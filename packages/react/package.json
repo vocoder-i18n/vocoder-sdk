@@ -1,0 +1,23 @@
+{
+  "name": "@vocoder/react",
+  "version": "0.1.0",
+  "description": "React components for the Vocoder SDK",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --outDir dist src/index.ts --jsx react-jsx --esModuleInterop --allowSyntheticDefaultImports --sourceMap --inlineSourceMap false --inlineSources true && tsc --declaration --emitDeclarationOnly --outDir dist src/index.ts --jsx react-jsx --esModuleInterop --allowSyntheticDefaultImports --sourceMap --inlineSourceMap false --inlineSources true",
+    "dev": "tsc --watch --outDir dist src/index.ts --jsx react-jsx --esModuleInterop --allowSyntheticDefaultImports --sourceMap --inlineSourceMap false --inlineSources true",
+    "watch": "tsc --watch --outDir dist src/index.ts --jsx react-jsx --esModuleInterop --allowSyntheticDefaultImports --sourceMap --inlineSourceMap false --inlineSources true"
+  },
+  "dependencies": {
+    "@vocoder/types": "file:../types",
+    "react": "^18.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.0.0",
+    "typescript": "^5.0.0"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0"
+  }
+}

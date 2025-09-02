@@ -1,0 +1,22 @@
+{
+  "name": "@vocoder/types",
+  "version": "0.1.0",
+  "description": "TypeScript types for Vocoder SDK",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc --outDir dist src/index.ts && tsc --declaration --emitDeclarationOnly --outDir dist src/index.ts",
+    "dev": "tsc --watch --outDir dist src/index.ts",
+    "watch": "tsc --watch --outDir dist src/index.ts",
+    "test": "vitest",
+    "lint": "eslint . --ext .ts"
+  },
+  "devDependencies": {
+    "tsup": "^7.2.0",
+    "vitest": "^1.0.0"
+  }
+}

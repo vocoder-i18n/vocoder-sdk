@@ -1,0 +1,32 @@
+{
+  "name": "vocoder-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "watch": "turbo run watch --parallel",
+    "watch:types": "cd packages/types && pnpm watch",
+    "watch:react": "cd packages/react && pnpm watch",
+    "watch:cli": "cd packages/cli && pnpm watch",
+    "watch:all": "concurrently \"pnpm watch:types\" \"pnpm watch:react\" \"pnpm watch:cli\"",
+    "dev:watch": "node scripts/dev-watch.js",
+    "lint": "turbo run lint",
+    "clean": "turbo run clean",
+    "test": "turbo run test",
+    "release": "changeset publish",
+    "prepublishOnly": "pnpm build",
+    "clean:all": "pnpm clean && find . -name 'node_modules' -type d -exec rm -rf {} + 2>/dev/null || true && pnpm store prune && pnpm install && pnpm build"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.26.2",
+    "@types/node": "^20.19.9",
+    "concurrently": "^9.2.0",
+    "prettier": "^3.0.0",
+    "turbo": "^1.10.0",
+    "typescript": "^5.4.0"
+  }
+}

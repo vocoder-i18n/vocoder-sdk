@@ -1,0 +1,31 @@
+{
+  "name": "vocoder-dev-env",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "NODE_OPTIONS='--inspect' npx next@^14.0.0 dev -p 3001",
+    "debug": "NODE_OPTIONS='--inspect-brk' npx next@^14.0.0 dev -p 3001",
+    "start": "npx next@^14.0.0 start -p 3001",
+    "lint": "npx next@^14.0.0 lint"
+  },
+  "dependencies": {
+    "@vocoder/react": "workspace:*",
+    "@vocoder/types": "workspace:*",
+    "next": "^14.2.31",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
+    "eslint": "^8.0.0",
+    "eslint-config-next": "^14.0.0",
+    "typescript": "^5.0.0"
+  },
+  "description": "A comprehensive testing environment for the Vocoder React SDK, designed to test both server-side and client-side implementations.",
+  "main": "next.config.js",
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
