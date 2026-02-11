@@ -1,10 +1,12 @@
 {
   "name": "@vocoder/cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "CLI tool for Vocoder translation workflow",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "bin": {
     "vocoder": "dist/bin.mjs"
   },
