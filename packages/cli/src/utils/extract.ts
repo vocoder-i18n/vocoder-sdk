@@ -268,9 +268,9 @@ export class StringExtractor {
           text += expr.value;
         }
         // Handle {`${variableName}`} - template literal
+        // Convert template literal syntax to ICU MessageFormat: `$${price}` → ${price}
         else if (expr.type === 'TemplateLiteral') {
-          // For simple template literals, just use the raw value
-          text += expr.quasis.map((q: any) => q.value.raw).join('');
+          text += this.extractTemplateText(expr);
         }
       }
     }

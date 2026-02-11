@@ -350,6 +350,62 @@ describe('StringExtractor', () => {
     });
   });
 
+  describe('Currency and special characters', () => {
+    it('should preserve literal dollar sign before variable placeholder', async () => {
+      const file = createTestFile(
+        'test.tsx',
+        `
+        import { T } from '@vocoder/react';
+
+        function Component({ price }: { price: number }) {
+          return <T price={price}>Price: \${"{price}"}</T>;
+        }
+      `,
+      );
+
+      const result = await extractor.extractFromProject(file);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]!.text).toBe('Price: ${price}');
+    });
+
+    it('should handle template literals with dollar signs in JSX', async () => {
+      const file = createTestFile(
+        'test.tsx',
+        `
+        import { T } from '@vocoder/react';
+
+        function Component({ price }: { price: number }) {
+          return <T price={price}>Price: {\`$\${price}\`}</T>;
+        }
+      `,
+      );
+
+      const result = await extractor.extractFromProject(file);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]!.text).toBe('Price: ${price}');
+    });
+
+    it('should handle template literals with variables in t() function', async () => {
+      const file = createTestFile(
+        'test.ts',
+        `
+        import { t } from '@vocoder/react';
+
+        function formatPrice(price: number) {
+          return t(\`Price: $\${price}\`);
+        }
+      `,
+      );
+
+      const result = await extractor.extractFromProject(file);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]!.text).toBe('Price: ${price}');
+    });
+  });
+
   describe('Edge cases', () => {
     it('should skip empty strings', async () => {
       const file = createTestFile(
