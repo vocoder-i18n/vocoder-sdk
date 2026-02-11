@@ -1,21 +1,75 @@
 {
   "name": "@vocoder/react",
   "version": "0.1.0",
-  "description": "React components for the Vocoder SDK",
+  "description": "React components for internationalization (i18n) with SSR support, ICU MessageFormat, and build-time translation generation",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js",
+      "require": "./dist/server.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "build": "tsc --outDir dist src/index.ts --jsx react-jsx --esModuleInterop --allowSyntheticDefaultImports --sourceMap --inlineSourceMap false --inlineSources true && tsc --declaration --emitDeclarationOnly --outDir dist src/index.ts --jsx react-jsx --esModuleInterop --allowSyntheticDefaultImports --sourceMap --inlineSourceMap false --inlineSources true",
-    "dev": "tsc --watch --outDir dist src/index.ts --jsx react-jsx --esModuleInterop --allowSyntheticDefaultImports --sourceMap --inlineSourceMap false --inlineSources true",
-    "watch": "tsc --watch --outDir dist src/index.ts --jsx react-jsx --esModuleInterop --allowSyntheticDefaultImports --sourceMap --inlineSourceMap false --inlineSources true"
+    "build": "tsc && tsc --declaration --emitDeclarationOnly",
+    "dev": "tsc --watch",
+    "watch": "tsc --watch",
+    "test": "vitest",
+    "test:watch": "vitest --watch"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vocoder/vocoder-sdk.git",
+    "directory": "packages/react"
+  },
+  "keywords": [
+    "i18n",
+    "internationalization",
+    "translation",
+    "react",
+    "localization",
+    "l10n",
+    "icu",
+    "messageformat",
+    "server-side-rendering",
+    "ssr",
+    "next.js",
+    "typescript"
+  ],
+  "author": "Vocoder <admin@vocoder.app>",
+  "license": "MIT",
+  "homepage": "https://github.com/vocoder/vocoder-sdk#readme",
+  "bugs": {
+    "url": "https://github.com/vocoder/vocoder-sdk/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
-    "@vocoder/types": "file:../types",
+    "@formatjs/intl": "^4.1.2",
+    "@radix-ui/react-dropdown-menu": "^2.1.16",
+    "@vocoder/types": "^0.1.0",
+    "intl-messageformat": "^11.1.2",
+    "lucide-react": "^0.563.0",
     "react": "^18.0.0"
   },
   "devDependencies": {
-    "@types/react": "^18.0.0",
-    "typescript": "^5.0.0"
+    "@testing-library/jest-dom": "^6.0.0",
+    "@testing-library/react": "^14.0.0",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/react": "^18.3.0",
+    "jsdom": "^23.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
   },
   "peerDependencies": {
     "react": "^18.0.0"

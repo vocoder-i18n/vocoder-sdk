@@ -8,6 +8,25 @@
   "publishConfig": {
     "access": "public"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vocoder/vocoder-sdk.git",
+    "directory": "packages/types"
+  },
+  "keywords": [
+    "i18n",
+    "internationalization",
+    "translation",
+    "typescript",
+    "types",
+    "localization"
+  ],
+  "author": "Vocoder <admin@vocoder.app>",
+  "license": "MIT",
+  "homepage": "https://github.com/vocoder/vocoder-sdk#readme",
+  "bugs": {
+    "url": "https://github.com/vocoder/vocoder-sdk/issues"
+  },
   "scripts": {
     "build": "tsc --outDir dist src/index.ts && tsc --declaration --emitDeclarationOnly --outDir dist src/index.ts",
     "dev": "tsc --watch --outDir dist src/index.ts",
@@ -16,7 +35,11 @@
     "lint": "eslint . --ext .ts"
   },
   "devDependencies": {
+    "@types/react": "^18.2.0",
     "tsup": "^7.2.0",
     "vitest": "^1.0.0"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0"
   }
 }

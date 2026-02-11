@@ -1,27 +1,17 @@
 {
-  "extends": "../../tsconfig.json",
   "compilerOptions": {
     "target": "ES2020",
+    "lib": ["ES2020", "ES2021.Intl", "DOM"],
     "module": "ESNext",
     "moduleResolution": "node",
-    "outDir": "dist",
-    "declaration": true,
-    "sourceMap": true,
-    "strict": true,
+    "jsx": "react-jsx",
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "skipLibCheck": true,
-    "jsx": "react-jsx",
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "noEmit": false,
-    "baseUrl": ".",
-    "paths": {
-      "@vocoder/types": ["../types/src"]
-    },
-    "types": ["node"]
+    "strict": true,
+    "declaration": true,
+    "outDir": "./dist"
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
-} 
+  "exclude": ["node_modules", "dist", "**/*.test.tsx", "**/*.test.ts"]
+}

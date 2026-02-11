@@ -1,4 +1,5 @@
 // Core types for Vocoder SDK
+import type { ReactNode, ReactElement } from 'react';
 
 // Translation data structure
 export interface TranslationsMap {
@@ -7,19 +8,40 @@ export interface TranslationsMap {
   };
 }
 
-// Context value for the translation provider
-export interface TranslationContextValue {
+// Context value for the VocoderProvider
+export interface VocoderContextValue {
   locale: string;
   setLocale: (locale: string) => void;
-  translations: TranslationsMap;
+  t: (text: string, values?: Record<string, any>) => string;
+  availableLocales: string[];
   isLoading: boolean;
   error: string | null;
 }
 
-// Props for the TranslationProvider component
-export interface TranslationProviderProps {
+// Props for the VocoderProvider component
+export interface VocoderProviderProps {
   apiKey?: string;
-  children: React.ReactNode;
+  children: ReactNode;
   defaultLocale?: string;
-  translations?: TranslationsMap; // Allow pre-fetched translations for SSR
-};
+  translations?: TranslationsMap;
+}
+
+// Props for the T component
+export interface TProps {
+  children?: ReactNode;
+  id?: string;
+  context?: string;
+  formality?: 'formal' | 'informal' | 'auto';
+  components?: Record<string, ReactElement>;
+  [key: string]: any;
+}
+
+// Props for LocaleSelector
+export interface LocaleSelectorProps {
+  className?: string;
+  placeholder?: string;
+}
+
+// Legacy types for backwards compatibility
+export interface TranslationContextValue extends VocoderContextValue {}
+export interface TranslationProviderProps extends VocoderProviderProps {}
