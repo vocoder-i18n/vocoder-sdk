@@ -1,16 +1,16 @@
 {
   "compilerOptions": {
-    "target": "ES2020",
+    "allowSyntheticDefaultImports": true,
+    "declaration": true,
+    "esModuleInterop": true,
+    "jsx": "react-jsx",
     "lib": ["ES2020", "ES2021.Intl", "DOM"],
     "module": "ESNext",
     "moduleResolution": "node",
-    "jsx": "react-jsx",
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
+    "outDir": "./dist",
     "skipLibCheck": true,
     "strict": true,
-    "declaration": true,
-    "outDir": "./dist"
+    "target": "ES2020"
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "**/*.test.tsx", "**/*.test.ts"]

@@ -94,4 +94,23 @@ describe('t() function', () => {
 
     expect(t('Hello, {name}!')).toBe('Hello, {name}!');
   });
+
+  it('preserves whitespace around interpolated values (regression test)', () => {
+    // This test ensures that "Tienes {count} mensajes" with count=1
+    // renders as "Tienes 1 mensajes" (with spaces), not "Tienes1mensajes"
+    render(
+      <TestWrapper locale="es">
+        <div>Provider mounted</div>
+      </TestWrapper>
+    );
+
+    const result = t('You have {count} messages', { count: 1 });
+
+    // Verify the result is a string (not array)
+    expect(typeof result).toBe('string');
+
+    // Verify spaces are preserved around the interpolated value
+    expect(result).toBe('Tienes 1 mensajes');
+    expect(result).not.toBe('Tienes1mensajes'); // NOT smashed together
+  });
 });

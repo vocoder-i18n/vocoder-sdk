@@ -1,5 +1,4 @@
-import { interpolate } from './utils/interpolate';
-import { isICUMessage, formatICUMessage } from './utils/formatMessage';
+import { formatMessage } from './utils/formatMessage';
 
 /**
  * Global translation state
@@ -76,15 +75,21 @@ export function _getGlobalTranslations(): Record<string, Record<string, string>>
  * - Rich text with components is only supported in `<T>` component, not in `t()` function
  */
 export function t(text: string, values?: Record<string, any>): string {
-  let translated = globalTranslations[globalLocale]?.[text] || text;
+  const translated = globalTranslations[globalLocale]?.[text] || text;
 
-  if (values) {
-    // Check if text uses ICU MessageFormat syntax
-    if (isICUMessage(translated)) {
-      return formatICUMessage(translated, values, globalLocale);
+  if (values && Object.keys(values).length > 0) {
+    // Use IntlMessageFormat for all cases (simple interpolation, ICU, etc.)
+    const result = formatMessage(translated, values, globalLocale);
+    
+    // formatMessage can return React nodes for rich text, but t() is for strings only
+    // If result is an array (rich text), join it as string
+    if (Array.isArray(result)) {
+      return result.map(part => 
+        typeof part === 'string' ? part : String(part)
+      ).join('');
     }
-    // Simple variable interpolation
-    return interpolate(translated, values);
+    
+    return typeof result === 'string' ? result : String(result);
   }
 
   return translated;

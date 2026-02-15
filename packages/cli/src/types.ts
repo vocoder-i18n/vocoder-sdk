@@ -4,6 +4,8 @@ export interface TranslateOptions {
   dryRun?: boolean;
   verbose?: boolean;
   maxAge?: number;
+  include?: string[];
+  exclude?: string[];
 }
 
 // Local configuration (from env vars)
@@ -19,10 +21,18 @@ export interface APIProjectConfig {
   targetBranches: string[];
 }
 
+// Configuration from vocoder.config.{js,ts,mjs,cjs,json}
+export interface VocoderConfigFile {
+  include?: string | string[];
+  exclude?: string | string[];
+  apiKey?: string;
+  apiUrl?: string;
+}
+
 // Combined configuration used by CLI
 export interface ProjectConfig extends LocalConfig, APIProjectConfig {
-  extractionPattern: string;
-  outputDir: string;
+  extractionPattern: string | string[];
+  excludePattern?: string | string[];
   timeout: number;
 }
 

@@ -16,23 +16,45 @@ const traverse = (babelTraverse as any).default || babelTraverse;
  */
 export class StringExtractor {
   /**
-   * Extract strings from all files matching the pattern
+   * Extract strings from all files matching the pattern(s)
+   *
+   * @param pattern - Glob pattern(s) to include
+   * @param projectRoot - Project root directory
+   * @param excludePattern - Glob pattern(s) to exclude (optional)
    */
   async extractFromProject(
-    pattern: string,
+    pattern: string | string[],
     projectRoot: string = process.cwd(),
+    excludePattern?: string | string[],
   ): Promise<ExtractedString[]> {
-    // Find all files matching the pattern
-    const files = await glob(pattern, {
-      cwd: projectRoot,
-      absolute: true,
-      ignore: ['**/node_modules/**', '**/.next/**', '**/dist/**', '**/build/**'],
-    });
+    // Normalize patterns to arrays
+    const includePatterns = Array.isArray(pattern) ? pattern : [pattern];
+
+    // Default ignore patterns (always excluded)
+    const defaultIgnore = ['**/node_modules/**', '**/.next/**', '**/dist/**', '**/build/**'];
+
+    // Merge user exclude patterns with defaults
+    const ignorePatterns = excludePattern
+      ? [...defaultIgnore, ...(Array.isArray(excludePattern) ? excludePattern : [excludePattern])]
+      : defaultIgnore;
+
+    // Find all files matching any of the include patterns (OR behavior)
+    const allFiles = new Set<string>();
+
+    for (const includePattern of includePatterns) {
+      const files = await glob(includePattern, {
+        cwd: projectRoot,
+        absolute: true,
+        ignore: ignorePatterns,
+      });
+
+      files.forEach((file: string) => allFiles.add(file));
+    }
 
     const allStrings: ExtractedString[] = [];
 
     // Extract from each file
-    for (const file of files) {
+    for (const file of allFiles) {
       try {
         const strings = await this.extractFromFile(file);
         allStrings.push(...strings);
@@ -191,8 +213,11 @@ export class StringExtractor {
 
           if (!isTranslationComponent) return;
 
-          // Extract text content
-          const text = this.extractTextContent(path.node.children);
+          // Check for msg attribute first (preferred for ICU messages)
+          const msgAttribute = this.getStringAttribute(opening.attributes, 'msg');
+
+          // Extract text - prefer msg attribute over children
+          const text = msgAttribute || this.extractTextContent(path.node.children);
 
           if (!text || text.trim().length === 0) return;
 
@@ -280,6 +305,7 @@ export class StringExtractor {
 
   /**
    * Get string value from JSX attribute
+   * Handles both string literals and template literals
    */
   private getStringAttribute(
     attributes: any[],
@@ -291,8 +317,24 @@ export class StringExtractor {
 
     if (!attr || !attr.value) return undefined;
 
+    // Handle string literal: msg="Hello"
     if (attr.value.type === 'StringLiteral') {
       return attr.value.value;
+    }
+
+    // Handle JSX expression container: msg={...}
+    if (attr.value.type === 'JSXExpressionContainer') {
+      const expr = attr.value.expression;
+
+      // Handle template literal: msg={`Hello ${name}`}
+      if (expr.type === 'TemplateLiteral') {
+        return this.extractTemplateText(expr);
+      }
+
+      // Handle string literal in expression: msg={'Hello'}
+      if (expr.type === 'StringLiteral') {
+        return expr.value;
+      }
     }
 
     return undefined;

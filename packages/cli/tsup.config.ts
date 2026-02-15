@@ -12,5 +12,4 @@ export default defineConfig({
   minify: false,
   target: 'node18',
   outDir: 'dist',
-  // Shebang is already in bin.ts source, no need for banner
 });

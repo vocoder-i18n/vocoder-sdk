@@ -10,12 +10,16 @@ const mockTranslations = {
     'Welcome to our app!': 'Welcome to our app!',
     'Hello, {name}!': 'Hello, {name}!',
     'You have {count} messages': 'You have {count} messages',
+    '{count, plural, one {# item} other {# items}}': '{count, plural, one {# item} other {# items}}',
+    'Message from msg prop': 'Message from msg prop',
   },
   es: {
     'Hello, world!': '¡Hola, mundo!',
     'Welcome to our app!': '¡Bienvenido a nuestra aplicación!',
     'Hello, {name}!': '¡Hola, {name}!',
     'You have {count} messages': 'Tienes {count} mensajes',
+    '{count, plural, one {# item} other {# items}}': '{count, plural, one {# artículo} other {# artículos}}',
+    'Message from msg prop': 'Mensaje desde msg prop',
   },
 };
 
@@ -99,5 +103,66 @@ describe('T Component', () => {
     );
 
     expect(screen.getByText('Source text')).toBeInTheDocument();
+  });
+
+  it('renders text from msg prop', () => {
+    render(
+      <VocoderProvider translations={mockTranslations} defaultLocale="en">
+        <T msg="Message from msg prop" />
+      </VocoderProvider>
+    );
+
+    expect(screen.getByText('Message from msg prop')).toBeInTheDocument();
+  });
+
+  it('prefers msg prop over children', () => {
+    render(
+      <VocoderProvider translations={mockTranslations} defaultLocale="en">
+        <T msg="Message from msg prop">Message from children</T>
+      </VocoderProvider>
+    );
+
+    expect(screen.getByText('Message from msg prop')).toBeInTheDocument();
+    expect(screen.queryByText('Message from children')).not.toBeInTheDocument();
+  });
+
+  it('handles ICU MessageFormat in msg prop', () => {
+    render(
+      <VocoderProvider translations={mockTranslations} defaultLocale="en">
+        <T msg="{count, plural, one {# item} other {# items}}" count={1} />
+      </VocoderProvider>
+    );
+
+    expect(screen.getByText('1 item')).toBeInTheDocument();
+  });
+
+  it('handles ICU MessageFormat in msg prop with multiple values', () => {
+    render(
+      <VocoderProvider translations={mockTranslations} defaultLocale="en">
+        <T msg="{count, plural, one {# item} other {# items}}" count={5} />
+      </VocoderProvider>
+    );
+
+    expect(screen.getByText('5 items')).toBeInTheDocument();
+  });
+
+  it('translates ICU MessageFormat in msg prop to Spanish', () => {
+    render(
+      <VocoderProvider translations={mockTranslations} defaultLocale="es">
+        <T msg="{count, plural, one {# item} other {# items}}" count={1} />
+      </VocoderProvider>
+    );
+
+    expect(screen.getByText('1 artículo')).toBeInTheDocument();
+  });
+
+  it('translates ICU MessageFormat in msg prop to Spanish with multiple items', () => {
+    render(
+      <VocoderProvider translations={mockTranslations} defaultLocale="es">
+        <T msg="{count, plural, one {# item} other {# items}}" count={5} />
+      </VocoderProvider>
+    );
+
+    expect(screen.getByText('5 artículos')).toBeInTheDocument();
   });
 });

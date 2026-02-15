@@ -34,7 +34,15 @@ VOCODER_API_KEY=your-api-key-here
 3. **Use `<T>` components in your code**:
 
 ```tsx
-import { T } from '@vocoder/react';
+import { VocoderProvider, T } from '@vocoder/react';
+
+function App({ children }) {
+  return (
+    <VocoderProvider defaultLocale="en">
+      {children}
+    </VocoderProvider>
+  );
+}
 
 function MyComponent() {
   return (
@@ -55,29 +63,90 @@ npx vocoder sync
 This will:
 - Extract all `<T>` components from your code
 - Submit them to Vocoder for translation
-- Download translations to `.vocoder/locales/*.json`
+- Write translations to `node_modules/.vocoder/` (loaded automatically by `@vocoder/react`)
 - Only translate NEW strings (incremental updates are fast!)
+
+**No manual imports needed.** `@vocoder/react` automatically loads the generated translations.
 
 ## Configuration
 
-The CLI uses environment variables for configuration:
+Configure the CLI using one of three methods (in priority order):
 
-### Required
+### 1. CLI Flags (Highest Priority)
 
-- **`VOCODER_API_KEY`**: Your Vocoder API key (get from https://vocoder.dev)
+Override extraction patterns on a per-run basis:
 
-### Optional (Development Only)
+```bash
+npx vocoder sync --include="src/**/*.tsx" --exclude="**/*.test.tsx"
+```
 
-- **`VOCODER_API_URL`**: Override API endpoint (defaults to `https://api.vocoder.dev`)
+### 2. Config File (Recommended)
 
-### Defaults (Not Configurable)
+Create `vocoder.config.js` (or `.ts`, `.mjs`, `.cjs`, `.json`) in your project root:
 
-- **Target locales**: `es`, `fr`, `de`
+```javascript
+// vocoder.config.js
+module.exports = {
+  // Glob pattern(s) for files to extract from
+  include: [
+    'src/**/*.{tsx,jsx,ts,js}',
+    'components/**/*.tsx',
+  ],
+
+  // Glob pattern(s) for files to exclude
+  exclude: [
+    '**/*.test.{tsx,ts}',
+    '**/__tests__/**',
+    '**/*.stories.tsx',
+  ],
+};
+```
+
+**TypeScript config:**
+
+```typescript
+// vocoder.config.ts
+import type { VocoderConfigFile } from '@vocoder/cli';
+
+const config: VocoderConfigFile = {
+  include: 'src/**/*.tsx',
+  exclude: '**/*.test.tsx',
+};
+
+export default config;
+```
+
+The CLI searches up the directory tree for the config file, so it works in monorepos.
+
+### 3. Environment Variables
+
+Set environment variables in `.env`:
+
+```bash
+# Required
+VOCODER_API_KEY=your-api-key-here
+
+# Optional
+VOCODER_API_URL=https://vocoder.app
+VOCODER_EXTRACTION_PATTERN=src/**/*.{tsx,jsx,ts,js}
+```
+
+### Configuration Priority
+
+Settings are merged with this priority:
+
+1. **CLI flags** (highest priority)
+2. **Config file** (`vocoder.config.{js,ts,mjs,cjs,json}`)
+3. **Environment variables**
+4. **Defaults** (lowest priority)
+
+### Default Values
+
 - **Extraction pattern**: `src/**/*.{tsx,jsx,ts,js}`
-- **Output directory**: `.vocoder/locales`
-- **Target branches**: `main`, `master`, `production`, `staging`
+- **Exclude patterns**: None (but always ignores `node_modules`, `.next`, `dist`, `build`)
+- **API URL**: `https://vocoder.app`
 
-To customize these defaults, configure them in your Vocoder dashboard.
+**Note:** Target locales and branches are configured in your Vocoder dashboard, not in the CLI.
 
 ## Commands
 
@@ -91,19 +160,24 @@ npx vocoder sync [options]
 
 **Options:**
 
+- `--include <pattern>` - Glob pattern to include (can be used multiple times)
+- `--exclude <pattern>` - Glob pattern to exclude (can be used multiple times)
 - `--branch <name>` - Specify branch name (auto-detected from git)
 - `--force` - Translate even if not on a target branch
 - `--dry-run` - Show what would be translated without making API calls
-- `--verbose` - Show detailed output
+- `--verbose` - Show detailed output and config sources
 
 **Examples:**
 
 ```bash
-# Normal usage (auto-detects branch from git)
+# Normal usage (uses config file or defaults)
 npx vocoder sync
 
-# Specify branch manually
-npx vocoder sync --branch feature/new-ui
+# Override extraction patterns
+npx vocoder sync --include="src/**/*.tsx" --include="components/**/*.tsx"
+
+# Exclude test files
+npx vocoder sync --exclude="**/*.test.tsx" --exclude="**/*.stories.tsx"
 
 # See what would be translated without making API calls
 npx vocoder sync --dry-run
@@ -111,135 +185,63 @@ npx vocoder sync --dry-run
 # Force translation even if not on a target branch
 npx vocoder sync --force
 
-# Verbose output for debugging
+# Verbose output shows which config sources are used
 npx vocoder sync --verbose
 ```
 
-## Workflow
+## How It Works
 
-### First Run (100 strings)
-```bash
-$ npx vocoder sync
-✓ Detected branch: main
-✓ Loaded config for project: abc123
-✓ Extracted 100 strings from src/**/*.{tsx,jsx,ts,js}
-✓ Submitted to API - Batch ID: batch-xyz
-  Found 100 new strings to translate
-⏳ Translating to 3 locales (es, fr, de)
-  Estimated time: ~30 seconds
-✓ Translations complete!
-✓ Wrote 3 locale files
+Translations are written to `node_modules/.vocoder/` — similar to how Prisma generates its client.
 
-✅ Translation complete! (32.4s)
-```
-
-### Second Run (Same strings, 0 new)
-```bash
-$ npx vocoder sync
-✓ Detected branch: main
-✓ Loaded config for project: abc123
-✓ Extracted 100 strings from src/**/*.{tsx,jsx,ts,js}
-✓ Submitted to API - Batch ID: batch-abc
-  Found 0 new strings to translate
-
-✅ No new strings - using existing translations
-✓ Wrote 3 locale files
-
-✅ Translation complete! (0.8s)
-```
-
-### Incremental Run (1 new string)
-```bash
-$ npx vocoder sync
-✓ Detected branch: main
-✓ Loaded config for project: abc123
-✓ Extracted 101 strings from src/**/*.{tsx,jsx,ts,js}
-✓ Submitted to API - Batch ID: batch-def
-  Found 1 new strings to translate
-⏳ Translating to 3 locales (es, fr, de)
-  Estimated time: ~1 seconds
-✓ Translations complete!
-✓ Wrote 3 locale files
-
-✅ Translation complete! (1.2s)
-```
-
-## Branch-Scoped Translations
-
-Translations are isolated per git branch:
-
-- **Main branch** translations are shared across the team
-- **Feature branches** get their own translations
-- Feature branches fall back to main branch translations
-- Merge to main to promote feature translations
-
-This allows you to:
-- Test translations in feature branches
-- Preview translations before merging
-- Avoid conflicts between features
-
-## Performance
-
-The CLI is optimized for incremental updates:
-
-| Scenario | Time | Cost |
-|----------|------|------|
-| 100 new strings | ~30s | 100 strings × 3 locales |
-| 0 new strings | <1s | No API calls |
-| 1 new string | ~1s | 1 string × 3 locales |
-
-**Speedup: 30x faster** for incremental updates!
-
-## Output
-
-Translations are written to `.vocoder/locales/`:
+`@vocoder/react` automatically loads translations from this location. **No manual imports or prop wiring needed.**
 
 ```
-.vocoder/
-└── locales/
-    ├── es.json
-    ├── fr.json
-    └── de.json
+npx vocoder sync
+  ↓
+1. Extract <T> strings from your code
+2. Send to Vocoder API for translation
+3. Write translations to node_modules/.vocoder/
+  ↓
+@vocoder/react loads them automatically
 ```
 
-Each file contains a flat key-value mapping:
+Since `node_modules/.vocoder/` is regenerated on every sync, add `vocoder sync` to your build pipeline:
 
 ```json
 {
-  "Welcome to our app!": "¡Bienvenido a nuestra aplicación!",
-  "Hello, {name}!": "¡Hola, {name}!",
-  "You have {count} messages": "Tienes {count} mensajes"
+  "scripts": {
+    "prebuild": "vocoder sync",
+    "build": "next build"
+  }
 }
 ```
 
-**Add to `.gitignore`:**
-
-```
-.vocoder/
-```
-
-Translations are generated at build time, not checked into git.
-
 ## Integration with React
 
-Use the generated locale files with `@vocoder/react`:
+After running `vocoder sync`, just use `@vocoder/react` — translations are loaded automatically:
 
 ```tsx
-import { VocoderProvider } from '@vocoder/react';
-import en from './.vocoder/locales/en.json';
-import es from './.vocoder/locales/es.json';
-import fr from './.vocoder/locales/fr.json';
+import { VocoderProvider, T, useVocoder } from '@vocoder/react';
 
-export default function App({ children }) {
+// In your root layout
+export default function RootLayout({ children }) {
   return (
-    <VocoderProvider
-      translations={{ en, es, fr }}
-      defaultLocale="en"
-    >
+    <VocoderProvider defaultLocale="en">
       {children}
     </VocoderProvider>
   );
 }
+
+// In any component
+function Greeting({ name }) {
+  return <T name={name}>Hello, {name}!</T>;
+}
+```
+
+**Advanced:** You can still pass translations as props for testing or custom setups:
+
+```tsx
+<VocoderProvider translations={myCustomTranslations} defaultLocale="en">
 ```
 
 ## Troubleshooting
@@ -259,10 +261,10 @@ Make sure you're using `<T>` components from `@vocoder/react`:
 ```tsx
 import { T } from '@vocoder/react';
 
-// ✅ Good
+// Good
 <T>Welcome!</T>
 
-// ❌ Bad (not detected)
+// Bad (not detected)
 <span>Welcome!</span>
 ```
 
@@ -281,22 +283,10 @@ The CLI only runs on target branches (`main`, `master`, `production`, `staging`)
 ## Development
 
 ```bash
-# Install dependencies
 pnpm install
-
-# Build
 pnpm build
-
-# Run tests
 pnpm test
-
-# Run unit tests only (fast)
 pnpm test:unit
-
-# Run integration tests (requires API)
-pnpm test:integration
-
-# Watch mode
 pnpm test:watch
 ```
 

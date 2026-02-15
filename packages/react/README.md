@@ -68,25 +68,6 @@ Translation files (`locales/es.json`):
 }
 ```
 
-### 2. API Mode
-
-Fetch translations from the Vocoder API:
-
-```tsx
-import { VocoderProvider, T } from '@vocoder/react';
-
-function App() {
-  return (
-    <VocoderProvider
-      apiKey="vc_pub_your_key_here"
-      defaultLocale="en"
-    >
-      <T>Welcome to our app!</T>
-    </VocoderProvider>
-  );
-}
-```
-
 ## API Reference
 
 ### `t(text, values?)` / `translate(text, values?)`
@@ -281,8 +262,7 @@ Embed React components in your translations:
 Manages translation state and locale switching.
 
 **Props:**
-- `translations?`: Static translations object (recommended)
-- `apiKey?`: API key for Vocoder API (for API mode)
+- `translations?`: Static translations object (key-value pairs per locale)
 - `defaultLocale`: Default locale to use (default: 'en')
 - `children`: React children
 

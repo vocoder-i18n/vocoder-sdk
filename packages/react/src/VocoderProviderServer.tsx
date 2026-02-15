@@ -1,5 +1,6 @@
-import { createContext } from "react";
 import { VocoderContextValue, VocoderProviderServerProps } from "./types";
+
+import { createContext } from "react";
 
 const VocoderContext = createContext<VocoderContextValue | null>(null);
 
@@ -48,13 +49,11 @@ export async function VocoderProviderServer({
   };
 
   const value: VocoderContextValue = {
+    availableLocales: [locale], // Only current locale available on server
+    getDisplayName,
     locale,
     setLocale: () => {}, // No-op on server (no interactivity)
     t,
-    availableLocales: [locale], // Only current locale available on server
-    isLoading: false,
-    error: null,
-    getDisplayName,
   };
 
   return (

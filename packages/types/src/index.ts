@@ -20,10 +20,11 @@ export interface VocoderContextValue {
 
 // Props for the VocoderProvider component
 export interface VocoderProviderProps {
-  apiKey?: string;
   children: ReactNode;
   defaultLocale?: string;
   translations?: TranslationsMap;
+  locales?: Record<string, { nativeName: string; dir?: 'rtl' }>;
+  cookies?: string;
 }
 
 // Props for the T component

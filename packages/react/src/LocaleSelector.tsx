@@ -1,8 +1,9 @@
-import React from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+
 import { Globe } from 'lucide-react';
-import { useVocoder } from './VocoderProvider';
 import type { LocaleSelectorProps } from './types';
+import React from 'react';
+import { useVocoder } from './VocoderProvider';
 
 // Position mapping for shorthand
 const POSITION_MAP: Record<string, string> = {
@@ -91,7 +92,7 @@ export const LocaleSelector: React.FC<LocaleSelectorProps> = ({
   locales: localesProp,
   sortBy = 'source',
 }) => {
-  const { locale, setLocale, availableLocales, isLoading, error, getDisplayName, locales: localesFromContext } = useVocoder();
+  const { locale, setLocale, availableLocales, getDisplayName, locales: localesFromContext } = useVocoder();
 
   // Use prop if provided, otherwise fall back to context
   const locales = localesProp ?? localesFromContext;
@@ -212,21 +213,6 @@ export const LocaleSelector: React.FC<LocaleSelectorProps> = ({
     userSelect: 'none',
     transition: 'background-color 0.15s ease',
   };
-
-  if (isLoading) {
-    return (
-      <div style={getPositionStyles()} className={className}>
-        <button style={buttonStyles} disabled>
-          <Globe size={iconSize} opacity={0.5} />
-        </button>
-      </div>
-    );
-  }
-
-  if (error) {
-    console.error('LocaleSelector error:', error);
-    return null;
-  }
 
   return (
     <div style={getPositionStyles()} className={className}>

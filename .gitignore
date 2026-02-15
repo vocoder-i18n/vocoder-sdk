@@ -96,3 +96,9 @@ temp/
 
 # pnpm
 .npmrc
+
+# Markdown files except README.md
+*.md
+!README.md
+
+scripts/

@@ -104,6 +104,124 @@ describe('StringExtractor', () => {
       expect(result).toHaveLength(1);
       expect(result[0]!.text).toBe('Hello');
     });
+
+    it('should extract text from msg prop', async () => {
+      const file = createTestFile(
+        'test.tsx',
+        `
+        import { T } from '@vocoder/react';
+
+        function Component({ count }: { count: number }) {
+          return <T msg="{count, plural, one {# item} other {# items}}" count={count} />;
+        }
+      `,
+      );
+
+      const result = await extractor.extractFromProject(file);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]!.text).toBe('{count, plural, one {# item} other {# items}}');
+    });
+
+    it('should prefer msg prop over children', async () => {
+      const file = createTestFile(
+        'test.tsx',
+        `
+        import { T } from '@vocoder/react';
+
+        function Component() {
+          return <T msg="From msg prop">From children</T>;
+        }
+      `,
+      );
+
+      const result = await extractor.extractFromProject(file);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]!.text).toBe('From msg prop');
+    });
+
+    it('should extract ICU MessageFormat from msg prop', async () => {
+      const file = createTestFile(
+        'test.tsx',
+        `
+        import { T } from '@vocoder/react';
+
+        function Component({ status }: { status: string }) {
+          return <T msg="{status, select, pending {Order pending} shipped {Order shipped} other {Unknown}}" status={status} />;
+        }
+      `,
+      );
+
+      const result = await extractor.extractFromProject(file);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]!.text).toBe('{status, select, pending {Order pending} shipped {Order shipped} other {Unknown}}');
+    });
+
+    it('should extract msg prop with context and formality', async () => {
+      const file = createTestFile(
+        'test.tsx',
+        `
+        import { T } from '@vocoder/react';
+
+        function Component({ count }: { count: number }) {
+          return <T msg="{count, plural, one {# item} other {# items}}" context="shopping-cart" formality="informal" count={count} />;
+        }
+      `,
+      );
+
+      const result = await extractor.extractFromProject(file);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]!.text).toBe('{count, plural, one {# item} other {# items}}');
+      expect(result[0]!.context).toBe('shopping-cart');
+      expect(result[0]!.formality).toBe('informal');
+    });
+
+    it('should extract rich text with components from msg prop', async () => {
+      const file = createTestFile(
+        'test.tsx',
+        `
+        import { T } from '@vocoder/react';
+
+        function Component() {
+          return <T msg="Click <link>here</link> for help" components={{ link: <a href="/help" /> }} />;
+        }
+      `,
+      );
+
+      const result = await extractor.extractFromProject(file);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]!.text).toBe('Click <link>here</link> for help');
+    });
+
+    it('should extract rich text with multiple components from msg prop', async () => {
+      const file = createTestFile(
+        'test.tsx',
+        `
+        import { T } from '@vocoder/react';
+
+        function Component() {
+          return (
+            <T 
+              msg="Read our <privacy>Privacy Policy</privacy> and <terms>Terms of Service</terms>"
+              components={{
+                privacy: <a href="/privacy" />,
+                terms: <a href="/terms" />
+              }}
+            />
+          );
+        }
+      `,
+      );
+
+      const result = await extractor.extractFromProject(file);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]!.text).toBe('Read our <privacy>Privacy Policy</privacy> and <terms>Terms of Service</terms>');
+    });
   });
 
   describe('t() function extraction', () => {
@@ -403,6 +521,102 @@ describe('StringExtractor', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0]!.text).toBe('Price: ${price}');
+    });
+  });
+
+  describe('ICU MessageFormat', () => {
+    it('should extract ICU plural syntax correctly', async () => {
+      const file = createTestFile(
+        'test.tsx',
+        `
+        import { T } from '@vocoder/react';
+
+        function Counter({ count }: { count: number }) {
+          return (
+            <T count={count}>
+              {"{count, plural, =0 {No items} one {# item} other {# items}}"}
+            </T>
+          );
+        }
+      `,
+      );
+
+      const result = await extractor.extractFromProject(file);
+
+      expect(result).toHaveLength(1);
+      // CRITICAL: ICU keywords must remain in English
+      expect(result[0]!.text).toBe('{count, plural, =0 {No items} one {# item} other {# items}}');
+      expect(result[0]!.text).toContain('plural');
+      expect(result[0]!.text).not.toContain('pluriel');
+      expect(result[0]!.text).not.toContain('plurale');
+    });
+
+    it('should extract ICU select syntax correctly', async () => {
+      const file = createTestFile(
+        'test.tsx',
+        `
+        import { T } from '@vocoder/react';
+
+        function OrderStatus({ status }: { status: string }) {
+          return (
+            <T status={status}>
+              {"{status, select, pending {Order pending} shipped {Order shipped} delivered {Order delivered} other {Unknown status}}"}
+            </T>
+          );
+        }
+      `,
+      );
+
+      const result = await extractor.extractFromProject(file);
+
+      expect(result).toHaveLength(1);
+      // CRITICAL: ICU keywords must remain in English
+      expect(result[0]!.text).toContain('select');
+      expect(result[0]!.text).not.toContain('sélectionner');
+      expect(result[0]!.text).not.toContain('seleziona');
+    });
+
+    it('should extract ICU gender select correctly', async () => {
+      const file = createTestFile(
+        'test.tsx',
+        `
+        import { T } from '@vocoder/react';
+
+        function GenderMessage({ gender }: { gender: string }) {
+          return (
+            <T gender={gender}>
+              {"{gender, select, male {He} female {She} other {They}} replied to your message"}
+            </T>
+          );
+        }
+      `,
+      );
+
+      const result = await extractor.extractFromProject(file);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]!.text).toBe('{gender, select, male {He} female {She} other {They}} replied to your message');
+      expect(result[0]!.text).toContain('select');
+    });
+
+    it('should NOT translate ICU syntax when in template literals', async () => {
+      const file = createTestFile(
+        'test.tsx',
+        `
+        import { T } from '@vocoder/react';
+
+        function Counter({ count }: { count: number }) {
+          return <T count={count}>{\`{count, plural, =0 {No items} one {# item} other {# items}}\`}</T>;
+        }
+      `,
+      );
+
+      const result = await extractor.extractFromProject(file);
+
+      expect(result).toHaveLength(1);
+      // ICU syntax should remain unchanged even in template literals
+      expect(result[0]!.text).toBe('{count, plural, =0 {No items} one {# item} other {# items}}');
+      expect(result[0]!.text).toContain('plural');
     });
   });
 

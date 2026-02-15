@@ -1,10 +1,7 @@
-import { formatICUMessage, isICUMessage } from './utils/formatMessage';
-import { hasComponentPlaceholders, parseRichText } from './utils/parseRichText';
-
 import React from 'react';
 import type { TProps } from './types';
 import { extractText } from './utils/extractText';
-import { interpolate } from './utils/interpolate';
+import { formatMessage } from './utils/formatMessage';
 import { useVocoder } from './VocoderProvider';
 
 /**
@@ -22,10 +19,15 @@ import { useVocoder } from './VocoderProvider';
  * <T count={5}>You have {count} messages</T>
  * ```
  *
- * @example ICU MessageFormat (pluralization)
+ * @example ICU MessageFormat with msg prop (cleaner syntax)
  * ```tsx
- * <T count={0}>{count, plural, =0 {No items} one {# item} other {# items}}</T>
- * <T count={5}>{count, plural, =0 {No items} one {# item} other {# items}}</T>
+ * <T msg="{count, plural, =0 {No items} one {# item} other {# items}}" count={0} />
+ * <T msg="{count, plural, =0 {No items} one {# item} other {# items}}" count={5} />
+ * ```
+ *
+ * @example ICU MessageFormat with children (legacy, requires escaping)
+ * ```tsx
+ * <T count={0}>{"{count, plural, =0 {No items} one {# item} other {# items}}"}</T>
  * ```
  *
  * @example Rich text with components
@@ -37,56 +39,42 @@ import { useVocoder } from './VocoderProvider';
  */
 export const T: React.FC<TProps> = ({
   children,
+  msg,
   context,
   formality,
   components,
   ...values
 }) => {
-  const { t, locale, isLoading, error } = useVocoder();
-
-  // Handle loading state
-  if (isLoading) {
-    // During loading, show the source text
-    return <>{children}</>;
-  }
-
-  // Handle error state - fallback to source text
-  if (error) {
-    console.warn('Vocoder translation error:', error);
-    return <>{children}</>;
-  }
+  const { t, locale } = useVocoder();
 
   try {
-    // Extract source text from children (this becomes the translation key)
-    const sourceText = extractText(children);
+    // Extract source text - prefer msg prop over children
+    // msg prop is cleaner for ICU syntax (no JSX escaping needed)
+    const sourceText = msg || extractText(children);
 
     // Look up translation using source text as key
-    let translatedText = t(sourceText);
+    const translatedText = t(sourceText);
 
-    // Phase 2: Check if text uses ICU MessageFormat syntax
-    const isICU = isICUMessage(translatedText);
-
-    if (isICU) {
-      try {
-        const formatted = formatICUMessage(translatedText, values, locale);
-        translatedText = formatted;
-      } catch (error) {
-        console.error('[T Component] ICU format error:', error);
-      }
-    }
-    // Phase 1: Simple variable interpolation
-    else if (Object.keys(values).length > 0) {
-      translatedText = interpolate(translatedText, values);
+    // Prepare values for FormatJS
+    // Convert component elements to FormatJS function format
+    const formatValues: Record<string, any> = { ...values };
+    
+    if (components) {
+      Object.entries(components).forEach(([key, component]) => {
+        // FormatJS expects functions that receive chunks and return React elements
+        formatValues[key] = (chunks: any[]) => 
+          React.cloneElement(component, { key }, chunks);
+      });
     }
 
-    // Phase 3: Check if text has component placeholders
-    if (components && hasComponentPlaceholders(translatedText)) {
-      const richTextParts = parseRichText(translatedText, components);
-      return <>{richTextParts}</>;
-    }
+    // Use IntlMessageFormat for ALL cases:
+    // - Simple interpolation: "Hello {name}!" → "Hello John!"
+    // - ICU plurals/select: "{count, plural, ...}" → "5 items"
+    // - Rich text: "Click <link>here</link>" → ["Click ", <a>here</a>]
+    const result = formatMessage(translatedText, formatValues, locale);
 
-    // Return plain translated text
-    return <>{translatedText}</>;
+    // Return formatted result (can be string or React nodes)
+    return <>{result}</>;
   } catch (err) {
     console.error('Vocoder formatting error:', err);
     // On error, fall back to original children

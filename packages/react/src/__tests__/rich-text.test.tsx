@@ -154,4 +154,94 @@ describe('Rich Text with Components - Phase 3', () => {
     // Without components prop, should render plain text
     expect(screen.getByText(/Click.*here.*for help/)).toBeInTheDocument();
   });
+
+  describe('Rich Text with msg prop', () => {
+    it('renders rich text from msg prop with single component', () => {
+      render(
+        <TestWrapper locale="en">
+          <T 
+            msg="Click <link>here</link> for help"
+            components={{ link: <a href="/help" className="help-link" /> }}
+          />
+        </TestWrapper>
+      );
+
+      const linkElement = screen.getByText('here');
+      expect(linkElement.tagName).toBe('A');
+      expect(linkElement).toHaveAttribute('href', '/help');
+      expect(linkElement).toHaveClass('help-link');
+      expect(screen.getByText(/Click.*for help/)).toBeInTheDocument();
+    });
+
+    it('renders rich text from msg prop with multiple components', () => {
+      render(
+        <TestWrapper locale="en">
+          <T 
+            msg="Read our <privacy>Privacy Policy</privacy> and <terms>Terms of Service</terms>"
+            components={{
+              privacy: <a href="/privacy" className="privacy-link" />,
+              terms: <a href="/terms" className="terms-link" />,
+            }}
+          />
+        </TestWrapper>
+      );
+
+      const privacyLink = screen.getByText('Privacy Policy');
+      expect(privacyLink.tagName).toBe('A');
+      expect(privacyLink).toHaveAttribute('href', '/privacy');
+      expect(privacyLink).toHaveClass('privacy-link');
+
+      const termsLink = screen.getByText('Terms of Service');
+      expect(termsLink.tagName).toBe('A');
+      expect(termsLink).toHaveAttribute('href', '/terms');
+      expect(termsLink).toHaveClass('terms-link');
+    });
+
+    it('translates rich text from msg prop', () => {
+      render(
+        <TestWrapper locale="es">
+          <T 
+            msg="Click <link>here</link> for help"
+            components={{ link: <a href="/help" /> }}
+          />
+        </TestWrapper>
+      );
+
+      const linkElement = screen.getByText('aquí');
+      expect(linkElement.tagName).toBe('A');
+      expect(screen.getByText(/Haz clic.*para obtener ayuda/)).toBeInTheDocument();
+    });
+
+    it('works with msg prop and styled components', () => {
+      render(
+        <TestWrapper locale="en">
+          <T 
+            msg="Visit <bold>our website</bold> to learn more"
+            components={{ bold: <strong className="font-bold" /> }}
+          />
+        </TestWrapper>
+      );
+
+      const boldElement = screen.getByText('our website');
+      expect(boldElement.tagName).toBe('STRONG');
+      expect(boldElement).toHaveClass('font-bold');
+    });
+
+    it('prefers msg prop over children for rich text', () => {
+      render(
+        <TestWrapper locale="en">
+          <T 
+            msg="Click <link>here</link> for help"
+            components={{ link: <a href="/help" className="help-link" /> }}
+          >
+            This should be ignored
+          </T>
+        </TestWrapper>
+      );
+
+      const linkElement = screen.getByText('here');
+      expect(linkElement).toBeInTheDocument();
+      expect(screen.queryByText('This should be ignored')).not.toBeInTheDocument();
+    });
+  });
 });

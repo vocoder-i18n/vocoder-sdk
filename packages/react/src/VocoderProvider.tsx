@@ -1,9 +1,9 @@
 import React, {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useState,
-  useCallback,
 } from "react";
 import {
   TranslationsMap,
@@ -15,12 +15,16 @@ import {
   _setGlobalTranslations,
 } from "./translate";
 import {
+  getGeneratedConfig,
+  getGeneratedTranslations,
+  getGeneratedLocales,
+  loadLocale,
+} from "./generated";
+import {
   getBestMatchingLocale,
   getStoredLocale,
   setStoredLocale,
 } from "./utils/storage";
-
-import { getEnvVar } from "./utils/env";
 
 const VocoderContext = createContext<VocoderContextValue | null>(null);
 
@@ -29,42 +33,42 @@ const STORAGE_KEY = "vocoder_locale";
 /**
  * VocoderProvider manages translation state and locale switching.
  *
- * Supports two modes:
- * 1. Static mode (recommended): Pass `translations` prop with imported locales
- * 2. API mode: Pass `apiKey` to fetch translations from Vocoder API
+ * After running `npx vocoder sync`, translations are loaded automatically.
+ * No imports or prop wiring needed.
  *
- * @example Static mode (recommended)
+ * @example
  * ```tsx
- * import { translations } from './.vocoder/locales'
- *
- * <VocoderProvider translations={translations} defaultLocale="en">
+ * <VocoderProvider>
  *   <App />
  * </VocoderProvider>
  * ```
- * Note: Run `vocoder translate` to generate .vocoder/locales/index.ts
  *
- * @example API mode (runtime fetching)
+ * @example With explicit overrides
  * ```tsx
- * <VocoderProvider apiKey="vc_pub_..." defaultLocale="en">
+ * <VocoderProvider defaultLocale="fr" translations={customTranslations}>
  *   <App />
  * </VocoderProvider>
  * ```
  */
 export const VocoderProvider: React.FC<VocoderProviderProps> = ({
-  apiKey,
   children,
-  defaultLocale = "en",
-  translations: initialTranslations,
-  locales: localesMetadata,
+  defaultLocale: propDefaultLocale,
+  translations: propTranslations,
+  locales: propLocales,
   cookies: cookieString,
 }) => {
-  const [translations, setTranslations] = useState<TranslationsMap>(
-    initialTranslations || {}
-  );
+  // Use prop values if provided, otherwise use auto-loaded generated data
+  const generatedConfig = getGeneratedConfig();
+  const initialTranslations = propTranslations ?? getGeneratedTranslations();
+  const localesMetadata = propLocales ?? getGeneratedLocales();
+  const defaultLocale = propDefaultLocale || generatedConfig.sourceLocale || "en";
+
+  // Translations state - starts with initial locale, grows as locales are loaded
+  const [translations, setTranslationsState] = useState<TranslationsMap>(initialTranslations);
   // Initialize locale with cookie-based preference (SSR-compatible!)
   // Cookies can be read on server, preventing hydration mismatches
   const [locale, setLocaleState] = useState<string>(() => {
-    const availableLocales = initialTranslations ? Object.keys(initialTranslations) : [];
+    const availableLocales = translations ? Object.keys(translations) : [];
 
     // Try to get stored preference from cookies (works on server and client)
     const storedPreference = getStoredLocale(STORAGE_KEY, cookieString);
@@ -91,86 +95,10 @@ export const VocoderProvider: React.FC<VocoderProviderProps> = ({
       return bestLocale;
     }
 
-    // API mode - no translations yet, use defaultLocale as-is
+    // No translations loaded yet, use defaultLocale as-is
     _setGlobalLocale(defaultLocale);
     return defaultLocale;
   });
-  const [isLoading, setIsLoading] = useState(!initialTranslations);
-  const [error, setError] = useState<string | null>(null);
-
-  // Fetch translations from API if needed
-  useEffect(() => {
-    // If translations are provided (static mode), don't fetch
-    if (initialTranslations) {
-      return;
-    }
-
-    // API mode: fetch translations from Vocoder API
-    const fetchTranslations = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
-
-        const key = apiKey || getEnvVar("VOCODER_PUBLIC_KEY");
-
-        if (!key) {
-          throw new Error(
-            "Missing VOCODER_PUBLIC_KEY. Please provide it as a prop, set VOCODER_PUBLIC_KEY environment variable, " +
-              'add a meta tag <meta name="VOCODER_PUBLIC_KEY" content="your-key">, ' +
-              'or set window.__VOCODER_PUBLIC_KEY__ = "your-key"'
-          );
-        }
-
-        if (!key.startsWith("vc_pub_")) {
-          throw new Error(
-            "Invalid public key format. Expected format: vc_pub_<32_chars>"
-          );
-        }
-
-        const res = await fetch(`https://api.vocoder.dev/translations`, {
-          headers: {
-            Authorization: `Bearer ${key}`,
-            "Content-Type": "application/json",
-          },
-        });
-
-        if (!res.ok) {
-          throw new Error(
-            `Failed to fetch translations: ${res.status} ${res.statusText}`
-          );
-        }
-
-        const data = await res.json();
-        setTranslations(data);
-
-        // After fetching, validate current locale is available
-        if (Object.keys(data).length > 0) {
-          const availableLocales = Object.keys(data);
-          const storedLocale = getStoredLocale(STORAGE_KEY);
-          const preferredLocale = storedLocale ?? defaultLocale;
-
-          const bestLocale = getBestMatchingLocale(
-            preferredLocale,
-            availableLocales,
-            defaultLocale
-          );
-
-          setLocaleState(bestLocale);
-          setStoredLocale(STORAGE_KEY, bestLocale);
-          _setGlobalLocale(bestLocale);
-        }
-      } catch (err) {
-        const errorMessage =
-          err instanceof Error ? err.message : "Failed to fetch translations";
-        setError(errorMessage);
-        console.error("Vocoder SDK Error:", err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchTranslations();
-  }, [apiKey, initialTranslations, defaultLocale]);
 
   /**
    * Translation lookup function.
@@ -201,10 +129,11 @@ export const VocoderProvider: React.FC<VocoderProviderProps> = ({
 
   /**
    * Smart locale setter that persists the choice and finds the best match.
+   * Lazy loads translations for the new locale if not already loaded.
    */
-  const setLocale = (newLocale: string) => {
-    // Get available locales from translations
-    const availableLocales = Object.keys(translations);
+  const setLocale = async (newLocale: string) => {
+    // Get available locales from config (not just loaded translations)
+    const availableLocales = Object.keys(localesMetadata);
 
     // Find the best matching locale
     const bestLocale = getBestMatchingLocale(
@@ -212,6 +141,21 @@ export const VocoderProvider: React.FC<VocoderProviderProps> = ({
       availableLocales,
       defaultLocale
     );
+
+    // Lazy load translations if not already loaded
+    if (!translations[bestLocale]) {
+      try {
+        const newTranslations = await loadLocale(bestLocale);
+        // Merge into existing translations (React will re-render)
+        setTranslationsState(prev => ({
+          ...prev,
+          [bestLocale]: newTranslations,
+        }));
+      } catch (error) {
+        console.error(`Failed to load locale ${bestLocale}:`, error);
+        // Continue with locale switch even if load fails (will show source text)
+      }
+    }
 
     // Update state
     setLocaleState(bestLocale);
@@ -231,14 +175,12 @@ export const VocoderProvider: React.FC<VocoderProviderProps> = ({
   }, [translations]);
 
   const value: VocoderContextValue = {
+    availableLocales: Object.keys(translations),
+    getDisplayName,
     locale,
+    locales: localesMetadata,
     setLocale,
     t,
-    availableLocales: Object.keys(translations),
-    locales: localesMetadata,
-    isLoading,
-    error,
-    getDisplayName,
   };
 
   return (
