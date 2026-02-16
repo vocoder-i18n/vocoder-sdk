@@ -97,19 +97,7 @@ function buildHydrationOnServer(
   return { raw, data };
 }
 
-/**
- * VocoderProvider manages translation state and locale switching.
- *
- * After running `pnpm exec vocoder sync`, translations are loaded automatically.
- * No imports or prop wiring needed.
- *
- * @example
- * ```tsx
- * <VocoderProvider>
- *   <App />
- * </VocoderProvider>
- * ```
- */
+/** Provides locale state and translations from generated runtime data. */
 export const VocoderProvider: React.FC<VocoderProviderProps> = ({
   children,
   cookies: cookieString,
@@ -132,7 +120,6 @@ export const VocoderProvider: React.FC<VocoderProviderProps> = ({
       const generated = getGeneratedTranslations();
       initial = generated;
 
-      // SSR: prime translations for stored locale to avoid flash
       const storedPreference = getStoredLocale(STORAGE_KEY, cookieString);
       if (storedPreference && !generated[storedPreference]) {
         const loaded = loadLocaleSync(storedPreference);
@@ -156,8 +143,6 @@ export const VocoderProvider: React.FC<VocoderProviderProps> = ({
   );
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // If translations are empty, load them async (for browser/Vite where
-  // the synchronous require couldn't load locale files at module init time)
   useEffect(() => {
     if (isInitialized) return;
 
@@ -214,8 +199,6 @@ export const VocoderProvider: React.FC<VocoderProviderProps> = ({
     };
   }, [cookieString, hydrationData, isInitialized]);
 
-  // Initialize locale with cookie-based preference (SSR-compatible!)
-  // Cookies can be read on server, preventing hydration mismatches
   const [locale, setLocaleState] = useState<string>(() => {
     if (hydrationData?.locale) {
       _setGlobalLocale(hydrationData.locale);
@@ -227,10 +210,8 @@ export const VocoderProvider: React.FC<VocoderProviderProps> = ({
       ? availableFromConfig
       : availableFromTranslations;
 
-    // Try to get stored preference from cookies (works on server and client)
     const storedPreference = getStoredLocale(STORAGE_KEY, cookieString);
 
-    // If stored preference exists, use it (even if translations aren't loaded yet)
     if (storedPreference) {
       const bestLocale = availableLocales.length > 0
         ? getBestMatchingLocale(storedPreference, availableLocales, defaultLocale)
@@ -239,7 +220,6 @@ export const VocoderProvider: React.FC<VocoderProviderProps> = ({
       return bestLocale;
     }
 
-    // No stored preference - use defaultLocale
     if (availableLocales.length > 0) {
       const bestLocale = getBestMatchingLocale(
         defaultLocale,
@@ -250,17 +230,11 @@ export const VocoderProvider: React.FC<VocoderProviderProps> = ({
       return bestLocale;
     }
 
-    // No translations loaded yet, use defaultLocale as-is
     _setGlobalLocale(defaultLocale);
     return defaultLocale;
   });
   const isReady = Boolean(translations[locale]) && (isInitialized || Boolean(hydrationData));
 
-  /**
-   * Translation lookup function.
-   * Returns the translated text for the given source text key.
-   * Falls back to the source text if no translation is found.
-   */
   const t = useCallback(
     (text: string): string => {
       return translations[locale]?.[text] || text;
@@ -297,45 +271,33 @@ export const VocoderProvider: React.FC<VocoderProviderProps> = ({
     }
   }, [locale]);
 
-  /**
-   * Smart locale setter that persists the choice and finds the best match.
-   * Lazy loads translations for the new locale if not already loaded.
-   */
   const setLocale = async (newLocale: string) => {
-    // Get available locales from config (not just loaded translations)
     const availableLocales = Object.keys(localesMetadata).length > 0
       ? Object.keys(localesMetadata)
       : Object.keys(translations);
 
-    // Find the best matching locale
     const bestLocale = getBestMatchingLocale(
       newLocale,
       availableLocales,
       defaultLocale
     );
 
-    // Lazy load translations if not already loaded
     if (!translations[bestLocale]) {
       try {
         const newTranslations = await loadLocale(bestLocale);
-        // Merge into existing translations (React will re-render)
         setTranslationsState(prev => ({
           ...prev,
           [bestLocale]: newTranslations,
         }));
       } catch (error) {
         console.error(`Failed to load locale ${bestLocale}:`, error);
-        // Continue with locale switch even if load fails (will show source text)
       }
     }
 
-    // Update state
     setLocaleState(bestLocale);
 
-    // Persist the choice
     setStoredLocale(STORAGE_KEY, bestLocale);
 
-    // Sync with global state for t() function
     _setGlobalLocale(bestLocale);
   };
 
@@ -343,15 +305,12 @@ export const VocoderProvider: React.FC<VocoderProviderProps> = ({
     _setGlobalLocale(locale);
   }, [locale]);
 
-  // Sync translations with global state whenever they change
   useEffect(() => {
     if (Object.keys(translations).length > 0) {
       _setGlobalTranslations(translations);
     }
   }, [translations]);
 
-  // Available locales = all locales from config (not just loaded ones)
-  // since setLocale can lazy-load any locale on demand
   const availableLocales = Object.keys(localesMetadata).length > 0
     ? Object.keys(localesMetadata)
     : Object.keys(translations);
@@ -382,16 +341,6 @@ export const VocoderProvider: React.FC<VocoderProviderProps> = ({
   );
 };
 
-/**
- * Hook to access Vocoder translation context.
- * Must be used within VocoderProvider.
- *
- * @example
- * ```tsx
- * const { locale, setLocale, t } = useVocoder();
- * const greeting = t("Hello, world!");
- * ```
- */
 export const useVocoder = () => {
   const context = useContext(VocoderContext);
   if (!context) {
