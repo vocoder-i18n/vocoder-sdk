@@ -24,22 +24,6 @@ export function _setGlobalLocale(locale: string): void {
 }
 
 /**
- * Get current global locale
- * @internal
- */
-export function _getGlobalLocale(): string {
-  return globalLocale;
-}
-
-/**
- * Get global translations
- * @internal
- */
-export function _getGlobalTranslations(): Record<string, Record<string, string>> {
-  return globalTranslations;
-}
-
-/**
  * Translate text using global translations
  * Can be used outside React components (utilities, services, etc.)
  *
@@ -103,8 +87,3 @@ export function t(text: string, values?: Record<string, any>): string {
 
   return translated;
 }
-
-/**
- * Alias for t() function
- */
-export const translate = t;

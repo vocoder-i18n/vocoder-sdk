@@ -29,11 +29,10 @@ pnpm test:unit
 pnpm test:integration
 ```
 
-### Skip Integration Tests
+### Integration Tests Are Opt-In
 ```bash
-pnpm test:integration:skip
-# OR
-SKIP_INTEGRATION=true pnpm test
+pnpm test           # runs unit tests only
+pnpm test:integration
 ```
 
 ### Watch Mode (for Development)
@@ -86,7 +85,7 @@ Integration tests (`incremental-workflow.test.ts`) require:
 1. **vocoder-app running locally**:
    ```bash
    cd vocoder-app
-   npm run dev
+   pnpm run dev
    ```
 
 2. **Environment variables**:
@@ -168,6 +167,6 @@ Target coverage:
 ## Related Documentation
 
 - [../../README.md](../../README.md) - CLI package overview
-- [../commands/translate.ts](../commands/translate.ts) - Main command implementation
+- [../commands/sync.ts](../commands/sync.ts) - Main command implementation
 - [../utils/api.ts](../utils/api.ts) - API client
 - [/vocoder-app/app/api/translate/route.ts](/vocoder-app/app/api/translate/route.ts) - API endpoint

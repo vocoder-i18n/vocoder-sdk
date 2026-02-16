@@ -26,13 +26,12 @@ const POSITION_MAP: Record<string, string> = {
  * - Uses Intl.DisplayNames for runtime translation of locale names
  * - Configurable sorting: by English names (default), native names, or translated names
  *
- * @example Basic usage (with auto-generated locales from CLI)
+ * @example Basic usage (with auto-generated locales from VocoderProvider)
  * ```tsx
- * import { LocaleSelector } from '@vocoder/react';
- * import { locales } from './.vocoder/locales';
+ * import { LocaleSelector } from '@vocoder/react/locale-selector';
  *
  * // Sorts by source language (English) by default - consistent order
- * <LocaleSelector locales={locales} />
+ * <LocaleSelector />
  * ```
  *
  * @example Sort by native names (consistent across locales)

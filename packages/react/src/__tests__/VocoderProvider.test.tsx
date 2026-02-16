@@ -1,30 +1,15 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import React from 'react';
 import { VocoderProvider, useVocoder } from '../VocoderProvider';
 
-const mockTranslations = {
-  en: {
-    'Hello': 'Hello',
-    'Goodbye': 'Goodbye',
-  },
-  es: {
-    'Hello': 'Hola',
-    'Goodbye': 'Adiós',
-  },
-  fr: {
-    'Hello': 'Bonjour',
-    'Goodbye': 'Au revoir',
-  },
-};
-
-// Test component that uses the hook
 function TestComponent() {
-  const { locale, setLocale, t, availableLocales } = useVocoder();
+  const { locale, setLocale, t, availableLocales, isReady } = useVocoder();
 
   return (
     <div>
+      <div data-testid="ready">{String(isReady)}</div>
       <div data-testid="locale">{locale}</div>
       <div data-testid="translation">{t('Hello')}</div>
       <div data-testid="available">{availableLocales.join(',')}</div>
@@ -35,89 +20,57 @@ function TestComponent() {
 }
 
 describe('VocoderProvider', () => {
-  beforeEach(() => {
-    // Clear localStorage before each test
-    localStorage.clear();
-  });
-
-  afterEach(() => {
-    localStorage.clear();
-  });
-
-  it('provides translations to descendants', () => {
+  it('loads generated translations and exposes locales', async () => {
     render(
-      <VocoderProvider translations={mockTranslations} defaultLocale="en">
+      <VocoderProvider>
         <TestComponent />
-      </VocoderProvider>
+      </VocoderProvider>,
     );
 
-    expect(screen.getByTestId('translation')).toHaveTextContent('Hello');
+    await waitFor(() => {
+      expect(screen.getByTestId('ready')).toHaveTextContent('true');
+      expect(screen.getByTestId('translation')).toHaveTextContent('Hello');
+    });
+
+    expect(screen.getByTestId('available')).toHaveTextContent('en,es,fr');
+    expect(screen.getByTestId('locale')).toHaveTextContent('en');
   });
 
-  it('switches locales correctly', async () => {
+  it('switches locale and persists cookie preference', async () => {
     const user = userEvent.setup();
 
     render(
-      <VocoderProvider translations={mockTranslations} defaultLocale="en">
+      <VocoderProvider>
         <TestComponent />
-      </VocoderProvider>
+      </VocoderProvider>,
     );
 
-    // Initial locale
-    expect(screen.getByTestId('locale')).toHaveTextContent('en');
-    expect(screen.getByTestId('translation')).toHaveTextContent('Hello');
-
-    // Switch to Spanish
     await user.click(screen.getByText('Switch to Spanish'));
 
     await waitFor(() => {
       expect(screen.getByTestId('locale')).toHaveTextContent('es');
       expect(screen.getByTestId('translation')).toHaveTextContent('Hola');
     });
+
+    expect(document.cookie).toContain('vocoder_locale=es');
   });
 
-  it('persists locale preference', async () => {
-    const user = userEvent.setup();
+  it('uses cookie locale on initial render', async () => {
+    document.cookie = 'vocoder_locale=fr; Path=/';
 
-    const { unmount } = render(
-      <VocoderProvider translations={mockTranslations} defaultLocale="en">
+    render(
+      <VocoderProvider>
         <TestComponent />
-      </VocoderProvider>
+      </VocoderProvider>,
     );
-
-    // Switch to French
-    await user.click(screen.getByText('Switch to French'));
 
     await waitFor(() => {
       expect(screen.getByTestId('locale')).toHaveTextContent('fr');
+      expect(screen.getByTestId('translation')).toHaveTextContent('Bonjour');
     });
-
-    // Unmount and remount
-    unmount();
-
-    render(
-      <VocoderProvider translations={mockTranslations} defaultLocale="en">
-        <TestComponent />
-      </VocoderProvider>
-    );
-
-    // Should remember French
-    expect(screen.getByTestId('locale')).toHaveTextContent('fr');
-    expect(screen.getByTestId('translation')).toHaveTextContent('Bonjour');
   });
 
-  it('handles static translations mode', () => {
-    render(
-      <VocoderProvider translations={mockTranslations} defaultLocale="en">
-        <TestComponent />
-      </VocoderProvider>
-    );
-
-    expect(screen.getByTestId('available')).toHaveTextContent('en,es,fr');
-  });
-
-  it('throws error when useVocoder is used outside provider', () => {
-    // Suppress console.error for this test
+  it('throws when useVocoder is used outside provider', () => {
     const originalError = console.error;
     console.error = () => {};
 

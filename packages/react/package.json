@@ -23,7 +23,7 @@
     "build": "tsc && tsc --declaration --emitDeclarationOnly",
     "dev": "tsc --watch",
     "watch": "tsc --watch",
-    "test": "vitest",
+    "test": "vitest run",
     "test:watch": "vitest --watch"
   },
   "repository": {
@@ -55,8 +55,6 @@
     "access": "public"
   },
   "dependencies": {
-    "@formatjs/intl": "^4.1.2",
-    "@vocoder/types": "^0.1.1",
     "intl-messageformat": "^11.1.2"
   },
   "peerDependencies": {

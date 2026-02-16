@@ -28,7 +28,7 @@ function meetsConfidenceThreshold(
  * 5. Transform files with <T> and t() wrappers
  * 6. Write transformed files
  */
-export async function wrap(options: WrapOptions = {}): Promise<void> {
+export async function wrap(options: WrapOptions = {}): Promise<number> {
   const startTime = Date.now();
   const projectRoot = process.cwd();
   const confidenceThreshold = options.confidence || 'high';
@@ -43,7 +43,7 @@ export async function wrap(options: WrapOptions = {}): Promise<void> {
     if (allCandidates.length === 0) {
       spinner.succeed('No unwrapped strings found');
       console.log(chalk.dim('All user-facing strings appear to be wrapped already.'));
-      return;
+      return 0;
     }
 
     spinner.succeed(
@@ -64,7 +64,7 @@ export async function wrap(options: WrapOptions = {}): Promise<void> {
       console.log(
         chalk.dim('Try --confidence medium or --confidence low to see more candidates.'),
       );
-      return;
+      return 0;
     }
 
     console.log(
@@ -111,7 +111,7 @@ export async function wrap(options: WrapOptions = {}): Promise<void> {
       const summary = summarizeCandidates(filtered);
       console.log(chalk.dim(`Summary: ${summary}`));
       console.log(chalk.dim('\nRun without --dry-run to apply changes.'));
-      return;
+      return 0;
     }
 
     // 4. Interactive mode
@@ -125,7 +125,7 @@ export async function wrap(options: WrapOptions = {}): Promise<void> {
 
     if (accepted.length === 0) {
       console.log(chalk.yellow('No strings selected for wrapping.'));
-      return;
+      return 0;
     }
 
     // 5. Transform files
@@ -173,6 +173,7 @@ export async function wrap(options: WrapOptions = {}): Promise<void> {
     console.log(chalk.dim('  1. Review the changes (git diff)'));
     console.log(chalk.dim('  2. Run your tests to verify nothing broke'));
     console.log(chalk.dim('  3. Run "vocoder sync" to extract and translate'));
+    return 0;
 
   } catch (error: unknown) {
     if (error instanceof Error) {
@@ -181,7 +182,7 @@ export async function wrap(options: WrapOptions = {}): Promise<void> {
         console.error(chalk.dim('\nFull error:'), error);
       }
     }
-    process.exit(1);
+    return 1;
   }
 }
 

@@ -1,7 +1,7 @@
 /**
  * Auto-loader for generated translations (new split-file architecture)
  *
- * When users run `npx vocoder sync`, the CLI writes:
+ * When users run `pnpm exec vocoder sync`, the CLI writes:
  * - node_modules/@vocoder/generated/manifest.mjs: ESM manifest with locale loaders
  * - node_modules/@vocoder/generated/manifest.cjs: CJS manifest for SSR/Node
  * - node_modules/@vocoder/generated/en.js, es.js, etc.: Locale files
@@ -39,9 +39,9 @@ const emptyConfig: VocoderConfig = {
 
 let _config: VocoderConfig = emptyConfig;
 let _loadedTranslations: TranslationsMap = {};
-let _initialLocale: string = '';
 let _loaders: Record<string, () => any> = {};
 let _manifestLoaded = false;
+let _manifestLoadPromise: Promise<VocoderManifest | null> | null = null;
 
 // Load manifest immediately in Node.js/SSR (CJS)
 try {
@@ -64,24 +64,35 @@ try {
 
 // Lazy-load ESM manifest (client + bundlers)
 async function loadManifest(): Promise<VocoderManifest | null> {
-  if (_manifestLoaded) return _config.sourceLocale ? { config: _config, loaders: _loaders } : null;
-  _manifestLoaded = true;
-
-  try {
-    const mod = await import('@vocoder/generated/manifest');
-    const manifest = (mod.default ?? mod) as VocoderManifest;
-
-    if (manifest?.config) {
-      _config = manifest.config;
-    }
-    if (manifest?.loaders) {
-      _loaders = manifest.loaders;
-    }
-
-    return manifest;
-  } catch {
-    return null;
+  if (_manifestLoaded) {
+    return _config.sourceLocale ? { config: _config, loaders: _loaders } : null;
   }
+  if (_manifestLoadPromise) {
+    return _manifestLoadPromise;
+  }
+
+  _manifestLoadPromise = (async () => {
+    try {
+      const mod = await import('@vocoder/generated/manifest');
+      const manifest = (mod.default ?? mod) as VocoderManifest;
+
+      if (manifest?.config) {
+        _config = manifest.config;
+      }
+      if (manifest?.loaders) {
+        _loaders = manifest.loaders;
+      }
+      _manifestLoaded = true;
+
+      return manifest;
+    } catch {
+      return null;
+    } finally {
+      _manifestLoadPromise = null;
+    }
+  })();
+
+  return _manifestLoadPromise;
 }
 
 // Determine initial locale to load synchronously
@@ -118,12 +129,12 @@ function getInitialLocale(): string {
 // Load initial locale synchronously (for SSR/Node.js only)
 // In browser/Vite, this will be loaded async by VocoderProvider
 if (typeof window === 'undefined' && typeof require !== 'undefined') {
-  _initialLocale = getInitialLocale();
-  if (_initialLocale && _loaders[_initialLocale]) {
+  const initialLocale = getInitialLocale();
+  if (initialLocale && _loaders[initialLocale]) {
     try {
-      const mod = _loaders[_initialLocale]!();
+      const mod = _loaders[initialLocale]!();
       const translations = (mod as any)?.default ?? mod;
-      _loadedTranslations[_initialLocale] = translations || {};
+      _loadedTranslations[initialLocale] = translations || {};
     } catch {
       // File not found - fall back to empty
     }
@@ -164,13 +175,6 @@ export function getGeneratedTranslations(): TranslationsMap {
  */
 export function getGeneratedLocales(): LocalesMap {
   return _config.locales;
-}
-
-/**
- * Check if any translations are loaded
- */
-export function hasGeneratedData(): boolean {
-  return Object.keys(_loadedTranslations).length > 0;
 }
 
 /**
@@ -248,18 +252,4 @@ export function loadLocaleSync(locale: string): Record<string, string> | null {
   }
 
   return null;
-}
-
-/**
- * Preload a locale in the background (don't wait for it)
- */
-export function preloadLocale(locale: string): void {
-  if (_loadedTranslations[locale]) {
-    return; // Already loaded
-  }
-
-  // Fire and forget
-  loadLocale(locale).catch(() => {
-    // Ignore errors - it's just a preload
-  });
 }

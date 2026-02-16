@@ -6,6 +6,7 @@ import React, {
   useState,
 } from "react";
 import {
+  LocalesMap,
   TranslationsMap,
   VocoderContextValue,
   VocoderProviderProps,
@@ -26,7 +27,7 @@ import {
   initializeVocoder,
   loadLocale,
   loadLocaleSync,
-} from "./generated";
+} from "./runtime";
 
 const VocoderContext = createContext<VocoderContextValue | null>(null);
 
@@ -36,7 +37,7 @@ const HYDRATION_ID = "__vocoder_hydration__";
 type HydrationSnapshot = {
   locale: string;
   translations: Record<string, string>;
-  locales: Record<string, any>;
+  locales: LocalesMap;
   defaultLocale: string;
 };
 
@@ -60,18 +61,14 @@ function readHydrationFromDom(): { raw: string; data: HydrationSnapshot } | null
 
 function buildHydrationOnServer(
   cookieString: string | undefined,
-  propDefaultLocale: string | undefined,
-  propLocales: Record<string, any> | undefined,
-  propTranslations: TranslationsMap | undefined,
 ): { raw: string; data: HydrationSnapshot } | null {
   if (typeof window !== "undefined") return null;
-  if (propTranslations) return null;
 
   const config = getGeneratedConfig();
-  const locales = propLocales ?? getGeneratedLocales() ?? {};
+  const locales = getGeneratedLocales() ?? {};
   const availableLocales = Object.keys(locales);
   const fallback =
-    propDefaultLocale || config.sourceLocale || availableLocales[0] || "en";
+    config.sourceLocale || availableLocales[0] || "en";
 
   const storedPreference = getStoredLocale(STORAGE_KEY, cookieString);
   const bestLocale = storedPreference
@@ -103,7 +100,7 @@ function buildHydrationOnServer(
 /**
  * VocoderProvider manages translation state and locale switching.
  *
- * After running `npx vocoder sync`, translations are loaded automatically.
+ * After running `pnpm exec vocoder sync`, translations are loaded automatically.
  * No imports or prop wiring needed.
  *
  * @example
@@ -112,140 +109,110 @@ function buildHydrationOnServer(
  *   <App />
  * </VocoderProvider>
  * ```
- *
- * @example With explicit overrides
- * ```tsx
- * <VocoderProvider defaultLocale="fr" translations={customTranslations}>
- *   <App />
- * </VocoderProvider>
- * ```
  */
 export const VocoderProvider: React.FC<VocoderProviderProps> = ({
   children,
-  defaultLocale: propDefaultLocale,
-  translations: propTranslations,
-  locales: propLocales,
   cookies: cookieString,
 }) => {
-  // Use prop values if provided, otherwise use auto-loaded generated data
-  const generatedConfig = getGeneratedConfig();
   const [hydration] = useState(() => {
     if (typeof window !== "undefined") {
       return readHydrationFromDom();
     }
-    return buildHydrationOnServer(
-      cookieString,
-      propDefaultLocale,
-      propLocales,
-      propTranslations,
-    );
+    return buildHydrationOnServer(cookieString);
   });
   const hydrationData = hydration?.data;
   const hydrationRaw = hydration?.raw;
 
   const [translations, setTranslationsState] = useState<TranslationsMap>(() => {
-    if (propTranslations) return propTranslations;
+    let initial: TranslationsMap;
+
     if (hydrationData?.translations && hydrationData?.locale) {
-      return { [hydrationData.locale]: hydrationData.translations };
-    }
+      initial = { [hydrationData.locale]: hydrationData.translations };
+    } else {
+      const generated = getGeneratedTranslations();
+      initial = generated;
 
-    const generated = getGeneratedTranslations();
-
-    // SSR: prime translations for stored locale to avoid flash
-    if (typeof window === 'undefined') {
+      // SSR: prime translations for stored locale to avoid flash
       const storedPreference = getStoredLocale(STORAGE_KEY, cookieString);
       if (storedPreference && !generated[storedPreference]) {
         const loaded = loadLocaleSync(storedPreference);
         if (loaded) {
-          return { ...generated, [storedPreference]: loaded };
+          initial = { ...generated, [storedPreference]: loaded };
         }
       }
     }
 
-    return generated;
+    _setGlobalTranslations(initial);
+    return initial;
   });
   const [localesMetadata, setLocalesMetadata] = useState(
-    () => propLocales ?? hydrationData?.locales ?? getGeneratedLocales(),
+    () => hydrationData?.locales ?? getGeneratedLocales(),
   );
   const [defaultLocale, setDefaultLocale] = useState(
     () =>
-      propDefaultLocale ||
       hydrationData?.defaultLocale ||
-      generatedConfig.sourceLocale ||
+      getGeneratedConfig().sourceLocale ||
       "en",
   );
   const [isInitialized, setIsInitialized] = useState(false);
-  const isReady = Boolean(propTranslations) ||
-    Boolean(hydrationData?.translations && hydrationData?.locale) ||
-    (Object.keys(translations).length > 0 && isInitialized);
 
   // If translations are empty, load them async (for browser/Vite where
   // the synchronous require couldn't load locale files at module init time)
   useEffect(() => {
     if (isInitialized) return;
 
-    const hasTranslations = Object.keys(translations).length > 0;
-    const hasLocales = Object.keys(localesMetadata || {}).length > 0;
-    const hasDefaultLocale = Boolean(defaultLocale);
+    let cancelled = false;
 
-    initializeVocoder().then(() => {
+    (async () => {
+      await initializeVocoder();
+      if (cancelled) return;
+
       setIsInitialized(true);
 
-      if (!propTranslations) {
-        const trans = getGeneratedTranslations();
-        if (Object.keys(trans).length > 0) {
-          setTranslationsState(trans);
-        }
+      const generatedTranslations = getGeneratedTranslations();
+      if (Object.keys(generatedTranslations).length > 0) {
+        setTranslationsState((prev) => ({ ...generatedTranslations, ...prev }));
       }
 
-      if (!propLocales) {
-        const locales = getGeneratedLocales();
-        if (Object.keys(locales).length > 0) {
-          setLocalesMetadata(locales);
-        }
+      const generatedLocales = getGeneratedLocales();
+      if (Object.keys(generatedLocales).length > 0) {
+        setLocalesMetadata(generatedLocales);
       }
 
-      if (!propDefaultLocale) {
-        const cfg = getGeneratedConfig();
-        if (cfg.sourceLocale) {
-          setDefaultLocale(cfg.sourceLocale);
-        }
+      const cfg = getGeneratedConfig();
+      if (cfg.sourceLocale) {
+        setDefaultLocale(cfg.sourceLocale);
       }
 
-      // If we didn't have translations initially, re-resolve locale after init
-      if (!propTranslations && !hasTranslations && !hydrationData) {
-        const trans = getGeneratedTranslations();
-        const locales = getGeneratedLocales();
-        const available = Object.keys(locales).length > 0
-          ? Object.keys(locales)
-          : Object.keys(trans);
+      const available = Object.keys(generatedLocales).length > 0
+        ? Object.keys(generatedLocales)
+        : Object.keys(generatedTranslations);
 
-        if (available.length > 0) {
-          const storedPreference = getStoredLocale(STORAGE_KEY, cookieString);
-          const fallback = getGeneratedConfig().sourceLocale || available[0] || 'en';
-          const bestLocale = getBestMatchingLocale(
-            storedPreference || fallback,
-            available,
-            fallback,
-          );
+      if (available.length === 0) return;
 
-          setLocaleState(bestLocale);
-          _setGlobalLocale(bestLocale);
-        }
+      const fallback = cfg.sourceLocale || available[0] || "en";
+      const storedPreference = getStoredLocale(STORAGE_KEY, cookieString);
+      const bestLocale = getBestMatchingLocale(
+        storedPreference || fallback,
+        available,
+        fallback,
+      );
+
+      if (!generatedTranslations[bestLocale]) {
+        const loaded = await loadLocale(bestLocale);
+        if (cancelled) return;
+        setTranslationsState((prev) => ({ ...prev, [bestLocale]: loaded }));
       }
 
-    });
-  }, [
-    defaultLocale,
-    isInitialized,
-    localesMetadata,
-    propDefaultLocale,
-    propLocales,
-    propTranslations,
-    translations,
-    cookieString,
-    hydrationData,
-  ]);
+      if (cancelled) return;
+      setLocaleState(bestLocale);
+      _setGlobalLocale(bestLocale);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [cookieString, hydrationData, isInitialized]);
 
   // Initialize locale with cookie-based preference (SSR-compatible!)
   // Cookies can be read on server, preventing hydration mismatches
@@ -287,15 +254,19 @@ export const VocoderProvider: React.FC<VocoderProviderProps> = ({
     _setGlobalLocale(defaultLocale);
     return defaultLocale;
   });
+  const isReady = Boolean(translations[locale]) && (isInitialized || Boolean(hydrationData));
 
   /**
    * Translation lookup function.
    * Returns the translated text for the given source text key.
    * Falls back to the source text if no translation is found.
    */
-  const t = (text: string): string => {
-    return translations[locale]?.[text] || text;
-  };
+  const t = useCallback(
+    (text: string): string => {
+      return translations[locale]?.[text] || text;
+    },
+    [locale, translations],
+  );
 
   const hasTranslation = useCallback(
     (text: string): boolean => {
@@ -368,6 +339,10 @@ export const VocoderProvider: React.FC<VocoderProviderProps> = ({
     _setGlobalLocale(bestLocale);
   };
 
+  useEffect(() => {
+    _setGlobalLocale(locale);
+  }, [locale]);
+
   // Sync translations with global state whenever they change
   useEffect(() => {
     if (Object.keys(translations).length > 0) {
@@ -377,9 +352,9 @@ export const VocoderProvider: React.FC<VocoderProviderProps> = ({
 
   // Available locales = all locales from config (not just loaded ones)
   // since setLocale can lazy-load any locale on demand
-    const availableLocales = Object.keys(localesMetadata).length > 0
-      ? Object.keys(localesMetadata)
-      : Object.keys(translations);
+  const availableLocales = Object.keys(localesMetadata).length > 0
+    ? Object.keys(localesMetadata)
+    : Object.keys(translations);
 
   const value: VocoderContextValue = {
     availableLocales,

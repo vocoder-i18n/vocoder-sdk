@@ -17,13 +17,12 @@ describe('Incremental Translation Workflow', () => {
 
   beforeEach(() => {
     config = {
-      projectId: 'test-project',
       apiKey: 'test-key',
       apiUrl: 'http://localhost:3000',
+      sourceLocale: 'en',
       targetBranches: ['main'],
       targetLocales: ['es', 'fr', 'de'],
       extractionPattern: 'src/**/*.{tsx,jsx}',
-      outputDir: '.vocoder/locales',
       timeout: 60000,
     };
 

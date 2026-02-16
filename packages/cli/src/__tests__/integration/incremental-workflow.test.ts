@@ -9,12 +9,12 @@ import { VocoderAPI } from '../../utils/api.js';
  * These tests run against the actual API (requires vocoder-app running on localhost:3000)
  *
  * To run these tests:
- * 1. Start vocoder-app: cd vocoder-app && npm run dev
+ * 1. Start vocoder-app: cd vocoder-app && pnpm run dev
  * 2. Run tests: pnpm test incremental-workflow
  *
- * Set SKIP_INTEGRATION=true to skip these tests
+ * Set RUN_INTEGRATION=true to run these tests
  */
-describe.skipIf(process.env.SKIP_INTEGRATION === 'true')('Incremental Workflow Integration', () => {
+describe.skipIf(process.env.RUN_INTEGRATION !== 'true')('Incremental Workflow Integration', () => {
   let api: VocoderAPI;
   let config: ProjectConfig;
   const testBranch = `test-incremental-${Date.now()}`;
@@ -27,7 +27,6 @@ describe.skipIf(process.env.SKIP_INTEGRATION === 'true')('Incremental Workflow I
       targetBranches: ['main'],
       targetLocales: ['es', 'fr'],
       extractionPattern: 'src/**/*.{tsx,jsx}',
-      outputDir: '.vocoder/locales',
       timeout: 120000,
     };
 
@@ -60,7 +59,8 @@ describe.skipIf(process.env.SKIP_INTEGRATION === 'true')('Incremental Workflow I
     expect(batch1.totalStrings).toBe(5);
 
     // Wait for translations to complete
-    const translations1 = await api.waitForCompletion(batch1.batchId, config.timeout);
+    const completion1 = await api.waitForCompletion(batch1.batchId, config.timeout);
+    const translations1 = completion1.translations;
 
     // Verify we got translations for all locales
     expect(Object.keys(translations1)).toHaveLength(2); // es, fr
@@ -79,8 +79,8 @@ describe.skipIf(process.env.SKIP_INTEGRATION === 'true')('Incremental Workflow I
     expect(batch2.totalStrings).toBe(5);
 
     // Should return immediately with existing translations
-    const translations2 = await api.waitForCompletion(batch2.batchId, config.timeout);
-    expect(translations2).toEqual(translations1);
+    const completion2 = await api.waitForCompletion(batch2.batchId, config.timeout);
+    expect(completion2.translations).toEqual(translations1);
   }, 60000); // 60 second timeout
 
   it('should handle adding one new string efficiently', async () => {
@@ -114,7 +114,7 @@ describe.skipIf(process.env.SKIP_INTEGRATION === 'true')('Incremental Workflow I
     expect(batch2.totalStrings).toBe(4);
 
     const start2 = Date.now();
-    const translations = await api.waitForCompletion(batch2.batchId, config.timeout);
+    const { translations } = await api.waitForCompletion(batch2.batchId, config.timeout);
     const duration2 = Date.now() - start2;
 
     // Verify new string was translated
@@ -155,7 +155,7 @@ describe.skipIf(process.env.SKIP_INTEGRATION === 'true')('Incremental Workflow I
     expect(batch2.newStrings).toBe(0);
     expect(batch2.totalStrings).toBe(3);
 
-    const translations = await api.waitForCompletion(batch2.batchId, config.timeout);
+    const { translations } = await api.waitForCompletion(batch2.batchId, config.timeout);
 
     // Removed string should not be in translations
     expect(translations.es['String to be removed']).toBeUndefined();
@@ -189,7 +189,7 @@ describe.skipIf(process.env.SKIP_INTEGRATION === 'true')('Incremental Workflow I
     expect(batch2.newStrings).toBe(1);
     expect(batch2.totalStrings).toBe(1);
 
-    const translations = await api.waitForCompletion(batch2.batchId, config.timeout);
+    const { translations } = await api.waitForCompletion(batch2.batchId, config.timeout);
 
     // Should have translation for modified string
     expect(translations.es[modifiedString]).toBeDefined();
@@ -212,7 +212,7 @@ describe.skipIf(process.env.SKIP_INTEGRATION === 'true')('Incremental Workflow I
     expect(batch1.newStrings).toBe(100);
 
     const start = Date.now();
-    const translations = await api.waitForCompletion(batch1.batchId, 180000); // 3 minute timeout
+    const { translations } = await api.waitForCompletion(batch1.batchId, 180000); // 3 minute timeout
     const duration = Date.now() - start;
 
     // Verify all strings were translated

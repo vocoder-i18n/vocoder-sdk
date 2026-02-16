@@ -3,7 +3,6 @@ export interface TranslateOptions {
   force?: boolean;
   dryRun?: boolean;
   verbose?: boolean;
-  maxAge?: number;
   include?: string[];
   exclude?: string[];
 }

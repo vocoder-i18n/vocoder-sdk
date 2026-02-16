@@ -12,12 +12,17 @@ function collect(value: string, previous: string[] = []): string[] {
   return previous.concat([value]);
 }
 
+async function runCommand(command: (options: any) => Promise<number>, options: any): Promise<void> {
+  const exitCode = await command(options);
+  process.exitCode = exitCode;
+}
+
 const program = new Command();
 
 program
   .name('vocoder')
   .description('Vocoder CLI - Sync translations for your application')
-  .version('0.1.0');
+  .version('0.1.2');
 
 program
   .command('sync')
@@ -28,8 +33,7 @@ program
   .option('--force', 'Sync even if not a target branch')
   .option('--dry-run', 'Show what would be synced without doing it')
   .option('--verbose', 'Show detailed progress')
-  .option('--max-age <seconds>', 'Use cache if younger than this (seconds)', parseInt)
-  .action(sync);
+  .action((options) => runCommand(sync, options));
 
 program
   .command('wrap')
@@ -40,6 +44,6 @@ program
   .option('--interactive', 'Confirm each string interactively')
   .option('--confidence <level>', 'Minimum confidence: high, medium, low', 'high')
   .option('--verbose', 'Detailed output')
-  .action(wrap);
+  .action((options) => runCommand(wrap, options));
 
 program.parse(process.argv);
