@@ -23,10 +23,13 @@ export interface LocalesMap {
 export interface VocoderContextValue {
   availableLocales: string[];
   getDisplayName: (targetLocale: string, viewingLocale?: string) => string;
+  /** True when initial translations are ready for render */
+  isReady: boolean;
   locale: string;
   locales?: LocalesMap;
   setLocale: (locale: string) => void;
   t: (text: string) => string;
+  hasTranslation: (text: string) => boolean;
 }
 
 // Props for the VocoderProvider component
@@ -46,16 +49,6 @@ export interface VocoderProviderProps {
    * @example Next.js Pages: context.req.headers.cookie
    */
   cookies?: string;
-}
-
-// Props for the VocoderProviderServer component (SSR)
-export interface VocoderProviderServerProps {
-  /** Current locale */
-  locale: string;
-  /** Translations for the current locale */
-  translations: Record<string, string>;
-  /** React children */
-  children: React.ReactNode;
 }
 
 // Props for the T component

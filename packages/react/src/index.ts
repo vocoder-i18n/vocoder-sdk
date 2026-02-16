@@ -5,7 +5,7 @@ export { withVocoder, withTranslation } from './withVocoder';
 export { t, translate } from './translate';
 
 // Lazy loading utilities
-export { loadLocale, preloadLocale } from './generated';
+export { loadLocale, preloadLocale, initializeVocoder } from './generated';
 
 // Type exports
 export type {
@@ -23,3 +23,5 @@ export type { WithVocoderProps } from './withVocoder';
 // bundling Radix UI and Lucide dependencies unless explicitly imported.
 // Import it like this:
 //   import { LocaleSelector } from '@vocoder/react/locale-selector';
+// Test change at Sun Feb 15 20:45:14 CST 2026
+// Another test at Sun Feb 15 20:49:35 CST 2026

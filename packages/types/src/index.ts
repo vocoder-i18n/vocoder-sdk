@@ -16,6 +16,7 @@ export interface VocoderContextValue {
   availableLocales: string[];
   isLoading: boolean;
   error: string | null;
+  hasTranslation: (text: string) => boolean;
 }
 
 // Props for the VocoderProvider component

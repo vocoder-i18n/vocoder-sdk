@@ -446,19 +446,57 @@ const locale = document.cookie
 
 ## Server-Side Rendering (SSR)
 
-For server components (Next.js App Router):
+Use the main `VocoderProvider` for SSR. Pass request cookies to keep
+server and client in sync and avoid hydration mismatches:
 
 ```tsx
-import { VocoderProviderServer } from '@vocoder/react/server';
-import { T } from '@vocoder/react';
-import en from './locales/en.json';
+import { cookies } from 'next/headers';
+import { VocoderProvider } from '@vocoder/react';
 
-export default async function Page() {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const cookieString = (await cookies()).toString();
+
   return (
-    <VocoderProviderServer locale="en" translations={en}>
-      <T>Server-rendered content</T>
-    </VocoderProviderServer>
+    <VocoderProvider cookies={cookieString}>
+      {children}
+    </VocoderProvider>
   );
+}
+```
+
+## Client-Side SPA (No Flash)
+
+For client-only apps, bootstrap translations before the first render:
+
+```tsx
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+import { initializeVocoder } from '@vocoder/react';
+
+async function bootstrap() {
+  await initializeVocoder();
+  ReactDOM.createRoot(document.getElementById('root')!).render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>
+  );
+}
+
+bootstrap();
+```
+
+If you prefer to render a loading state instead of blocking, use `isReady`
+from `useVocoder()` and decide what to show while translations load.
+For example:
+
+```tsx
+import { useVocoder } from '@vocoder/react';
+
+export function AppShell() {
+  const { isReady } = useVocoder();
+  if (!isReady) return <div>Loading translations...</div>;
+  return <App />;
 }
 ```
 

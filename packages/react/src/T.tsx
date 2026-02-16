@@ -45,12 +45,17 @@ export const T: React.FC<TProps> = ({
   components,
   ...values
 }) => {
-  const { t, locale } = useVocoder();
+  const { t, locale, hasTranslation } = useVocoder();
 
   try {
     // Extract source text - prefer msg prop over children
     // msg prop is cleaner for ICU syntax (no JSX escaping needed)
     const sourceText = msg || extractText(children);
+
+    // If translation is missing, render source as-is with no formatting
+    if (!hasTranslation(sourceText)) {
+      return <>{msg ?? children}</>;
+    }
 
     // Look up translation using source text as key
     const translatedText = t(sourceText);

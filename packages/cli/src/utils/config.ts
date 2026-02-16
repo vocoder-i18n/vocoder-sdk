@@ -1,7 +1,8 @@
-import type { LocalConfig, VocoderConfigFile, TranslateOptions } from '../types.js';
-import { config as loadEnv } from 'dotenv';
+import type { LocalConfig, TranslateOptions, VocoderConfigFile } from '../types.js';
 import { loadConfigFile, validateConfigFile } from './config-file.js';
+
 import chalk from 'chalk';
+import { config as loadEnv } from 'dotenv';
 
 // Load .env file if present
 loadEnv();
@@ -38,6 +39,7 @@ export function getLocalConfig(): LocalConfig {
  * Validates the local configuration
  */
 export function validateLocalConfig(config: LocalConfig): void {
+  console.log('config', config);
   if (!config.apiKey || config.apiKey.length === 0) {
     throw new Error('Invalid API key');
   }

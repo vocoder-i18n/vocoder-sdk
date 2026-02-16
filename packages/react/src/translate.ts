@@ -75,7 +75,16 @@ export function _getGlobalTranslations(): Record<string, Record<string, string>>
  * - Rich text with components is only supported in `<T>` component, not in `t()` function
  */
 export function t(text: string, values?: Record<string, any>): string {
-  const translated = globalTranslations[globalLocale]?.[text] || text;
+  const localeTranslations = globalTranslations[globalLocale];
+  const hasTranslation =
+    !!localeTranslations &&
+    Object.prototype.hasOwnProperty.call(localeTranslations, text);
+
+  if (!hasTranslation) {
+    return text;
+  }
+
+  const translated = localeTranslations![text];
 
   if (values && Object.keys(values).length > 0) {
     // Use IntlMessageFormat for all cases (simple interpolation, ICU, etc.)

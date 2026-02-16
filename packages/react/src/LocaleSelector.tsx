@@ -266,7 +266,22 @@ export const LocaleSelector: React.FC<LocaleSelectorProps> = ({
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <span>
                       {locales?.[lang]
-                        ? `${getDisplayName(lang)} (${locales[lang]!.nativeName})`
+                        ? (() => {
+                            // Check if regional variant (has hyphen: pt-BR, en-US, etc.)
+                            const isRegional = lang.includes('-');
+                            const displayName = getDisplayName(lang);
+                            const nativeName = locales[lang]!.nativeName;
+
+                            if (isRegional) {
+                              // Regional: Just show display name (already includes region)
+                              return displayName;
+                            } else {
+                              // Base language: Show display + native if different
+                              return nativeName && nativeName !== displayName
+                                ? `${displayName} (${nativeName})`
+                                : displayName;
+                            }
+                          })()
                         : lang.toUpperCase()}
                     </span>
                     {isActive && (

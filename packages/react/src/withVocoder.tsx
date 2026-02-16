@@ -14,6 +14,8 @@ export interface WithVocoderProps {
   setLocale: (locale: string) => void;
   /** Available locale codes */
   availableLocales: string[];
+  /** Returns true if a translation exists for the given source text */
+  hasTranslation: VocoderContextValue['hasTranslation'];
 }
 
 /**

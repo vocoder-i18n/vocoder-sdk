@@ -45,7 +45,6 @@ export function formatMessage(
   try {
     // IntlMessageFormat expects lowercase locale codes
     const normalizedLocale = locale.toLowerCase();
-
     const msg = new IntlMessageFormat(text, normalizedLocale);
     const result = msg.format(values);
 
