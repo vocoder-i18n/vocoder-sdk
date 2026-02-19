@@ -1,11 +1,12 @@
-import type { ProjectConfig, TranslateOptions } from '../types.js';
+import type { LimitErrorResponse, ProjectConfig, TranslateOptions } from '../types.js';
 import { detectBranch, isTargetBranch } from '../utils/branch.js';
 import { getMergedConfig, validateLocalConfig } from '../utils/config.js';
 import { mkdirSync, writeFileSync } from 'fs';
 
 import { StringExtractor } from '../utils/extract.js';
-import { VocoderAPI } from '../utils/api.js';
+import { VocoderAPI, VocoderAPIError } from '../utils/api.js';
 import chalk from 'chalk';
+import { resolveGitRepositoryIdentity } from '../utils/git-identity.js';
 import { join } from 'path';
 import ora from 'ora';
 
@@ -95,6 +96,62 @@ ${loaderLines}
 
 module.exports = { config, loaders };
 `;
+}
+
+export function getLimitErrorGuidance(limitError: LimitErrorResponse): string[] {
+  if (limitError.limitType === 'providers') {
+    return [
+      'Provider setup required.',
+      'Add a DeepL API key in Dashboard → Organization Settings → Providers.',
+      `Open settings: ${limitError.upgradeUrl}`,
+    ];
+  }
+
+  if (limitError.limitType === 'translation_chars') {
+    return [
+      'Monthly translation character limit reached.',
+      `Used this month: ${limitError.current.toLocaleString()} chars`,
+      `Requested after sync: ${limitError.required.toLocaleString()} chars`,
+      `Upgrade plan: ${limitError.upgradeUrl}`,
+    ];
+  }
+
+  if (limitError.limitType === 'source_strings') {
+    return [
+      'Active source string limit reached.',
+      `Current active strings: ${limitError.current.toLocaleString()}`,
+      `Required for this sync: ${limitError.required.toLocaleString()}`,
+      `Upgrade plan: ${limitError.upgradeUrl}`,
+    ];
+  }
+
+  return [
+    `Plan: ${limitError.planId}`,
+    `Current: ${limitError.current}`,
+    `Required: ${limitError.required}`,
+    `Upgrade: ${limitError.upgradeUrl}`,
+  ];
+}
+
+function getSyncPolicyErrorGuidance(error: NonNullable<VocoderAPIError['syncPolicyError']>): string[] {
+  if (error.errorCode === 'BRANCH_NOT_ALLOWED') {
+    const lines = ['This branch is not allowed for this project.'];
+    if (error.branch) {
+      lines.push(`Current branch: ${error.branch}`);
+    }
+    if (error.targetBranches && error.targetBranches.length > 0) {
+      lines.push(`Allowed branches: ${error.targetBranches.join(', ')}`);
+    }
+    lines.push('Update your project target branches in the dashboard if needed.');
+    return lines;
+  }
+
+  const lines = ['This project is bound to a different repository.'];
+  if (error.boundRepoLabel) {
+    lines.push(`Bound repository: ${error.boundRepoLabel}`);
+  }
+  lines.push('Run `vocoder init` from the correct repository or create a separate project.');
+  return lines;
 }
 
 /**
@@ -207,11 +264,17 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
     // 5. Submit to API
     spinner.start('Submitting strings to Vocoder API...');
 
+    const repoIdentity = resolveGitRepositoryIdentity();
+    if (!repoIdentity && options.verbose) {
+      console.log(chalk.yellow('⚠ Could not detect git remote origin. Sync will continue without repo metadata.'));
+    }
+
     const strings = extractedStrings.map((s) => s.text);
     const batchResponse = await api.submitTranslation(
       branch,
       strings,
       config.targetLocales,
+      repoIdentity ?? undefined,
     );
 
     spinner.succeed(
@@ -370,6 +433,39 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
     );
     return 0;
   } catch (error) {
+    if (error instanceof VocoderAPIError && error.syncPolicyError) {
+      console.error(chalk.red(`\n❌ ${error.syncPolicyError.message}`));
+      const guidance = getSyncPolicyErrorGuidance(error.syncPolicyError);
+      for (const [index, line] of guidance.entries()) {
+        if (index === 0) {
+          console.log(chalk.yellow(`💡 ${line}`));
+        } else {
+          console.log(chalk.dim(`   ${line}`));
+        }
+      }
+      console.log();
+      return 1;
+    }
+
+    if (error instanceof VocoderAPIError && error.limitError) {
+      const { limitError } = error;
+      console.error(chalk.red(`\n❌ ${limitError.message}`));
+      const guidance = getLimitErrorGuidance(limitError);
+      for (const [index, line] of guidance.entries()) {
+        if (line.startsWith('Open settings:') || line.startsWith('Upgrade')) {
+          console.log(chalk.cyan(`   ${line}`));
+          continue;
+        }
+        if (index === 0) {
+          console.log(chalk.yellow(`💡 ${line}`));
+          continue;
+        }
+        console.log(chalk.dim(`   ${line}`));
+      }
+      console.log();
+      return 1;
+    }
+
     if (error instanceof Error) {
       console.error(chalk.red(`\n❌ Error: ${error.message}\n`));
 

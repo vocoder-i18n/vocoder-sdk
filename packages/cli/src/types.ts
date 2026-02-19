@@ -7,6 +7,21 @@ export interface TranslateOptions {
   exclude?: string[];
 }
 
+export interface InitOptions {
+  apiUrl?: string;
+  yes?: boolean;
+  writeEnv?: boolean;
+  projectName?: string;
+  sourceLocale?: string;
+  targetLocales?: string;
+  verbose?: boolean;
+}
+
+export interface RepoIdentityPayload {
+  repoCanonical?: string;
+  repoLabel?: string;
+}
+
 // Local configuration (from env vars)
 export interface LocalConfig {
   apiKey: string;
@@ -18,14 +33,6 @@ export interface APIProjectConfig {
   sourceLocale: string;
   targetLocales: string[];
   targetBranches: string[];
-}
-
-// Configuration from vocoder.config.{js,ts,mjs,cjs,json}
-export interface VocoderConfigFile {
-  include?: string | string[];
-  exclude?: string | string[];
-  apiKey?: string;
-  apiUrl?: string;
 }
 
 // Combined configuration used by CLI
@@ -66,3 +73,66 @@ export interface TranslationStatusResponse {
   localeMetadata?: Record<string, { nativeName: string; dir?: 'rtl' }>;
   errorMessage?: string;
 }
+
+export interface LimitErrorResponse {
+  errorCode: 'LIMIT_EXCEEDED' | 'INSUFFICIENT_CREDITS';
+  limitType:
+    | 'organizations'
+    | 'projects'
+    | 'git_connections'
+    | 'members'
+    | 'providers'
+    | 'translation_chars'
+    | 'source_strings'
+    | 'credits';
+  planId: string;
+  current: number;
+  required: number;
+  upgradeUrl: string;
+  message: string;
+}
+
+export interface SyncPolicyErrorResponse {
+  errorCode: 'BRANCH_NOT_ALLOWED' | 'PROJECT_REPOSITORY_MISMATCH';
+  message: string;
+  branch?: string;
+  targetBranches?: string[];
+  boundRepoLabel?: string | null;
+}
+
+export interface InitStartResponse {
+  sessionId: string;
+  deviceCode: string;
+  userCode: string;
+  verificationUrl: string;
+  expiresAt: string;
+  poll: {
+    token: string;
+    intervalSeconds: number;
+  };
+}
+
+export type InitStatusResponse =
+  | {
+      status: 'pending';
+      pollIntervalSeconds: number;
+      expiresAt: string;
+      message?: string;
+    }
+  | {
+      status: 'failed';
+      message: string;
+    }
+  | {
+      status: 'completed';
+      credentials: {
+        apiKey: string;
+        apiUrl: string;
+        organizationId: string;
+        organizationName: string;
+        projectId: string;
+        projectName: string;
+        sourceLocale: string;
+        targetLocales: string[];
+      };
+    };

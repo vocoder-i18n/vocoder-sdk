@@ -4,6 +4,7 @@ CLI for Vocoder translation workflows.
 
 Commands:
 
+- `vocoder init`
 - `vocoder sync`
 - `vocoder wrap`
 
@@ -76,21 +77,8 @@ Options:
 Config priority:
 
 1. CLI flags
-2. `vocoder.config.{js,ts,mjs,cjs,json}`
-3. environment variables
-4. defaults
-
-### Config file
-
-```ts
-// vocoder.config.ts
-export default {
-  include: ['src/**/*.{tsx,jsx,ts,js}'],
-  exclude: ['**/*.test.*', '**/__tests__/**'],
-  apiKey: process.env.VOCODER_API_KEY,
-  apiUrl: 'https://vocoder.app',
-};
-```
+2. environment variables
+3. defaults
 
 ### Environment variables
 
@@ -100,13 +88,25 @@ VOCODER_API_URL=https://vocoder.app
 VOCODER_EXTRACTION_PATTERN=src/**/*.{tsx,jsx,ts,js}
 ```
 
-`VOCODER_API_KEY` can come from either environment or config file.
+`VOCODER_API_KEY` must come from the environment.
+
+## `vocoder init`
+
+Bootstraps a project by opening a browser authorization flow, then provisioning
+an organization project API key.
+
+During browser completion, you can paste a DeepL API key (BYOK) or reuse an
+existing org-level DeepL key.
+
+```bash
+pnpm exec vocoder init --write-env
+```
 
 ## Troubleshooting
 
 ### `VOCODER_API_KEY is required`
 
-Set `VOCODER_API_KEY` in `.env` or `vocoder.config.*`.
+Set `VOCODER_API_KEY` in `.env` or your environment.
 
 ### No strings found
 

@@ -1,5 +1,11 @@
 import { execSync } from 'child_process';
 
+const REGEX_SPECIAL_CHARS = /[.+?^${}()|[\]\\]/g;
+
+function escapeRegexChar(value: string): string {
+  return value.replace(REGEX_SPECIAL_CHARS, '\\$&');
+}
+
 /**
  * Detects the current git branch from multiple sources in priority order:
  * 1. Explicit --branch flag (passed as parameter)
@@ -54,5 +60,38 @@ export function isTargetBranch(
   currentBranch: string,
   targetBranches: string[],
 ): boolean {
-  return targetBranches.includes(currentBranch);
+  return targetBranches.some((pattern) =>
+    matchBranchPattern(currentBranch, pattern),
+  );
+}
+
+export function matchBranchPattern(branch: string, pattern: string): boolean {
+  const trimmedPattern = pattern.trim();
+  if (!trimmedPattern) {
+    return false;
+  }
+
+  let regexSource = '^';
+  for (let i = 0; i < trimmedPattern.length; i += 1) {
+    const char = trimmedPattern[i];
+    if (!char) {
+      continue;
+    }
+
+    if (char === '*') {
+      const next = trimmedPattern[i + 1];
+      if (next === '*') {
+        regexSource += '.*';
+        i += 1;
+      } else {
+        regexSource += '[^/]*';
+      }
+      continue;
+    }
+
+    regexSource += escapeRegexChar(char);
+  }
+  regexSource += '$';
+
+  return new RegExp(regexSource).test(branch);
 }

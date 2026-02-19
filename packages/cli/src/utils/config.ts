@@ -1,5 +1,4 @@
-import type { LocalConfig, TranslateOptions, VocoderConfigFile } from '../types.js';
-import { loadConfigFile, validateConfigFile } from './config-file.js';
+import type { LocalConfig, TranslateOptions } from '../types.js';
 
 import chalk from 'chalk';
 import { config as loadEnv } from 'dotenv';
@@ -12,9 +11,7 @@ loadEnv();
  */
 export function validateLocalConfig(config: LocalConfig): void {
   if (!config.apiKey || config.apiKey.length === 0) {
-    throw new Error(
-      'VOCODER_API_KEY is required. Set it in your .env file or config file.'
-    );
+    throw new Error('VOCODER_API_KEY is required. Set it in your .env file.');
   }
 
   if (!config.apiKey.startsWith('vc_')) {
@@ -29,19 +26,17 @@ export function validateLocalConfig(config: LocalConfig): void {
 /**
  * Merge configuration from all sources with priority:
  * 1. CLI flags (highest priority)
- * 2. Config file (vocoder.config.{js,ts,mjs,cjs,json})
- * 3. Environment variables
- * 4. Defaults (lowest priority)
+ * 2. Environment variables
+ * 3. Defaults (lowest priority)
  *
  * @param cliOptions - Options from CLI flags
  * @param verbose - Whether to log config sources
- * @param startDir - Directory to start searching for config file (defaults to cwd)
  * @returns Merged configuration with source information
  */
 export async function getMergedConfig(
   cliOptions: TranslateOptions,
   verbose: boolean = false,
-  startDir?: string
+  _startDir?: string
 ): Promise<{
   extractionPattern: string[];
   excludePattern: string[];
@@ -61,46 +56,24 @@ export async function getMergedConfig(
     apiUrl: 'default',
   };
 
-  // 1. Load config file (if exists)
-  let fileConfig: VocoderConfigFile | null = null;
-  let configFilePath: string | null = null;
-
-  try {
-    const result = await loadConfigFile(startDir);
-    if (result) {
-      fileConfig = validateConfigFile(result.config);
-      configFilePath = result.filePath;
-
-      if (verbose) {
-        console.log(chalk.dim(`   Using config from: ${chalk.cyan(configFilePath)}`));
-      }
-    }
-  } catch (error) {
-    // Config file errors should be thrown (invalid config is a hard error)
-    throw error;
-  }
-
-  // 2. Defaults
+  // 1. Defaults
   const defaults = {
     extractionPattern: ['src/**/*.{tsx,jsx,ts,js}'],
     excludePattern: [] as string[],
     apiUrl: 'https://vocoder.app',
   };
 
-  // 3. Environment variables
+  // 2. Environment variables
   const envExtractionPattern = process.env.VOCODER_EXTRACTION_PATTERN;
   const envApiUrl = process.env.VOCODER_API_URL;
 
-  // 4. Merge with priority: CLI > file > env > defaults
+  // 3. Merge with priority: CLI > env > defaults
 
   // Extract patterns (include)
   let extractionPattern: string[];
   if (cliOptions.include && cliOptions.include.length > 0) {
     extractionPattern = cliOptions.include;
     configSources.extractionPattern = 'CLI flag';
-  } else if (fileConfig?.include && fileConfig.include.length > 0) {
-    extractionPattern = Array.isArray(fileConfig.include) ? fileConfig.include : [fileConfig.include];
-    configSources.extractionPattern = 'config file';
   } else if (envExtractionPattern) {
     extractionPattern = [envExtractionPattern];
     configSources.extractionPattern = 'environment';
@@ -113,29 +86,20 @@ export async function getMergedConfig(
   if (cliOptions.exclude && cliOptions.exclude.length > 0) {
     excludePattern = cliOptions.exclude;
     configSources.excludePattern = 'CLI flag';
-  } else if (fileConfig?.exclude && fileConfig.exclude.length > 0) {
-    excludePattern = Array.isArray(fileConfig.exclude) ? fileConfig.exclude : [fileConfig.exclude];
-    configSources.excludePattern = 'config file';
   } else {
     excludePattern = defaults.excludePattern;
   }
 
-  // API key (from env or config file)
+  // API key (from env)
   let apiKey: string | undefined;
-  if (fileConfig?.apiKey) {
-    apiKey = fileConfig.apiKey;
-    configSources.apiKey = 'config file';
-  } else if (process.env.VOCODER_API_KEY) {
+  if (process.env.VOCODER_API_KEY) {
     apiKey = process.env.VOCODER_API_KEY;
     configSources.apiKey = 'environment';
   }
 
   // API URL
   let apiUrl: string;
-  if (fileConfig?.apiUrl) {
-    apiUrl = fileConfig.apiUrl;
-    configSources.apiUrl = 'config file';
-  } else if (envApiUrl) {
+  if (envApiUrl) {
     apiUrl = envApiUrl;
     configSources.apiUrl = 'environment';
   } else {

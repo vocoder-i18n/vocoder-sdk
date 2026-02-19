@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
+import { init } from './commands/init.js';
 import { sync } from './commands/sync.js';
 import { wrap } from './commands/wrap.js';
 
@@ -45,5 +46,17 @@ program
   .option('--confidence <level>', 'Minimum confidence: high, medium, low', 'high')
   .option('--verbose', 'Detailed output')
   .action((options) => runCommand(wrap, options));
+
+program
+  .command('init')
+  .description('Authenticate and provision Vocoder for this project')
+  .option('--api-url <url>', 'Override Vocoder API URL')
+  .option('--yes', 'Allow overwriting existing local config values')
+  .option('--no-write-env', 'Do not write VOCODER_API_KEY to .env')
+  .option('--project-name <name>', 'Starter project name to create')
+  .option('--source-locale <locale>', 'Source locale for the starter project')
+  .option('--target-locales <list>', 'Comma-separated target locales (e.g. es,fr,de)')
+  .option('--verbose', 'Detailed output')
+  .action((options) => runCommand(init, options));
 
 program.parse(process.argv);
