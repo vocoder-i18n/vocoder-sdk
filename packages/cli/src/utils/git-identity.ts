@@ -1,13 +1,13 @@
 import { execSync } from 'child_process';
+import { relative, resolve } from 'path';
 
 export type GitRepositoryIdentity = {
   repoCanonical: string;
-  repoLabel: string;
+  repoScopePath: string;
 };
 
 export type GitContext = {
   identity: GitRepositoryIdentity | null;
-  branch: string | null;
   warnings: string[];
 };
 
@@ -96,24 +96,28 @@ export function resolveGitRepositoryIdentity(): GitRepositoryIdentity | null {
     return null;
   }
 
+  const repositoryRoot = safeExec('git rev-parse --show-toplevel');
+  const currentDirectory = process.cwd();
+  let repoScopePath = '';
+  if (repositoryRoot) {
+    const relativePath = relative(resolve(repositoryRoot), resolve(currentDirectory))
+      .replace(/\\/g, '/')
+      .trim();
+
+    if (relativePath && relativePath !== '.' && !relativePath.startsWith('..')) {
+      repoScopePath = relativePath;
+    }
+  }
+
   return {
     repoCanonical: toCanonical(parsed.host, parsed.ownerRepoPath),
-    repoLabel: parsed.ownerRepoPath,
+    repoScopePath,
   };
-}
-
-export function detectBranchFromGitCommand(): string | null {
-  const branch = safeExec('git rev-parse --abbrev-ref HEAD');
-  if (!branch || branch === 'HEAD') {
-    return null;
-  }
-  return branch;
 }
 
 export function resolveGitContext(): GitContext {
   const warnings: string[] = [];
   const identity = resolveGitRepositoryIdentity();
-  const branch = detectBranchFromGitCommand();
 
   if (!identity) {
     warnings.push(
@@ -121,11 +125,5 @@ export function resolveGitContext(): GitContext {
     );
   }
 
-  if (!branch) {
-    warnings.push(
-      'Could not detect the current git branch. Target branches will use defaults unless you change them in setup.',
-    );
-  }
-
-  return { identity, branch, warnings };
+  return { identity, warnings };
 }

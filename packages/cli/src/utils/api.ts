@@ -7,6 +7,7 @@ import type {
   RepoIdentityPayload,
   SyncPolicyErrorResponse,
   TranslationBatchResponse,
+  TranslationStringEntry,
   TranslationStatusResponse,
 } from '../types.js';
 
@@ -169,12 +170,48 @@ export class VocoderAPI {
    * Submit strings for translation
    * Project is determined from the API key
    */
+  private stableTextKey(text: string): string {
+    // FNV-1a 32-bit hash for deterministic fallback IDs
+    let hash = 0x811c9dc5;
+    for (let i = 0; i < text.length; i++) {
+      hash ^= text.charCodeAt(i);
+      hash = Math.imul(hash, 0x01000193);
+    }
+    return `SK_TEXT_${(hash >>> 0).toString(16).toUpperCase().padStart(8, '0')}`;
+  }
+
+  private normalizeStringEntries(
+    entries: string[] | TranslationStringEntry[],
+  ): TranslationStringEntry[] {
+    if (entries.length === 0) {
+      return [];
+    }
+
+    const first = entries[0];
+    if (typeof first === 'string') {
+      return (entries as string[]).map((text) => ({
+        key: this.stableTextKey(text),
+        text,
+      }));
+    }
+
+    return (entries as TranslationStringEntry[]).map((entry, index) => ({
+      key: entry.key || this.stableTextKey(`${entry.text}:${index}`),
+      text: entry.text,
+      ...(entry.context ? { context: entry.context } : {}),
+      ...(entry.formality ? { formality: entry.formality } : {}),
+    }));
+  }
+
   async submitTranslation(
     branch: string,
-    strings: string[],
+    entries: string[] | TranslationStringEntry[],
     targetLocales: string[],
     repoIdentity?: RepoIdentityPayload,
   ): Promise<TranslationBatchResponse> {
+    const stringEntries = this.normalizeStringEntries(entries);
+    const strings = stringEntries.map((entry) => entry.text);
+
     // Compute hash of sorted strings for fast comparison
     const crypto = await import('crypto');
     const sortedStrings = [...strings].sort();
@@ -190,11 +227,13 @@ export class VocoderAPI {
       },
       body: JSON.stringify({
         branch,
-        strings,
+        stringEntries,
         targetLocales,
         stringsHash,
         ...(repoIdentity?.repoCanonical ? { repoCanonical: repoIdentity.repoCanonical } : {}),
-        ...(repoIdentity?.repoLabel ? { repoLabel: repoIdentity.repoLabel } : {}),
+        ...(repoIdentity?.repoScopePath !== undefined
+          ? { repoScopePath: repoIdentity.repoScopePath }
+          : {}),
       }),
     }, 'Translation submission failed');
   }
@@ -262,7 +301,7 @@ export class VocoderAPI {
     sourceLocale?: string;
     targetLocales?: string[];
     repoCanonical?: string;
-    repoLabel?: string;
+    repoScopePath?: string;
   }): Promise<InitStartResponse> {
     const response = await fetch(`${this.apiUrl}/api/cli/init/start`, {
       method: 'POST',

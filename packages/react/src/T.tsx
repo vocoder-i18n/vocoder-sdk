@@ -6,6 +6,7 @@ import { useVocoder } from './VocoderProvider';
 
 /** Translate and format message text in JSX. */
 export const T: React.FC<TProps> = ({
+  id: _id,
   children,
   msg,
   context,

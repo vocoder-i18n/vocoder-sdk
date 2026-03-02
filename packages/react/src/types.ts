@@ -41,6 +41,8 @@ export interface VocoderProviderProps {
 }
 
 export interface TProps {
+  /** Optional stable translation key (used by extraction/sync identity). */
+  id?: string;
   /** Source text to translate (also used as the translation key) */
   children?: React.ReactNode;
   /**

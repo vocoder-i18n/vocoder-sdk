@@ -10,16 +10,14 @@ export interface TranslateOptions {
 export interface InitOptions {
   apiUrl?: string;
   yes?: boolean;
-  writeEnv?: boolean;
   projectName?: string;
   sourceLocale?: string;
   targetLocales?: string;
-  verbose?: boolean;
 }
 
 export interface RepoIdentityPayload {
   repoCanonical?: string;
-  repoLabel?: string;
+  repoScopePath?: string;
 }
 
 // Local configuration (from env vars)
@@ -43,11 +41,19 @@ export interface ProjectConfig extends LocalConfig, APIProjectConfig {
 }
 
 export interface ExtractedString {
+  key: string;
   text: string;
   file: string;
   line: number;
   context?: string;
-  formality?: 'formal' | 'informal' | 'auto';
+  formality?: 'formal' | 'informal' | 'neutral' | 'auto';
+}
+
+export interface TranslationStringEntry {
+  key: string;
+  text: string;
+  context?: string;
+  formality?: 'formal' | 'informal' | 'neutral' | 'auto';
 }
 
 export interface TranslationBatchResponse {
@@ -98,12 +104,12 @@ export interface SyncPolicyErrorResponse {
   branch?: string;
   targetBranches?: string[];
   boundRepoLabel?: string | null;
+  boundScopePath?: string | null;
 }
 
 export interface InitStartResponse {
   sessionId: string;
   deviceCode: string;
-  userCode: string;
   verificationUrl: string;
   expiresAt: string;
   poll: {

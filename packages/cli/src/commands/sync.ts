@@ -1,4 +1,10 @@
-import type { LimitErrorResponse, ProjectConfig, TranslateOptions } from '../types.js';
+import type {
+  ExtractedString,
+  LimitErrorResponse,
+  ProjectConfig,
+  TranslateOptions,
+  TranslationStringEntry,
+} from '../types.js';
 import { detectBranch, isTargetBranch } from '../utils/branch.js';
 import { getMergedConfig, validateLocalConfig } from '../utils/config.js';
 import { mkdirSync, writeFileSync } from 'fs';
@@ -150,8 +156,62 @@ function getSyncPolicyErrorGuidance(error: NonNullable<VocoderAPIError['syncPoli
   if (error.boundRepoLabel) {
     lines.push(`Bound repository: ${error.boundRepoLabel}`);
   }
+  if (error.boundScopePath) {
+    lines.push(`Bound scope: ${error.boundScopePath}`);
+  }
   lines.push('Run `vocoder init` from the correct repository or create a separate project.');
   return lines;
+}
+
+function mergeContext(
+  current: string | undefined,
+  incoming: string | undefined,
+): string | undefined {
+  if (!incoming) return current;
+  if (!current) return incoming;
+  if (current === incoming) return current;
+
+  const merged = new Set(
+    [...current.split(' | '), ...incoming.split(' | ')]
+      .map((part) => part.trim())
+      .filter(Boolean),
+  );
+  return Array.from(merged).join(' | ');
+}
+
+function buildStringEntries(extractedStrings: ExtractedString[]): TranslationStringEntry[] {
+  const byText = new Map<string, TranslationStringEntry>();
+
+  for (const str of extractedStrings) {
+    const existing = byText.get(str.text);
+    if (!existing) {
+      byText.set(str.text, {
+        key: str.key,
+        text: str.text,
+        ...(str.context ? { context: str.context } : {}),
+        ...(str.formality ? { formality: str.formality } : {}),
+      });
+      continue;
+    }
+
+    existing.context = mergeContext(existing.context, str.context);
+
+    if (!existing.formality && str.formality) {
+      existing.formality = str.formality;
+    } else if (
+      existing.formality &&
+      str.formality &&
+      existing.formality !== str.formality
+    ) {
+      existing.formality = 'auto';
+    }
+
+    if (str.key < existing.key) {
+      existing.key = str.key;
+    }
+  }
+
+  return Array.from(byText.values());
 }
 
 /**
@@ -269,10 +329,20 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
       console.log(chalk.yellow('⚠ Could not detect git remote origin. Sync will continue without repo metadata.'));
     }
 
-    const strings = extractedStrings.map((s) => s.text);
+    const stringEntries = buildStringEntries(extractedStrings);
+    const strings = stringEntries.map((entry) => entry.text);
+
+    if (options.verbose && stringEntries.length !== extractedStrings.length) {
+      console.log(
+        chalk.dim(
+          `Deduped ${extractedStrings.length} extracted entries into ${stringEntries.length} unique source strings`,
+        ),
+      );
+    }
+
     const batchResponse = await api.submitTranslation(
       branch,
-      strings,
+      stringEntries,
       config.targetLocales,
       repoIdentity ?? undefined,
     );

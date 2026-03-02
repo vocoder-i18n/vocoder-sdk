@@ -93,13 +93,13 @@ VOCODER_EXTRACTION_PATTERN=src/**/*.{tsx,jsx,ts,js}
 ## `vocoder init`
 
 Bootstraps a project by opening a browser authorization flow, then provisioning
-an organization project API key.
+a workspace/project API key.
 
 During browser completion, you can paste a DeepL API key (BYOK) or reuse an
 existing org-level DeepL key.
 
 ```bash
-pnpm exec vocoder init --write-env
+pnpm exec vocoder init
 ```
 
 ## Troubleshooting
