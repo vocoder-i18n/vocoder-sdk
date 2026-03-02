@@ -210,8 +210,6 @@ export async function init(options: InitOptions = {}): Promise<number> {
     console.log();
     console.log(`${chalk.cyan('Authorize setup URL:')} ${verificationUrlString}`);
     console.log();
-    console.log(`${chalk.yellow('!')} First copy your one-time code: ${chalk.bold(start.userCode)}`);
-    console.log();
     if (gitContext.warnings.length > 0) {
       for (const warning of gitContext.warnings) {
         console.log(chalk.yellow(`⚠ ${warning}`));
