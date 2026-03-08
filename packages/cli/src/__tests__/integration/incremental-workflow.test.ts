@@ -23,9 +23,17 @@ describe.skipIf(process.env.RUN_INTEGRATION !== 'true')('Incremental Workflow In
     config = {
       apiKey: 'test-key',
       apiUrl: process.env.VOCODER_API_URL || 'http://localhost:3000',
+      projectName: 'test-project',
+      organizationName: 'test-org',
       sourceLocale: 'en',
       targetBranches: ['main'],
       targetLocales: ['es', 'fr'],
+      syncPolicy: {
+        blockingBranches: ['main', 'master'],
+        blockingMode: 'required',
+        nonBlockingMode: 'best-effort',
+        defaultMaxWaitMs: 60000,
+      },
       extractionPattern: 'src/**/*.{tsx,jsx}',
       timeout: 120000,
     };

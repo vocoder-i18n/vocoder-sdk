@@ -5,6 +5,19 @@ export interface TranslateOptions {
   verbose?: boolean;
   include?: string[];
   exclude?: string[];
+  mode?: RequestedSyncMode;
+  maxWaitMs?: number;
+  noFallback?: boolean;
+}
+
+export type EffectiveSyncMode = 'required' | 'best-effort';
+export type RequestedSyncMode = 'auto' | EffectiveSyncMode;
+
+export interface SyncPolicyConfig {
+  blockingBranches: string[];
+  blockingMode: EffectiveSyncMode;
+  nonBlockingMode: EffectiveSyncMode;
+  defaultMaxWaitMs: number;
 }
 
 export interface InitOptions {
@@ -28,9 +41,12 @@ export interface LocalConfig {
 
 // Project configuration (from API)
 export interface APIProjectConfig {
+  projectName: string;
+  organizationName: string;
   sourceLocale: string;
   targetLocales: string[];
   targetBranches: string[];
+  syncPolicy: SyncPolicyConfig;
 }
 
 // Combined configuration used by CLI
@@ -64,6 +80,10 @@ export interface TranslationBatchResponse {
   status: 'PENDING' | 'TRANSLATING' | 'COMPLETED' | 'FAILED' | 'UP_TO_DATE';
   noChanges?: boolean;
   estimatedTime?: number;
+  effectiveMode?: EffectiveSyncMode;
+  queueStatus?: 'QUEUED' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+  snapshotAvailable?: boolean;
+  latestCompletedBatchId?: string;
   translations?: Record<string, Record<string, string>>;
 }
 
@@ -78,6 +98,17 @@ export interface TranslationStatusResponse {
   translations?: Record<string, Record<string, string>>;
   localeMetadata?: Record<string, { nativeName: string; dir?: 'rtl' }>;
   errorMessage?: string;
+}
+
+export interface TranslationSnapshotResponse {
+  status: 'FOUND' | 'NOT_FOUND';
+  branch: string;
+  sourceLocale?: string;
+  targetLocales?: string[];
+  snapshotBatchId?: string;
+  completedAt?: string | null;
+  translations?: Record<string, Record<string, string>>;
+  localeMetadata?: Record<string, { nativeName: string; dir?: 'rtl' }>;
 }
 
 export interface LimitErrorResponse {

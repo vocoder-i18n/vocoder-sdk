@@ -19,9 +19,17 @@ describe('Incremental Translation Workflow', () => {
     config = {
       apiKey: 'test-key',
       apiUrl: 'http://localhost:3000',
+      projectName: 'test-project',
+      organizationName: 'test-org',
       sourceLocale: 'en',
       targetBranches: ['main'],
       targetLocales: ['es', 'fr', 'de'],
+      syncPolicy: {
+        blockingBranches: ['main', 'master'],
+        blockingMode: 'required',
+        nonBlockingMode: 'best-effort',
+        defaultMaxWaitMs: 60000,
+      },
       extractionPattern: 'src/**/*.{tsx,jsx}',
       timeout: 60000,
     };

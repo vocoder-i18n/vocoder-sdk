@@ -1,8 +1,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { relative } from 'path';
+import * as p from '@clack/prompts';
 import chalk from 'chalk';
-import ora from 'ora';
-import * as readline from 'readline';
 import { StringAnalyzer } from '../utils/wrap/analyzer.js';
 import { StringTransformer } from '../utils/wrap/transformer.js';
 import { reactAdapter } from '../utils/wrap/adapters/react.js';
@@ -33,20 +32,25 @@ export async function wrap(options: WrapOptions = {}): Promise<number> {
   const projectRoot = process.cwd();
   const confidenceThreshold = options.confidence || 'high';
 
+  p.intro('Vocoder Wrap');
+
+  const spinner = p.spinner();
+
   try {
     // 1. Scan files
-    const spinner = ora('Scanning files for unwrapped strings...').start();
+    spinner.start('Scanning files for unwrapped strings');
 
     const analyzer = new StringAnalyzer(reactAdapter);
     const allCandidates = await analyzer.analyzeProject(options, projectRoot);
 
     if (allCandidates.length === 0) {
-      spinner.succeed('No unwrapped strings found');
-      console.log(chalk.dim('All user-facing strings appear to be wrapped already.'));
+      spinner.stop('No unwrapped strings found');
+      p.log.info('All user-facing strings appear to be wrapped already.');
+      p.outro('');
       return 0;
     }
 
-    spinner.succeed(
+    spinner.stop(
       `Found ${chalk.cyan(allCandidates.length)} candidate strings`,
     );
 
@@ -56,21 +60,16 @@ export async function wrap(options: WrapOptions = {}): Promise<number> {
     );
 
     if (filtered.length === 0) {
-      console.log(
-        chalk.yellow(
-          `No strings meet the ${chalk.bold(confidenceThreshold)} confidence threshold.`,
-        ),
+      p.log.warn(
+        `No strings meet the ${chalk.bold(confidenceThreshold)} confidence threshold.`,
       );
-      console.log(
-        chalk.dim('Try --confidence medium or --confidence low to see more candidates.'),
-      );
+      p.log.info('Try --confidence medium or --confidence low to see more candidates.');
+      p.outro('');
       return 0;
     }
 
-    console.log(
-      chalk.dim(
-        `  ${filtered.length} strings meet ${confidenceThreshold} confidence threshold`,
-      ),
+    p.log.info(
+      `${filtered.length} strings meet ${chalk.bold(confidenceThreshold)} confidence threshold`,
     );
 
     // Group candidates by file
@@ -83,11 +82,10 @@ export async function wrap(options: WrapOptions = {}): Promise<number> {
 
     // 3. Dry-run mode
     if (options.dryRun) {
-      console.log(chalk.cyan('\nDry run - would wrap:\n'));
-
+      const lines: string[] = [];
       for (const [file, candidates] of byFile) {
         const relPath = relative(projectRoot, file);
-        console.log(chalk.bold(relPath));
+        lines.push(chalk.bold(relPath));
 
         for (const c of candidates) {
           const confidenceColor =
@@ -96,21 +94,21 @@ export async function wrap(options: WrapOptions = {}): Promise<number> {
             chalk.red;
 
           const strategyLabel = c.strategy === 'T-component' ? '<T>' : 't()';
-          console.log(
+          lines.push(
             `  ${chalk.dim(`L${c.line}`)} ${confidenceColor(`[${c.confidence}]`)} ` +
-            `${chalk.cyan(strategyLabel)} ${chalk.white(`"${truncate(c.text, 50)}"`)}`
+            `${chalk.cyan(strategyLabel)} "${truncate(c.text, 50)}"`,
           );
 
           if (options.verbose) {
-            console.log(chalk.dim(`        ${c.reason}`));
+            lines.push(chalk.dim(`        ${c.reason}`));
           }
         }
-        console.log();
+        lines.push('');
       }
 
-      const summary = summarizeCandidates(filtered);
-      console.log(chalk.dim(`Summary: ${summary}`));
-      console.log(chalk.dim('\nRun without --dry-run to apply changes.'));
+      lines.push(summarizeCandidates(filtered));
+      p.note(lines.join('\n'), 'Dry run — would wrap');
+      p.outro('Run without --dry-run to apply changes.');
       return 0;
     }
 
@@ -118,18 +116,18 @@ export async function wrap(options: WrapOptions = {}): Promise<number> {
     let accepted: WrapCandidate[];
 
     if (options.interactive) {
-      accepted = await interactiveConfirm(byFile, projectRoot, options);
+      accepted = await interactiveConfirm(byFile, projectRoot);
+      if (accepted.length === 0) {
+        p.log.warn('No strings selected for wrapping.');
+        p.outro('');
+        return 0;
+      }
     } else {
       accepted = filtered;
     }
 
-    if (accepted.length === 0) {
-      console.log(chalk.yellow('No strings selected for wrapping.'));
-      return 0;
-    }
-
     // 5. Transform files
-    spinner.start('Wrapping strings...');
+    spinner.start('Wrapping strings');
 
     const transformer = new StringTransformer(reactAdapter);
     let totalWrapped = 0;
@@ -155,31 +153,30 @@ export async function wrap(options: WrapOptions = {}): Promise<number> {
 
       if (options.verbose && result.skipped.length > 0) {
         const relPath = relative(projectRoot, file);
-        console.log(
-          chalk.dim(`\n  Skipped ${result.skipped.length} strings in ${relPath}`),
-        );
+        p.log.info(`Skipped ${result.skipped.length} strings in ${relPath}`);
       }
     }
 
-    spinner.succeed(
+    spinner.stop(
       `Wrapped ${chalk.cyan(totalWrapped)} strings across ${chalk.cyan(filesModified)} files`,
     );
 
     // 6. Summary
     const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-    console.log(chalk.green(`\nDone! (${duration}s)\n`));
+    p.outro(`Done! (${duration}s)`);
 
-    console.log(chalk.dim('Next steps:'));
-    console.log(chalk.dim('  1. Review the changes (git diff)'));
-    console.log(chalk.dim('  2. Run your tests to verify nothing broke'));
-    console.log(chalk.dim('  3. Run "vocoder sync" to extract and translate'));
+    p.log.info('Next steps:');
+    p.log.info('  1. Review the changes (git diff)');
+    p.log.info('  2. Run your tests to verify nothing broke');
+    p.log.info('  3. Run "vocoder sync" to extract and translate');
     return 0;
 
   } catch (error: unknown) {
+    spinner.stop();
     if (error instanceof Error) {
-      console.error(chalk.red(`\nError: ${error.message}\n`));
+      p.log.error(error.message);
       if (options.verbose) {
-        console.error(chalk.dim('\nFull error:'), error);
+        p.log.info(`Full error: ${error.stack ?? error}`);
       }
     }
     return 1;
@@ -188,89 +185,64 @@ export async function wrap(options: WrapOptions = {}): Promise<number> {
 
 /**
  * Interactive confirmation mode.
- * Prompts user for each candidate (or group).
+ * Prompts user for each candidate using clack select.
  */
 async function interactiveConfirm(
   byFile: Map<string, WrapCandidate[]>,
   projectRoot: string,
-  options: WrapOptions,
 ): Promise<WrapCandidate[]> {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  const ask = (question: string): Promise<string> =>
-    new Promise((resolve) => rl.question(question, resolve));
-
   const accepted: WrapCandidate[] = [];
-  let quit = false;
 
-  console.log(
-    chalk.cyan('\nInteractive mode - confirm each string:'),
-  );
-  console.log(
-    chalk.dim('  (y)es  (n)o  (a)ll remaining  (s)kip file  (q)uit\n'),
-  );
+  p.log.info('Interactive mode — confirm each string:');
 
   for (const [file, candidates] of byFile) {
-    if (quit) break;
-
     const relPath = relative(projectRoot, file);
-    console.log(chalk.bold(relPath));
+    p.log.step(chalk.bold(relPath));
 
     let skipFile = false;
 
     for (const c of candidates) {
-      if (quit || skipFile) break;
+      if (skipFile) break;
 
       const strategyLabel = c.strategy === 'T-component' ? '<T>' : 't()';
-      console.log(
-        `  ${chalk.dim(`L${c.line}`)} ${chalk.cyan(strategyLabel)} ` +
-        `${chalk.white(`"${truncate(c.text, 60)}"`)}`
-      );
+      const label = `L${c.line} ${strategyLabel} "${truncate(c.text, 50)}"`;
 
-      const answer = await ask('  Wrap? [y/n/a/s/q] ');
+      const action = await p.select({
+        message: label,
+        options: [
+          { value: 'yes', label: 'Yes, wrap this string' },
+          { value: 'no', label: 'No, skip' },
+          { value: 'all', label: 'Accept all remaining' },
+          { value: 'skip', label: 'Skip this file' },
+          { value: 'quit', label: 'Quit' },
+        ],
+      });
 
-      switch (answer.toLowerCase().trim()) {
-        case 'y':
-        case 'yes':
-          accepted.push(c);
-          break;
-        case 'n':
-        case 'no':
-          break;
-        case 'a':
-        case 'all':
-          accepted.push(c);
-          // Accept all remaining in this file
-          const remaining = candidates.slice(candidates.indexOf(c) + 1);
-          accepted.push(...remaining);
-          // Accept all remaining files
-          for (const [, moreCandidates] of byFile) {
-            if (moreCandidates !== candidates) {
-              accepted.push(...moreCandidates);
-            }
-          }
-          quit = true;
-          break;
-        case 's':
-        case 'skip':
-          skipFile = true;
-          break;
-        case 'q':
-        case 'quit':
-          quit = true;
-          break;
-        default:
-          break;
+      if (p.isCancel(action) || action === 'quit') {
+        return accepted;
       }
-    }
 
-    console.log();
+      if (action === 'yes') {
+        accepted.push(c);
+      } else if (action === 'all') {
+        accepted.push(c);
+        // Accept all remaining in this file
+        const remaining = candidates.slice(candidates.indexOf(c) + 1);
+        accepted.push(...remaining);
+        // Accept all remaining files
+        for (const [, moreCandidates] of byFile) {
+          if (moreCandidates !== candidates) {
+            accepted.push(...moreCandidates);
+          }
+        }
+        return accepted;
+      } else if (action === 'skip') {
+        skipFile = true;
+      }
+      // 'no' — just continue
+    }
   }
 
-  rl.close();
   return accepted;
 }
 

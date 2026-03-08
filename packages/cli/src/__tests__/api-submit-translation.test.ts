@@ -79,10 +79,20 @@ describe('VocoderAPI submitTranslation', () => {
       },
     ];
 
-    await api.submitTranslation('feature', entries, ['de'], {
-      repoCanonical: 'github:owner/repo',
-      repoScopePath: 'src',
-    });
+    await api.submitTranslation(
+      'feature',
+      entries,
+      ['de'],
+      {
+        requestedMode: 'best-effort',
+        requestedMaxWaitMs: 15000,
+        clientRunId: 'run_123',
+      },
+      {
+        repoCanonical: 'github:owner/repo',
+        repoScopePath: 'src',
+      },
+    );
 
     const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(String(init.body)) as Record<string, unknown>;
@@ -90,6 +100,9 @@ describe('VocoderAPI submitTranslation', () => {
     expect(body.stringEntries).toEqual(entries);
     expect(body.repoCanonical).toBe('github:owner/repo');
     expect(body.repoScopePath).toBe('src');
+    expect(body.requestedMode).toBe('best-effort');
+    expect(body.requestedMaxWaitMs).toBe(15000);
+    expect(body.clientRunId).toBe('run_123');
     expect(body).not.toHaveProperty('strings');
   });
 });

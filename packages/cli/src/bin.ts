@@ -32,9 +32,15 @@ program
   .option('--exclude <pattern>', 'Glob pattern(s) to exclude (can be used multiple times)', collect, [])
   .option('--branch <name>', 'Override branch detection')
   .option('--force', 'Sync even if not a target branch')
+  .option('--mode <mode>', 'Sync mode: auto|required|best-effort')
+  .option('--max-wait-ms <ms>', 'Max wait time before fallback (ms)', (value) => Number.parseInt(value, 10))
+  .option('--no-fallback', 'Fail instead of using fallback artifacts')
   .option('--dry-run', 'Show what would be synced without doing it')
   .option('--verbose', 'Show detailed progress')
-  .action((options) => runCommand(sync, options));
+  .action((options) => runCommand(sync, {
+    ...options,
+    noFallback: options.noFallback ? true : undefined,
+  }));
 
 program
   .command('wrap')

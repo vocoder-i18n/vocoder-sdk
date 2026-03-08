@@ -1,4 +1,4 @@
-import type { LocalConfig, TranslateOptions } from '../types.js';
+import type { LocalConfig, RequestedSyncMode, TranslateOptions } from '../types.js';
 
 import chalk from 'chalk';
 import { config as loadEnv } from 'dotenv';
@@ -42,11 +42,17 @@ export async function getMergedConfig(
   excludePattern: string[];
   apiKey?: string;
   apiUrl?: string;
+  mode: RequestedSyncMode;
+  maxWaitMs?: number;
+  noFallback: boolean;
   configSources: {
     extractionPattern: string;
     excludePattern: string;
     apiKey: string;
     apiUrl: string;
+    mode: string;
+    maxWaitMs: string;
+    noFallback: string;
   };
 }> {
   const configSources = {
@@ -54,6 +60,9 @@ export async function getMergedConfig(
     excludePattern: 'default',
     apiKey: 'environment',
     apiUrl: 'default',
+    mode: 'default',
+    maxWaitMs: 'default',
+    noFallback: 'default',
   };
 
   // 1. Defaults
@@ -66,6 +75,9 @@ export async function getMergedConfig(
   // 2. Environment variables
   const envExtractionPattern = process.env.VOCODER_EXTRACTION_PATTERN;
   const envApiUrl = process.env.VOCODER_API_URL;
+  const envSyncMode = process.env.VOCODER_SYNC_MODE;
+  const envSyncMaxWaitMs = process.env.VOCODER_SYNC_MAX_WAIT_MS;
+  const envSyncNoFallback = process.env.VOCODER_SYNC_NO_FALLBACK;
 
   // 3. Merge with priority: CLI > env > defaults
 
@@ -106,6 +118,37 @@ export async function getMergedConfig(
     apiUrl = defaults.apiUrl;
   }
 
+  const modeCandidates = ['auto', 'required', 'best-effort'] as const;
+  let mode: RequestedSyncMode = 'auto';
+  if (cliOptions.mode && modeCandidates.includes(cliOptions.mode)) {
+    mode = cliOptions.mode;
+    configSources.mode = 'CLI flag';
+  } else if (envSyncMode && modeCandidates.includes(envSyncMode as RequestedSyncMode)) {
+    mode = envSyncMode as RequestedSyncMode;
+    configSources.mode = 'environment';
+  }
+
+  let maxWaitMs: number | undefined;
+  if (typeof cliOptions.maxWaitMs === 'number' && Number.isFinite(cliOptions.maxWaitMs) && cliOptions.maxWaitMs > 0) {
+    maxWaitMs = Math.floor(cliOptions.maxWaitMs);
+    configSources.maxWaitMs = 'CLI flag';
+  } else if (envSyncMaxWaitMs) {
+    const parsed = Number.parseInt(envSyncMaxWaitMs, 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      maxWaitMs = parsed;
+      configSources.maxWaitMs = 'environment';
+    }
+  }
+
+  let noFallback = false;
+  if (typeof cliOptions.noFallback === 'boolean') {
+    noFallback = cliOptions.noFallback;
+    configSources.noFallback = 'CLI flag';
+  } else if (envSyncNoFallback) {
+    noFallback = ['1', 'true', 'yes', 'on'].includes(envSyncNoFallback.toLowerCase());
+    configSources.noFallback = 'environment';
+  }
+
   // Log config sources in verbose mode
   if (verbose) {
     console.log(chalk.dim('\n   Configuration sources:'));
@@ -115,6 +158,11 @@ export async function getMergedConfig(
     }
     console.log(chalk.dim(`     API key: ${configSources.apiKey}`));
     console.log(chalk.dim(`     API URL: ${configSources.apiUrl}\n`));
+    console.log(chalk.dim(`     Sync mode: ${configSources.mode}`));
+    if (maxWaitMs) {
+      console.log(chalk.dim(`     Max wait: ${configSources.maxWaitMs}`));
+    }
+    console.log(chalk.dim(`     No fallback: ${configSources.noFallback}\n`));
   }
 
   return {
@@ -122,6 +170,9 @@ export async function getMergedConfig(
     excludePattern,
     apiKey,
     apiUrl,
+    mode,
+    maxWaitMs,
+    noFallback,
     configSources,
   };
 }

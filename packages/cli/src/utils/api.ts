@@ -2,13 +2,15 @@ import type {
   APIProjectConfig,
   InitStartResponse,
   InitStatusResponse,
-  LimitErrorResponse,
-  LocalConfig,
-  RepoIdentityPayload,
-  SyncPolicyErrorResponse,
-  TranslationBatchResponse,
-  TranslationStringEntry,
-  TranslationStatusResponse,
+	LimitErrorResponse,
+	LocalConfig,
+	RequestedSyncMode,
+	RepoIdentityPayload,
+	SyncPolicyErrorResponse,
+	TranslationBatchResponse,
+	TranslationSnapshotResponse,
+	TranslationStringEntry,
+	TranslationStatusResponse,
 } from '../types.js';
 
 function isLimitErrorResponse(value: unknown): value is LimitErrorResponse {
@@ -152,19 +154,35 @@ export class VocoderAPI {
    * Fetch project configuration from API
    * Project is determined from the API key
    */
-  async getProjectConfig(): Promise<APIProjectConfig> {
-    const data = await this.request<{
-      sourceLocale: string;
-      targetLocales: string[];
-      targetBranches: string[];
-    }>('/api/cli/config', {}, 'Failed to fetch project config');
+	async getProjectConfig(): Promise<APIProjectConfig> {
+		const data = await this.request<{
+			projectName: string;
+			organizationName: string;
+			sourceLocale: string;
+			targetLocales: string[];
+			targetBranches: string[];
+			syncPolicy?: {
+				blockingBranches?: string[];
+				blockingMode?: "required" | "best-effort";
+				nonBlockingMode?: "required" | "best-effort";
+				defaultMaxWaitMs?: number;
+			};
+		}>('/api/cli/config', {}, 'Failed to fetch project config');
 
-    return {
-      sourceLocale: data.sourceLocale,
-      targetLocales: data.targetLocales,
-      targetBranches: data.targetBranches,
-    };
-  }
+		return {
+			projectName: data.projectName,
+			organizationName: data.organizationName,
+			sourceLocale: data.sourceLocale,
+			targetLocales: data.targetLocales,
+			targetBranches: data.targetBranches,
+			syncPolicy: {
+				blockingBranches: data.syncPolicy?.blockingBranches ?? ["main", "master"],
+				blockingMode: data.syncPolicy?.blockingMode ?? "required",
+				nonBlockingMode: data.syncPolicy?.nonBlockingMode ?? "best-effort",
+				defaultMaxWaitMs: data.syncPolicy?.defaultMaxWaitMs ?? 60_000,
+			},
+		};
+	}
 
   /**
    * Submit strings for translation
@@ -203,12 +221,17 @@ export class VocoderAPI {
     }));
   }
 
-  async submitTranslation(
-    branch: string,
-    entries: string[] | TranslationStringEntry[],
-    targetLocales: string[],
-    repoIdentity?: RepoIdentityPayload,
-  ): Promise<TranslationBatchResponse> {
+	async submitTranslation(
+		branch: string,
+		entries: string[] | TranslationStringEntry[],
+		targetLocales: string[],
+		options?: {
+			requestedMode?: RequestedSyncMode;
+			requestedMaxWaitMs?: number;
+			clientRunId?: string;
+		},
+		repoIdentity?: RepoIdentityPayload,
+	): Promise<TranslationBatchResponse> {
     const stringEntries = this.normalizeStringEntries(entries);
     const strings = stringEntries.map((entry) => entry.text);
 
@@ -225,14 +248,19 @@ export class VocoderAPI {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        branch,
-        stringEntries,
-        targetLocales,
-        stringsHash,
-        ...(repoIdentity?.repoCanonical ? { repoCanonical: repoIdentity.repoCanonical } : {}),
-        ...(repoIdentity?.repoScopePath !== undefined
-          ? { repoScopePath: repoIdentity.repoScopePath }
+	      body: JSON.stringify({
+	        branch,
+	        stringEntries,
+	        targetLocales,
+	        stringsHash,
+	        ...(options?.requestedMode ? { requestedMode: options.requestedMode } : {}),
+	        ...(typeof options?.requestedMaxWaitMs === 'number'
+	          ? { requestedMaxWaitMs: options.requestedMaxWaitMs }
+	          : {}),
+	        ...(options?.clientRunId ? { clientRunId: options.clientRunId } : {}),
+	        ...(repoIdentity?.repoCanonical ? { repoCanonical: repoIdentity.repoCanonical } : {}),
+	        ...(repoIdentity?.repoScopePath !== undefined
+	          ? { repoScopePath: repoIdentity.repoScopePath }
           : {}),
       }),
     }, 'Translation submission failed');
@@ -241,15 +269,32 @@ export class VocoderAPI {
   /**
    * Check translation status
    */
-  async getTranslationStatus(
-    batchId: string,
-  ): Promise<TranslationStatusResponse> {
-    return this.request<TranslationStatusResponse>(
-      `/api/cli/sync/status/${batchId}`,
-      {},
-      'Failed to check translation status',
-    );
-  }
+	async getTranslationStatus(
+		batchId: string,
+	): Promise<TranslationStatusResponse> {
+		return this.request<TranslationStatusResponse>(
+			`/api/cli/sync/status/${batchId}`,
+			{},
+			'Failed to check translation status',
+		);
+	}
+
+	async getTranslationSnapshot(params: {
+		branch: string;
+		targetLocales: string[];
+	}): Promise<TranslationSnapshotResponse> {
+		const search = new URLSearchParams();
+		search.set('branch', params.branch);
+		for (const locale of params.targetLocales) {
+			search.append('targetLocale', locale);
+		}
+
+		return this.request<TranslationSnapshotResponse>(
+			`/api/cli/sync/snapshot?${search.toString()}`,
+			{},
+			'Failed to fetch translation snapshot',
+		);
+	}
 
   /**
    * Wait for translation to complete with polling

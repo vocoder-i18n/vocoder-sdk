@@ -1,11 +1,10 @@
+import * as p from '@clack/prompts';
+
 import { VocoderAPI, VocoderAPIError } from '../utils/api.js';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 
 import type { InitOptions } from '../types.js';
-import chalk from 'chalk';
-import { createInterface } from 'node:readline/promises';
 import { join } from 'path';
-import ora from 'ora';
 import { resolveGitContext } from '../utils/git-identity.js';
 import { spawn } from 'node:child_process';
 
@@ -20,7 +19,7 @@ function parseTargetLocales(value?: string): string[] | undefined {
 
   const locales = value
     .split(',')
-    .map((locale) => locale.trim())
+    .map((locale: string) => locale.trim())
     .filter(Boolean);
 
   return locales.length > 0 ? locales : undefined;
@@ -35,6 +34,14 @@ function getEnvLine(filePath: string, key: string): string | null {
   const pattern = new RegExp(`^${escapeRegExp(key)}=.*$`, 'm');
   const existingMatch = current.match(pattern);
   return existingMatch?.[0] ?? null;
+}
+
+function getEnvValue(filePath: string, key: string): string | null {
+  const line = getEnvLine(filePath, key);
+  if (!line) return null;
+  const eqIndex = line.indexOf('=');
+  if (eqIndex === -1) return null;
+  return line.slice(eqIndex + 1);
 }
 
 function upsertEnvValue(params: {
@@ -124,49 +131,6 @@ async function tryOpenBrowser(url: string): Promise<boolean> {
   });
 }
 
-async function promptForBrowserOpen(): Promise<boolean> {
-  if (!process.stdin.isTTY || !process.stdout.isTTY || process.env.CI === 'true') {
-    return false;
-  }
-
-  const rl = createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  try {
-    await rl.question(chalk.white('Press Enter to open this URL in your browser...'));
-    return true;
-  } catch {
-    return false;
-  } finally {
-    rl.close();
-  }
-}
-
-async function promptForEnvOverwrite(filePath: string, key: string): Promise<boolean> {
-  if (!process.stdin.isTTY || !process.stdout.isTTY || process.env.CI === 'true') {
-    return false;
-  }
-
-  const rl = createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  try {
-    const answer = await rl.question(
-      chalk.white(`${key} already exists in ${filePath}. Overwrite it? [Y/n] `)
-    );
-    const normalized = answer.trim().toLowerCase();
-    return normalized === '' || normalized === 'y' || normalized === 'yes';
-  } catch {
-    return false;
-  } finally {
-    rl.close();
-  }
-}
-
 function isPlanLimitFailure(message?: string): boolean {
   if (!message) return false;
   return /limit|upgrade/i.test(message);
@@ -177,21 +141,104 @@ function getSubscriptionSettingsUrl(apiUrl: string): string {
 }
 
 function printPlanLimitMessage(apiUrl: string, message: string): void {
-  console.error(chalk.red('\n❌ You are over your plan limits.'));
-  console.error(chalk.red(`   ${message}`));
-  console.log(chalk.cyan(`   Manage subscription: ${getSubscriptionSettingsUrl(apiUrl)}\n`));
+  p.log.error(`You are over your plan limits.\n   ${message}`);
+  p.log.info(`Manage subscription: ${getSubscriptionSettingsUrl(apiUrl)}`);
+}
+
+function maskApiKey(key: string): string {
+  if (key.length <= 8) return key;
+  return `${key.slice(0, 4)}...${key.slice(-4)}`;
 }
 
 export async function init(options: InitOptions = {}): Promise<number> {
   const projectRoot = process.cwd();
   const apiUrl = options.apiUrl || process.env.VOCODER_API_URL || 'https://vocoder.app';
+  const envPath = join(projectRoot, '.env');
+
+  p.intro('Vocoder Setup');
+
+  const spinner = p.spinner();
 
   try {
-    const spinner = ora('Starting Vocoder setup...').start();
-    const api = new VocoderAPI({
-      apiUrl,
-      apiKey: '',
-    });
+    // ── Re-init detection ──────────────────────────────────────────
+    const existingKey = getEnvValue(envPath, 'VOCODER_API_KEY');
+
+    if (existingKey && existingKey.startsWith('vc_')) {
+      // Try to validate the existing key by fetching project config
+      const existingApi = new VocoderAPI({ apiUrl, apiKey: existingKey });
+
+      try {
+        const config = await existingApi.getProjectConfig();
+
+        // Key is valid — show current config and ask what to do
+        p.log.info('Existing configuration found:');
+        p.note(
+          [
+            `Project:    ${config.projectName}`,
+            `Workspace:  ${config.organizationName}`,
+            `Source:     ${config.sourceLocale}`,
+            `Targets:    ${config.targetLocales.join(', ')}`,
+            `Key:        ${maskApiKey(existingKey)}`,
+          ].join('\n'),
+        );
+
+        // --yes flag: auto-keep and exit
+        if (options.yes) {
+          p.outro('Configuration unchanged. You\'re all set!');
+          return 0;
+        }
+
+        const action = await p.select({
+          message: 'What would you like to do?',
+          options: [
+            { value: 'keep', label: 'Keep current configuration' },
+            { value: 'reconfigure', label: 'Reconfigure (new browser setup)' },
+          ],
+        });
+
+        if (p.isCancel(action)) {
+          p.cancel('Setup cancelled.');
+          return 1;
+        }
+
+        if (action === 'keep') {
+          p.outro('Configuration unchanged. You\'re all set!');
+          return 0;
+        }
+
+        // action === 'reconfigure' — fall through to normal init flow
+      } catch {
+        // Key is invalid or expired
+        p.log.warn('Found VOCODER_API_KEY in .env but it appears to be invalid or expired.');
+
+        if (!options.yes) {
+          const action = await p.select({
+            message: 'What would you like to do?',
+            options: [
+              { value: 'reconfigure', label: 'Reconfigure (new browser setup)' },
+              { value: 'keep', label: 'Keep current key anyway' },
+            ],
+          });
+
+          if (p.isCancel(action)) {
+            p.cancel('Setup cancelled.');
+            return 1;
+          }
+
+          if (action === 'keep') {
+            p.outro('Keeping existing key. You may encounter errors if the key is invalid.');
+            return 0;
+          }
+        }
+
+        // --yes or reconfigure — fall through to normal init flow
+      }
+    }
+
+    // ── Session creation ───────────────────────────────────────────
+    spinner.start('Creating setup session');
+
+    const api = new VocoderAPI({ apiUrl, apiKey: '' });
     const gitContext = resolveGitContext();
     const identity = gitContext.identity;
 
@@ -203,29 +250,42 @@ export async function init(options: InitOptions = {}): Promise<number> {
       ...(identity ? { repoScopePath: identity.repoScopePath } : {}),
     });
 
-    spinner.succeed('Setup session created');
+    spinner.stop('Setup session created');
 
     const verificationUrlString = start.verificationUrl;
 
-    console.log();
-    console.log(`${chalk.cyan('Authorize setup URL:')} ${verificationUrlString}`);
-    console.log();
+    // Show git warnings if any
     if (gitContext.warnings.length > 0) {
       for (const warning of gitContext.warnings) {
-        console.log(chalk.yellow(`⚠ ${warning}`));
+        p.log.warn(warning);
       }
     }
 
-    const shouldOpenBrowser = await promptForBrowserOpen();
-    if (shouldOpenBrowser) {
-      const opened = await tryOpenBrowser(verificationUrlString);
-      if (opened) {
-        console.log(chalk.dim('Opened your browser for verification.'));
-      } else {
-        console.log(chalk.dim('Could not open a browser automatically. Use the URL above.'));
+    // Display the authorization URL
+    p.note(verificationUrlString, 'Authorize in your browser');
+
+    // ── Browser open ───────────────────────────────────────────────
+    if (process.stdin.isTTY && process.stdout.isTTY && process.env.CI !== 'true') {
+      const shouldOpen = options.yes
+        ? true
+        : await p.confirm({ message: 'Open this URL in your browser?' });
+
+      if (p.isCancel(shouldOpen)) {
+        p.cancel('Setup cancelled.');
+        return 1;
+      }
+
+      if (shouldOpen) {
+        const opened = await tryOpenBrowser(verificationUrlString);
+        if (opened) {
+          p.log.info('Opened your browser for verification.');
+        } else {
+          p.log.info('Could not open a browser automatically. Use the URL above.');
+        }
       }
     }
 
+    // ── Polling ────────────────────────────────────────────────────
     const expiresAt = new Date(start.expiresAt).getTime();
     spinner.start('Waiting for browser authorization...');
 
@@ -238,26 +298,27 @@ export async function init(options: InitOptions = {}): Promise<number> {
       if (status.status === 'pending') {
         const pendingMessage = status.message?.trim();
         if (pendingMessage) {
-          spinner.text = `Waiting for browser authorization... (${pendingMessage})`;
+          spinner.message(`Waiting for browser authorization... (${pendingMessage})`);
         }
         await sleep((status.pollIntervalSeconds || start.poll.intervalSeconds) * 1000);
         continue;
       }
 
       if (status.status === 'failed') {
-        spinner.fail('Setup failed');
+        spinner.stop('Setup failed');
         if (isPlanLimitFailure(status.message)) {
           printPlanLimitMessage(apiUrl, status.message);
         } else {
-          console.error(chalk.red(`\n❌ ${status.message}\n`));
+          p.log.error(status.message);
         }
+        p.cancel('Setup could not be completed.');
         return 1;
       }
 
       if (status.status === 'completed') {
-        spinner.succeed('Setup completed');
+        spinner.stop('Authorization complete!');
 
-        const envPath = join(projectRoot, '.env');
+        // ── .env write ───────────────────────────────────────────
         const key = 'VOCODER_API_KEY';
         const desiredLine = `${key}=${status.credentials.apiKey}`;
         const existingLine = getEnvLine(envPath, key);
@@ -281,13 +342,14 @@ export async function init(options: InitOptions = {}): Promise<number> {
               throw error;
             }
 
-            const shouldOverwrite = await promptForEnvOverwrite(envPath, key);
-            if (!shouldOverwrite) {
-              console.log(chalk.yellow('\n⚠ Existing VOCODER_API_KEY was not changed.'));
-              console.log(chalk.dim('   Re-run with --yes to overwrite it without prompting.'));
-              console.log(
-                chalk.dim('   Update .env manually if this project should use a different key.')
-              );
+            const shouldOverwrite = await p.confirm({
+              message: `${key} already exists in ${envPath}. Overwrite it?`,
+            });
+
+            if (p.isCancel(shouldOverwrite) || !shouldOverwrite) {
+              p.log.warn('Existing VOCODER_API_KEY was not changed.');
+              p.log.info('Re-run with --yes to overwrite it without prompting.');
+              p.cancel('Setup cancelled.');
               return 1;
             }
 
@@ -301,30 +363,35 @@ export async function init(options: InitOptions = {}): Promise<number> {
           }
         }
 
-        console.log(chalk.green('\n✅ Vocoder initialized successfully.'));
         if (isAlreadyCurrent) {
-          console.log(chalk.dim(`   VOCODER_API_KEY already matches your .env file (${envPath})`));
+          p.log.info(`VOCODER_API_KEY already matches your .env file`);
         } else if (didOverwrite) {
-          console.log(chalk.dim(`   Updated VOCODER_API_KEY in your .env file (${envPath})`));
+          p.log.success(`Updated VOCODER_API_KEY in .env`);
         } else {
-          console.log(chalk.dim(`   Wrote VOCODER_API_KEY to your .env file (${envPath})`));
+          p.log.success(`Wrote VOCODER_API_KEY to .env`);
         }
 
-        console.log(chalk.dim(`\nProject: ${status.credentials.projectName} (${status.credentials.projectId})`));
-        console.log(chalk.dim(`Organization: ${status.credentials.organizationName}`));
+        p.outro('Vocoder initialized successfully!');
+
+        p.log.info(`Project:   ${status.credentials.projectName}`);
+        p.log.info(`Workspace: ${status.credentials.organizationName}`);
+
         return 0;
       }
     }
 
-    spinner.fail('Setup timed out');
-    console.error(chalk.red('\n❌ Authorization timed out. Run `vocoder init` again.\n'));
+    // ── Timeout ──────────────────────────────────────────────────
+    spinner.stop('Authorization timed out');
+    p.log.error('Authorization timed out. Run `vocoder init` again.');
+    p.cancel('Setup could not be completed.');
     return 1;
   } catch (error) {
+    spinner.stop();
     if (error instanceof VocoderAPIError && error.limitError) {
       printPlanLimitMessage(apiUrl, error.limitError.message);
-      console.log(chalk.dim(`   Current: ${error.limitError.current}`));
-      console.log(chalk.dim(`   Required: ${error.limitError.required}`));
-      console.log(chalk.cyan(`   Upgrade: ${error.limitError.upgradeUrl}\n`));
+      p.log.info(`Current: ${error.limitError.current}`);
+      p.log.info(`Required: ${error.limitError.required}`);
+      p.log.info(`Upgrade: ${error.limitError.upgradeUrl}`);
       return 1;
     }
 
@@ -333,9 +400,9 @@ export async function init(options: InitOptions = {}): Promise<number> {
         printPlanLimitMessage(apiUrl, error.message);
         return 1;
       }
-      console.error(chalk.red(`\n❌ Error: ${error.message}\n`));
+      p.log.error(`Error: ${error.message}`);
     } else {
-      console.error(chalk.red('\n❌ Unknown setup error\n'));
+      p.log.error('Unknown setup error');
     }
 
     return 1;
