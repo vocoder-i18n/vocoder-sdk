@@ -23,12 +23,15 @@ export function detectBranch(override?: string): string {
 
   // 2. CI environment variables
   const envBranch =
-    process.env.GITHUB_REF_NAME ||       // GitHub Actions
-    process.env.VERCEL_GIT_COMMIT_REF || // Vercel
-    process.env.BRANCH ||                // Netlify, generic
-    process.env.CI_COMMIT_REF_NAME ||    // GitLab
-    process.env.BITBUCKET_BRANCH ||      // Bitbucket
-    process.env.CIRCLE_BRANCH;           // CircleCI
+    process.env.GITHUB_HEAD_REF ||         // GitHub Actions (PR source branch)
+    process.env.GITHUB_REF_NAME ||         // GitHub Actions (push)
+    process.env.VERCEL_GIT_COMMIT_REF ||   // Vercel
+    process.env.BRANCH ||                  // Netlify
+    process.env.CF_PAGES_BRANCH ||         // Cloudflare Pages
+    process.env.CI_COMMIT_REF_NAME ||      // GitLab CI
+    process.env.BITBUCKET_BRANCH ||        // Bitbucket Pipelines
+    process.env.CIRCLE_BRANCH ||           // CircleCI
+    process.env.RENDER_GIT_BRANCH;         // Render
 
   if (envBranch) {
     return envBranch;

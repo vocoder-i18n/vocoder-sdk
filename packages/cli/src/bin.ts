@@ -22,25 +22,8 @@ const program = new Command();
 
 program
   .name('vocoder')
-  .description('Vocoder CLI - Sync translations for your application')
-  .version('0.1.2');
-
-program
-  .command('sync')
-  .description('Extract strings and sync translations')
-  .option('--include <pattern>', 'Glob pattern(s) to include (can be used multiple times)', collect, [])
-  .option('--exclude <pattern>', 'Glob pattern(s) to exclude (can be used multiple times)', collect, [])
-  .option('--branch <name>', 'Override branch detection')
-  .option('--force', 'Sync even if not a target branch')
-  .option('--mode <mode>', 'Sync mode: auto|required|best-effort')
-  .option('--max-wait-ms <ms>', 'Max wait time before fallback (ms)', (value) => Number.parseInt(value, 10))
-  .option('--no-fallback', 'Fail instead of using fallback artifacts')
-  .option('--dry-run', 'Show what would be synced without doing it')
-  .option('--verbose', 'Show detailed progress')
-  .action((options) => runCommand(sync, {
-    ...options,
-    noFallback: options.noFallback ? true : undefined,
-  }));
+  .description('Vocoder CLI - Project setup and string extraction')
+  .version('0.1.5');
 
 program
   .command('wrap')
@@ -62,5 +45,24 @@ program
   .option('--source-locale <locale>', 'Source locale for the starter project')
   .option('--target-locales <list>', 'Comma-separated target locales (e.g. es,fr,de)')
   .action((options) => runCommand(init, options));
+
+program
+  .command('sync')
+  .description('Extract strings and sync translations')
+  .option('--branch <branch>', 'Override detected branch')
+  .option('--mode <mode>', 'Sync mode: auto, required, best-effort', 'auto')
+  .option('--max-wait <ms>', 'Max wait for translations (ms)')
+  .option('--force', 'Force re-extraction even if no changes')
+  .option('--dry-run', 'Preview without syncing')
+  .option('--no-fallback', 'Disable fallback to cached translations')
+  .option('--include <pattern>', 'Include glob pattern', collect, [])
+  .option('--exclude <pattern>', 'Exclude glob pattern', collect, [])
+  .option('--verbose', 'Detailed output')
+  .action((options) => {
+    const translated: Record<string, unknown> = { ...options };
+    if (options.maxWait) translated.maxWaitMs = Number(options.maxWait);
+    if (options.fallback === false) translated.noFallback = true;
+    return runCommand(sync, translated);
+  });
 
 program.parse(process.argv);

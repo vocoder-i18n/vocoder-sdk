@@ -76,12 +76,29 @@ export function setCookie(
 }
 
 /**
- * Delete a cookie by name
+ * Find the best matching locale from available options.
+ * Handles language codes and regional variants (e.g., 'en-US' -> 'en').
  */
-export function deleteCookie(name: string, path: string = '/'): void {
-  if (typeof document === 'undefined') {
-    return;
+export function getBestMatchingLocale(
+  preferredLocale: string,
+  supportedLocales: string[],
+  fallback: string,
+): string {
+  if (supportedLocales.includes(preferredLocale)) {
+    return preferredLocale;
   }
 
-  document.cookie = `${name}=; Path=${path}; Max-Age=0`;
+  const languageCode = preferredLocale.split('-')[0];
+  if (languageCode && supportedLocales.includes(languageCode)) {
+    return languageCode;
+  }
+
+  const similarLocale = supportedLocales.find((locale: string) =>
+    locale.startsWith(`${languageCode}-`),
+  );
+  if (similarLocale) {
+    return similarLocale;
+  }
+
+  return fallback;
 }

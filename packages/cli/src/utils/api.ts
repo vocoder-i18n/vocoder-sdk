@@ -394,4 +394,43 @@ export class VocoderAPI {
 
     return payload as InitStatusResponse;
   }
+
+  /**
+   * Look up whether a project already exists for a given repo + scope.
+   * Returns { projectId, projectName, organizationName } or null if not found.
+   */
+  async lookupProjectByRepo(params: {
+    repoCanonical: string;
+    scopePath: string;
+  }): Promise<{
+    projectId: string;
+    projectName: string;
+    organizationName: string;
+    sourceLocale?: string;
+    translationTriggers?: string[];
+  } | null> {
+    try {
+      const response = await fetch(`${this.apiUrl}/api/cli/init/lookup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          repo: params.repoCanonical,
+          scopePath: params.scopePath,
+        }),
+      });
+
+      if (response.status === 404) return null;
+      if (!response.ok) return null;
+
+      return (await response.json()) as {
+        projectId: string;
+        projectName: string;
+        organizationName: string;
+        sourceLocale?: string;
+        translationTriggers?: string[];
+      };
+    } catch {
+      return null;
+    }
+  }
 }

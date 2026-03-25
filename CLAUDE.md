@@ -2,57 +2,56 @@
 
 This file provides guidance to Claude Code when working with the Vocoder SDK monorepo.
 
-## 📝 Documentation Synchronization (CRITICAL)
+## 📝 README Synchronization (CRITICAL)
 
-**MANDATORY**: When implementing or modifying features in this SDK, you MUST keep ALL documentation files in sync:
+**MANDATORY**: When modifying functionality in any package, you MUST update the corresponding README to reflect the change. READMEs are the primary user-facing documentation for this SDK.
 
-### Files to Update
+### README Files and Their Scope
 
-1. **[packages/react/README.md](./packages/react/README.md)** - User-facing documentation
-   - Update when: Adding new components, props, hooks, or features
-   - Include: API reference, examples, use cases
-   - Keep examples up-to-date with current API
+| README | Update when... |
+|---|---|
+| **[README.md](./README.md)** (root) | Adding/removing packages, changing the overall quick start flow, modifying how packages interact, changing the architecture |
+| **[packages/react/README.md](./packages/react/README.md)** | Adding/changing components, props, hooks, provider behavior, locale persistence, SSR hydration, background refresh |
+| **[packages/unplugin/README.md](./packages/unplugin/README.md)** | Changing bundler setup, virtual module structure, fingerprint computation, branch detection, env vars, offline fallback, build-time constants |
+| **[packages/cli/README.md](./packages/cli/README.md)** | Adding/changing CLI commands, flags, sync modes, extraction behavior, git integration |
 
-2. **[CLAUDE.md](./CLAUDE.md)** (this file) - Claude Code guidance
-   - Update when: Adding new patterns, best practices, or critical warnings
-   - Include: Implementation details, testing requirements, gotchas
+### README Style Guide
 
-3. **Test files** - Comprehensive test coverage
-   - Update when: Adding or modifying any feature
-   - Ensure tests cover all supported use cases
-   - Keep test descriptions clear and accurate
+Follow the patterns already established in the READMEs:
+
+- **Document what exists today.** Do not document planned features, migration history, or how things used to work.
+- **Lead with usage examples.** Show the code first, explain after.
+- **Use tables for props/options/flags.** Keep descriptions to one line.
+- **No emojis in READMEs.** Use plain markdown.
+- **Keep the root README as a quick start guide.** It should get a new user from zero to working in 5 steps. Detailed API docs belong in the package READMEs.
+- **Each package README is self-contained.** A user reading only that README should understand how to install, configure, and use that package.
 
 ### When to Update
 
-- ✅ After implementing a new component or hook
-- ✅ After adding or changing props/parameters
-- ✅ After fixing bugs that affect API behavior
-- ✅ After adding new examples or use cases
-- ✅ Before marking a task or phase as complete
+- After adding, removing, or renaming any user-facing API (component, hook, function, CLI flag, plugin option)
+- After changing default behavior or configuration
+- After adding or removing environment variables
+- After changing how packages interact (e.g., new virtual module, new build-time constant)
+- Before marking a task as complete
 
-### Update Checklist
+### Post-Implementation Checklist
 
-After implementing a feature, verify:
-- [ ] README.md has updated API reference
-- [ ] README.md includes working code examples
-- [ ] CLAUDE.md reflects any new patterns or requirements
-- [ ] All tests pass (`npm run test`)
-- [ ] Build succeeds (`npm run build`)
-- [ ] Examples in docs are tested and work correctly
-
-**Why This Matters**: Outdated documentation leads to confusion, wasted time, and poor developer experience. Since this is an SDK, documentation quality is critical.
+- [ ] Affected package README reflects the change
+- [ ] Root README still accurate (if cross-package behavior changed)
+- [ ] Code examples in READMEs are valid and match current API signatures
+- [ ] All tests pass (`pnpm test`)
+- [ ] Build succeeds (`pnpm build`)
 
 ## 🏗️ Project Structure
 
-This is a pnpm monorepo containing:
+This is a pnpm workspace monorepo containing three packages:
 
 ```
 vocoder-sdk/
 ├── packages/
-│   ├── react/          # React SDK (@vocoder/react)
-│   ├── types/          # Shared TypeScript types
-│   ├── core/           # Core utilities (platform-agnostic)
-│   └── cli/            # CLI tools
+│   ├── react/          # @vocoder/react — components, hooks, provider, locale selector
+│   ├── unplugin/       # @vocoder/unplugin — build plugin (Vite, Next.js, Webpack, Rollup, esbuild)
+│   └── cli/            # @vocoder/cli — project setup, string extraction, translation sync
 └── pnpm-workspace.yaml
 ```
 
@@ -489,6 +488,7 @@ npm run typecheck || tsc --noEmit
 
 ## Related Documentation
 
-- [packages/react/README.md](./packages/react/README.md) - User-facing SDK documentation
-- [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) - Common issues and solutions
-- [WATCH_DEVELOPMENT.md](./WATCH_DEVELOPMENT.md) - Development workflow
+- [README.md](./README.md) - SDK overview and quick start
+- [packages/react/README.md](./packages/react/README.md) - React SDK documentation
+- [packages/unplugin/README.md](./packages/unplugin/README.md) - Build plugin documentation
+- [packages/cli/README.md](./packages/cli/README.md) - CLI documentation

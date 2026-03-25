@@ -171,5 +171,6 @@ export type InitStatusResponse =
         projectName: string;
         sourceLocale: string;
         targetLocales: string[];
+        translationTriggers?: string[];
       };
     };

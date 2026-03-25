@@ -1,87 +1,125 @@
 # Vocoder SDK
 
-Vocoder SDK is a two-package i18n stack:
+Vocoder is an internationalization (i18n) platform that extracts translatable strings from your source code, translates them, and delivers translations to your app at build time. No manual JSON files, no key management.
 
-- `@vocoder/cli`: extracts strings and generates locale artifacts.
-- `@vocoder/react`: runtime + React bindings that consume those artifacts.
+## How It Works
+
+1. **Wrap strings** in your React components with `<T>` or `t()`
+2. **Push to git** -- Vocoder extracts strings and translates them server-side
+3. **Build your app** -- the build plugin fetches translations and injects them as virtual modules, code-split per locale
+
+Your app ships with translations baked in. No runtime API calls needed for initial page load. A background refresh mechanism keeps translations up to date between deployments.
 
 ## Packages
 
 | Package | Description |
-| --- | --- |
-| [`@vocoder/cli`](./packages/cli) | `vocoder sync` + `vocoder wrap` |
-| [`@vocoder/react`](./packages/react) | Provider, hooks, `<T>`, and bootstrap helpers |
-
-## Runtime Architecture
-
-`vocoder sync` writes generated files to:
-
-`node_modules/@vocoder/generated`
-
-Output shape:
-
-- `manifest.mjs` (ESM loaders for browser bundlers)
-- `manifest.cjs` (CJS loaders for SSR / Node)
-- `<locale>.js` per locale
-- `package.json` with exports map
-
-`@vocoder/react` loads that manifest, picks the best locale, lazy-loads locale chunks on demand, and falls back to source strings if generated data is missing.
+|---|---|
+| [`@vocoder/react`](./packages/react) | React components and hooks for rendering translations |
+| [`@vocoder/unplugin`](./packages/unplugin) | Build plugin that injects translations at build time (Vite, Next.js, Webpack, Rollup, esbuild) |
+| [`@vocoder/cli`](./packages/cli) | CLI for project setup and automatic string wrapping |
 
 ## Quick Start
 
-1. Install packages.
+### 1. Initialize your project
 
 ```bash
-pnpm add @vocoder/react
-pnpm add -D @vocoder/cli
+npx vocoder init
 ```
 
-2. Add sync to your build flow.
+This connects your repository to Vocoder. No config files or API keys are needed in your codebase -- the build plugin auto-detects your git repository and branch.
 
-```json
-{
-  "scripts": {
-    "prebuild": "pnpm exec vocoder sync",
-    "build": "next build"
-  }
-}
+### 2. Add the build plugin
+
+**Vite:**
+
+```ts
+// vite.config.ts
+import vocoder from '@vocoder/unplugin/vite';
+
+export default defineConfig({
+  plugins: [vocoder()],
+});
 ```
 
-3. Wrap your app with `VocoderProvider` and use `<T>`.
+**Next.js:**
+
+```js
+// next.config.js
+const { withVocoder } = require('@vocoder/unplugin/next');
+
+module.exports = withVocoder({
+  // your Next.js config
+});
+```
+
+### 3. Wrap your React app with the provider
 
 ```tsx
-import { VocoderProvider, T } from '@vocoder/react';
+import { VocoderProvider } from '@vocoder/react';
 
-export function App() {
+function App() {
   return (
     <VocoderProvider>
-      <T>Hello, world!</T>
+      {/* your app */}
     </VocoderProvider>
   );
 }
 ```
 
-4. For pure client apps (Vite/SPA), initialize before first render.
+### 4. Mark strings for translation
 
 ```tsx
-import { initializeVocoder, VocoderProvider } from '@vocoder/react';
+import { T, t } from '@vocoder/react';
 
-await initializeVocoder();
+// In JSX
+<T>Hello, world!</T>
+
+// With variables
+<T name={user.name}>Hello, {name}!</T>
+
+// Outside JSX
+const message = t('Hello, world!');
 ```
 
-## Monorepo Development
-
-From `vocoder-sdk/`:
+Or auto-wrap existing strings:
 
 ```bash
-pnpm install
-
-# Build/test per package
-cd packages/react && pnpm run build && pnpm test
-cd packages/cli && pnpm run build && pnpm test
+npx vocoder wrap
 ```
 
-## Canonical Docs
+### 5. Push to git
 
-- React SDK docs: [`packages/react/README.md`](./packages/react/README.md)
-- CLI docs: [`packages/cli/README.md`](./packages/cli/README.md)
+When you push, Vocoder automatically extracts strings and translates them. On the next build, the unplugin fetches the translations and injects them into your bundle.
+
+## Architecture
+
+```
+Your Code                    Server Side                    Build Time
+---------                    -----------                    ----------
+<T>Hello</T>  --> git push --> webhook extracts    unplugin --> virtual modules
+t('Hello')                     strings & translates (fetches)    (code-split per locale)
+                                                                     |
+                                                               Background refresh
+                                                               (checks for updates)
+```
+
+The build plugin reads your `.git/config` to identify the repository and `.git/HEAD` for the branch, then computes an opaque fingerprint. This fingerprint is used to fetch translations from the API -- your branch name never appears in network requests.
+
+## Monorepo Support
+
+Vocoder supports monorepos out of the box. Each package within a monorepo can be its own Vocoder project. The build plugin computes a scope path (the relative path from the git root to your package) and includes it in the fingerprint, so translations are scoped correctly.
+
+## Development
+
+This is a pnpm workspace monorepo.
+
+```bash
+pnpm install        # Install dependencies
+pnpm build          # Build all packages
+pnpm dev            # Watch mode for all packages
+pnpm test           # Run tests across all packages
+```
+
+## License
+
+MIT

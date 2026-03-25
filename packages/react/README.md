@@ -1,148 +1,185 @@
 # @vocoder/react
 
-React runtime for Vocoder-generated translations.
+React components and hooks for Vocoder internationalization. Provides the `<T>` component for translating JSX, the `t()` function for translating plain strings, and a provider that manages locale state with SSR hydration support.
 
-## What It Expects
-
-Run `vocoder sync` first. The runtime reads generated artifacts from:
-
-`node_modules/@vocoder/generated`
-
-No manual translation imports are needed.
-
-## Install
+## Installation
 
 ```bash
-pnpm add @vocoder/react
-pnpm add -D @vocoder/cli
+npm install @vocoder/react
 ```
 
-## Core API
+Requires React 18+.
 
-`@vocoder/react` exports:
+## Setup
 
-- `VocoderProvider`
-- `useVocoder`
-- `T`
-- `t`
-- `initializeVocoder`
-
-Optional UI export:
-
-- `LocaleSelector` from `@vocoder/react/locale-selector`
-
-## Provider
-
-`VocoderProvider` props:
-
-- `children: ReactNode`
-- `cookies?: string`
-
-`cookies` is used by SSR frameworks (like Next.js) to keep server locale and client locale in sync.
+Wrap your app with `VocoderProvider`:
 
 ```tsx
 import { VocoderProvider } from '@vocoder/react';
 
-export function AppRoot({ children }: { children: React.ReactNode }) {
-  return <VocoderProvider>{children}</VocoderProvider>;
-}
-```
-
-## Translation Components
-
-### `<T>`
-
-Use `<T>` for JSX translations, ICU, and rich text placeholders.
-
-```tsx
-import { T } from '@vocoder/react';
-
-<T>Hello, world!</T>
-<T name="Ada">Hello, {name}!</T>
-<T msg="{count, plural, one {# item} other {# items}}" count={3} />
-<T
-  msg="Click <link>here</link> for help"
-  components={{ link: <a href="/help" /> }}
-/>
-```
-
-### `t(text, values?)`
-
-Use `t()` outside JSX (utilities, toasts, logging, etc).
-
-```ts
-import { t } from '@vocoder/react';
-
-const title = t('Welcome');
-const items = t('{count, plural, one {# item} other {# items}}', { count: 2 });
-```
-
-If a translation is missing, `t()` returns the source string.
-
-## `useVocoder`
-
-```tsx
-import { useVocoder } from '@vocoder/react';
-
-const { locale, setLocale, availableLocales, isReady } = useVocoder();
-```
-
-Context fields:
-
-- `locale`
-- `setLocale(locale): Promise<void>`
-- `t(text): string`
-- `hasTranslation(text): boolean`
-- `availableLocales: string[]`
-- `locales?: Record<string, { nativeName: string; dir?: 'rtl'; currencyCode?: string }>`
-- `getDisplayName(targetLocale, viewingLocale?)`
-- `isReady`
-
-## SSR Example (Next.js App Router)
-
-Server layout:
-
-```tsx
-import { cookies } from 'next/headers';
-import { Providers } from './providers';
-
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const cookieString = (await cookies()).toString();
+function App() {
   return (
-    <html>
-      <body>
-        <Providers cookies={cookieString}>{children}</Providers>
-      </body>
-    </html>
+    <VocoderProvider>
+      {/* your app */}
+    </VocoderProvider>
   );
 }
 ```
 
-Client provider wrapper:
+The provider loads translations from virtual modules injected by [`@vocoder/unplugin`](../unplugin) at build time. If the unplugin is not installed, source text is rendered as-is.
+
+## Translating Strings
+
+### The `<T>` Component
+
+Use `<T>` to mark JSX content for translation:
 
 ```tsx
-'use client';
+import { T } from '@vocoder/react';
 
-import { VocoderProvider } from '@vocoder/react';
+// Simple text
+<T>Hello, world!</T>
 
-export function Providers({
-  children,
-  cookies,
-}: {
-  children: React.ReactNode;
-  cookies: string;
-}) {
-  return <VocoderProvider cookies={cookies}>{children}</VocoderProvider>;
+// Variable interpolation
+<T name={user.name}>Hello, {name}!</T>
+
+// ICU MessageFormat (pluralization)
+<T msg="{count, plural, one {# item} other {# items}}" count={items.length} />
+
+// Rich text with component placeholders
+<T components={{ link: <a href="/help" /> }}>
+  Click <link>here</link> for help
+</T>
+```
+
+#### Props
+
+| Prop | Type | Description |
+|---|---|---|
+| `children` | `ReactNode` | Source text (also used as the translation key) |
+| `msg` | `string` | Alternative to children for ICU strings. Takes precedence over children. |
+| `id` | `string` | Optional stable key for extraction/sync identity |
+| `context` | `string` | Disambiguation context for identical source text |
+| `formality` | `'formal' \| 'informal' \| 'auto'` | Formality level hint for translators |
+| `components` | `Record<string, ReactElement>` | Component placeholders for rich text |
+| `[key: string]` | `any` | Variable values for interpolation |
+
+### The `t()` Function
+
+Use `t()` for translations outside of JSX (utilities, services, constants):
+
+```tsx
+import { t } from '@vocoder/react';
+
+const greeting = t('Hello, world!');
+const message = t('Hello, {name}!', { name: 'John' });
+const items = t('{count, plural, one {# item} other {# items}}', { count: 5 });
+```
+
+`t()` uses global state synced by `VocoderProvider`. Make sure the provider is mounted before calling it. Rich text with components is only supported in `<T>`, not in `t()`.
+
+### The `useVocoder` Hook
+
+Access locale state and translation utilities in components:
+
+```tsx
+import { useVocoder } from '@vocoder/react';
+
+function MyComponent() {
+  const {
+    locale,            // Current locale code (e.g., 'es')
+    setLocale,         // Switch locale: await setLocale('fr')
+    availableLocales,  // Array of available locale codes
+    locales,           // Locale metadata (nativeName, dir)
+    isReady,           // True when translations are loaded
+    t,                 // Context-bound translate function
+    hasTranslation,    // Check if a translation exists
+    getDisplayName,    // Get translated locale name
+  } = useVocoder();
+
+  return (
+    <select
+      value={locale}
+      onChange={(e) => setLocale(e.target.value)}
+    >
+      {availableLocales.map((code) => (
+        <option key={code} value={code}>
+          {getDisplayName(code)}
+        </option>
+      ))}
+    </select>
+  );
 }
 ```
 
-## SPA Example (Vite / client-only)
+## Locale Selector
 
-Boot translations before first render to avoid flash:
+A pre-built locale switcher is available as a separate entry point (to avoid bundling Radix UI unless needed):
 
 ```tsx
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import { LocaleSelector } from '@vocoder/react/locale-selector';
+
+// Floating selector with position control
+<LocaleSelector position="bottom-right" />
+
+// Custom styling
+<LocaleSelector
+  position="top-right"
+  background="#1a1a1a"
+  color="#ffffff"
+  iconSize={20}
+  sortBy="native"
+/>
+```
+
+Requires `@radix-ui/react-dropdown-menu` and `lucide-react` as optional peer dependencies:
+
+```bash
+npm install @radix-ui/react-dropdown-menu lucide-react
+```
+
+### Props
+
+| Prop | Type | Default | Description |
+|---|---|---|---|
+| `position` | `'top-left' \| 'top-right' \| 'bottom-left' \| 'bottom-right'` | -- | Screen position |
+| `background` | `string` | -- | Background color |
+| `color` | `string` | -- | Text color |
+| `className` | `string` | -- | Additional CSS class |
+| `iconSize` | `number` | -- | Globe icon size in pixels |
+| `locales` | `LocalesMap` | -- | Override locale metadata |
+| `sortBy` | `'source' \| 'native' \| 'translated'` | `'source'` | Sort order for dropdown items |
+
+## Server-Side Rendering
+
+`VocoderProvider` supports SSR with hydration. Pass cookies from the request to enable server-side locale detection:
+
+```tsx
+// Next.js App Router
+import { cookies } from 'next/headers';
+
+export default function RootLayout({ children }) {
+  return (
+    <VocoderProvider cookies={cookies().toString()}>
+      {children}
+    </VocoderProvider>
+  );
+}
+```
+
+The provider injects a `<script type="application/json">` tag with the hydration snapshot so the client can render the correct locale on first paint without a flash of the wrong language.
+
+### Locale Persistence
+
+The user's locale preference is persisted across sessions:
+- **Client:** `localStorage` and a `vocoder_locale` cookie
+- **Server:** Reads the `vocoder_locale` cookie from the request headers
+
+## SPA Setup (Vite / Client-Only)
+
+For client-only apps, call `initializeVocoder()` before the first render to avoid a flash of untranslated content:
+
+```tsx
 import { initializeVocoder, VocoderProvider } from '@vocoder/react';
 import { App } from './App';
 
@@ -158,19 +195,23 @@ async function bootstrap() {
 bootstrap();
 ```
 
-Optional loading UI:
+## Background Refresh
 
-```tsx
-const { isReady } = useVocoder();
-if (!isReady) return <div>Loading translations...</div>;
-```
+When `@vocoder/unplugin` is installed, the build plugin injects metadata into the bundle. After the initial render, the provider checks the Vocoder API for translations newer than the build timestamp. If found, it updates the in-memory translations and re-renders.
 
-## Locale Selector
+This means:
+- Initial page load uses translations baked in at build time (fast)
+- New translations published after the build appear without redeployment (fresh)
 
-Import only if you want the built-in dropdown UI:
+## How Translations Are Loaded
 
-```tsx
-import { LocaleSelector } from '@vocoder/react/locale-selector';
+Translations are delivered as virtual modules by `@vocoder/unplugin`:
 
-<LocaleSelector position="bottom-right" />;
-```
+- `virtual:vocoder/manifest` -- project config and per-locale dynamic import loaders
+- `virtual:vocoder/translations/{locale}` -- translation map for each locale
+
+Each locale is a separate chunk that the bundler code-splits automatically. Only the active locale is loaded; others are fetched on demand when the user switches languages.
+
+## License
+
+MIT

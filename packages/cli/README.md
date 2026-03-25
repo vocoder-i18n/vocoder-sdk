@@ -1,127 +1,79 @@
 # @vocoder/cli
 
-CLI for Vocoder translation workflows.
+Command-line tool for Vocoder. Handles project setup and automatic string wrapping for translation.
 
-Commands:
-
-- `vocoder init`
-- `vocoder sync`
-- `vocoder wrap`
-
-## Install
+## Installation
 
 ```bash
-pnpm add -D @vocoder/cli
+npm install -g @vocoder/cli
 ```
 
-## `vocoder sync`
-
-Extracts translatable strings, sends them to Vocoder, then generates runtime artifacts for `@vocoder/react`.
-
-Generated output:
-
-`node_modules/@vocoder/generated`
-
-Includes:
-
-- `manifest.mjs`
-- `manifest.cjs`
-- `<locale>.js` files
-- `package.json` exports map
-
-### Typical usage
+Or use directly with npx:
 
 ```bash
-pnpm exec vocoder sync
+npx vocoder <command>
 ```
 
-Add to build pipeline:
+## Commands
 
-```json
-{
-  "scripts": {
-    "prebuild": "pnpm exec vocoder sync",
-    "build": "next build"
-  }
-}
-```
+### `vocoder init`
 
-### Options
-
-- `--include <pattern>` (repeatable)
-- `--exclude <pattern>` (repeatable)
-- `--branch <name>`
-- `--force`
-- `--dry-run`
-- `--verbose`
-
-## `vocoder wrap`
-
-Scans source files and wraps likely user-facing strings with `<T>` / `t()` patterns.
+Connect your repository to Vocoder.
 
 ```bash
-pnpm exec vocoder wrap
+vocoder init
 ```
 
-Options:
+The command detects your git remote and checks if a Vocoder project already exists for the repository. If found, it confirms the connection and prints next steps. If not, it opens a browser-based setup flow to create a new project.
 
-- `--include <pattern>` (repeatable)
-- `--exclude <pattern>` (repeatable)
-- `--dry-run`
-- `--interactive`
-- `--confidence <high|medium|low>`
-- `--verbose`
+**Options:**
 
-## Configuration
+| Flag | Description |
+|---|---|
+| `--yes` | Skip confirmation prompts |
+| `--project-name <name>` | Pre-fill project name |
+| `--source-locale <locale>` | Pre-fill source locale |
+| `--target-locales <list>` | Comma-separated target locales (e.g., `es,fr,de`) |
 
-Config priority:
+### `vocoder wrap`
 
-1. CLI flags
-2. environment variables
-3. defaults
-
-### Environment variables
+Automatically wrap string literals in your source code with `<T>` and `t()`.
 
 ```bash
-VOCODER_API_KEY=vc_xxx
-VOCODER_API_URL=https://vocoder.app
-VOCODER_EXTRACTION_PATTERN=src/**/*.{tsx,jsx,ts,js}
+vocoder wrap
 ```
 
-`VOCODER_API_KEY` must come from the environment.
+Scans your JSX/TSX files for user-facing string literals and wraps them with the appropriate Vocoder translation markers. Uses AST analysis to detect strings that are likely user-facing (not keys, classnames, or internal identifiers).
 
-## `vocoder init`
+**Options:**
 
-Bootstraps a project by opening a browser authorization flow, then provisioning
-a workspace/project API key.
+| Flag | Description |
+|---|---|
+| `--include <pattern>` | Glob pattern(s) to include (repeatable) |
+| `--exclude <pattern>` | Glob pattern(s) to exclude (repeatable) |
+| `--dry-run` | Preview changes without modifying files |
+| `--interactive` | Confirm each string interactively |
+| `--confidence <level>` | Minimum confidence: `high`, `medium`, `low` (default: `high`) |
+| `--verbose` | Detailed output |
 
-During browser completion, you can paste a DeepL API key (BYOK) or reuse an
-existing org-level DeepL key.
+## String Extraction
 
-```bash
-pnpm exec vocoder init
-```
+The `wrap` command uses Babel to parse JSX/TSX files and detect strings that are likely user-facing. It distinguishes between:
 
-## Troubleshooting
+- JSX text content (wrapped with `<T>`)
+- String props like `placeholder`, `title`, `aria-label` (wrapped with `t()`)
+- Non-translatable strings like class names, keys, and URLs (left alone)
 
-### `VOCODER_API_KEY is required`
+It tracks imports from `@vocoder/react` to avoid double-wrapping strings that are already marked for translation.
 
-Set `VOCODER_API_KEY` in `.env` or your environment.
+## Git Integration
 
-### No strings found
+The CLI auto-detects the repository and branch:
 
-Use `<T>` (from `@vocoder/react`) around translatable JSX text.
+- **Repository:** Reads the git remote URL and normalizes it to a canonical format (`github:owner/repo`)
+- **Branch:** Checks CI environment variables first (GitHub Actions, Vercel, Netlify, etc.), then falls back to reading `.git/HEAD`
+- **Scope path:** For monorepos, computes the relative path from the git root to the working directory
 
-### Wrong branch / skipped sync
+## License
 
-Use:
-
-```bash
-pnpm exec vocoder sync --branch main
-```
-
-or force:
-
-```bash
-pnpm exec vocoder sync --force
-```
+MIT
