@@ -477,7 +477,7 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 
     if (extractedStrings.length === 0) {
       spinner.stop('No translatable strings found');
-      p.log.warn('Make sure you are using <T> components from @vocoder/react');
+      p.log.warn('Make sure you are wrapping translatable strings with Vocoder');
       p.outro('');
       return 0;
     }

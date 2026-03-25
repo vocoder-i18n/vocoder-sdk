@@ -208,6 +208,8 @@ function toCanonical(host: string, ownerRepoPath: string): string {
 
 /**
  * Fetch all translations from the Vocoder API for a given fingerprint.
+ * The server automatically waits for any in-flight translations to complete
+ * before responding, avoiding build-time race conditions.
  * Falls back to disk cache if the API is unreachable.
  */
 export async function fetchTranslations(
@@ -221,7 +223,7 @@ export async function fetchTranslations(
   try {
     const response = await fetch(url, {
       headers: { Accept: 'application/json' },
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(45000),
     });
 
     if (!response.ok) {
