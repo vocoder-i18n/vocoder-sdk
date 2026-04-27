@@ -581,130 +581,255 @@ export async function init(options: InitOptions = {}): Promise<number> {
         selectedWorkspaceName = claimResult.organizationName;
         p.log.success(`Workspace: ${chalk.bold(selectedWorkspaceName)}`);
       } else {
-      const workspaceData = await api.listWorkspaces(userToken);
+      // ── Repo-aware workspace resolution ──────────────────────────────────────
+      const workspaceData = await api.listWorkspaces(userToken, {
+        repo: identity?.repoCanonical,
+      });
 
-      // Auto-select when there's exactly one workspace and the plan doesn't
-      // allow creating more — no point showing a single-item select with no
-      // "Create new" option.
-      if (workspaceData.workspaces.length === 1 && !workspaceData.canCreateWorkspace) {
-        const ws = workspaceData.workspaces[0]!;
+      const repoCanonical = identity?.repoCanonical ?? null;
+      // Workspaces whose GitHub installation covers the current repo
+      const covering = repoCanonical
+        ? workspaceData.workspaces.filter((w) => w.coversRepo === true)
+        : [];
+      // Workspaces that have any GitHub connection (may not cover this repo)
+      const connected = workspaceData.workspaces.filter((w) => w.hasGitHubConnection);
+
+      if (repoCanonical && covering.length === 1) {
+        // ── Scenario 1: exactly one workspace covers this repo — auto-select ──
+        const ws = covering[0]!;
         selectedWorkspaceId = ws.id;
         selectedWorkspaceName = ws.name;
         p.log.success(`Workspace: ${chalk.bold(selectedWorkspaceName)}`);
-      } else {
 
-      const workspaceResult = await selectWorkspace(workspaceData);
-
-      if (workspaceResult.action === 'cancelled') {
-        p.cancel('Setup cancelled.');
-        return 1;
-      }
-
-      if (workspaceResult.action === 'use') {
-        selectedWorkspaceId = workspaceResult.workspace.id;
-        selectedWorkspaceName = workspaceResult.workspace.name;
+      } else if (repoCanonical && covering.length > 1) {
+        // ── Scenario 2: multiple workspaces cover this repo — let user pick ──
+        const choice = await p.select<string>({
+          message: 'Select workspace for this repo',
+          options: covering.map((w) => ({
+            value: w.id,
+            label: `${w.name}  ${chalk.dim(`(${w.projectCount} project${w.projectCount !== 1 ? 's' : ''})`)}`,
+          })),
+        });
+        if (p.isCancel(choice)) { p.cancel('Setup cancelled.'); return 1; }
+        const ws = covering.find((w) => w.id === choice)!;
+        selectedWorkspaceId = ws.id;
+        selectedWorkspaceName = ws.name;
         p.log.success(`Workspace: ${chalk.bold(selectedWorkspaceName)}`);
-      } else {
-      // ── New workspace: GitHub connect flow ──────────────────────────────────
-      const connectChoice = await p.select<string>({
-        message: 'Connect your new workspace to GitHub',
-        options: [
-          { value: 'install', label: 'Install the Vocoder GitHub App' },
-          { value: 'link', label: 'Link an existing installation' },
-        ],
-      });
 
-      if (p.isCancel(connectChoice)) {
-        p.cancel('Setup cancelled.');
-        return 1;
-      }
+      } else if (repoCanonical && covering.length === 0 && connected.length > 0) {
+        // ── Scenario 3: connected workspaces exist but none cover this repo ──
+        const shortRepo = repoCanonical.split(':')[1] ?? repoCanonical;
+        p.log.warn(
+          `${chalk.bold(shortRepo)} isn't accessible from your Vocoder installation.\n` +
+          `  Grant access to this repository or install on the account that owns it.`,
+        );
 
-      if (connectChoice === 'install') {
-        // Full GitHub App install flow
-        const connectResult = await runGitHubInstallFlow({
-          api,
-          userToken,
-          yes: options.yes,
+        const fixOptions: Array<{ value: string; label: string }> = [];
+        for (const ws of connected) {
+          if (ws.installationConfigureUrl) {
+            fixOptions.push({
+              value: `grant:${ws.id}`,
+              label: `Configure ${chalk.bold(ws.connectionLabel ?? ws.name)}'s GitHub App installation`,
+            });
+          }
+        }
+        fixOptions.push({
+          value: 'install_new',
+          label: `Install on a different GitHub account ${chalk.dim('(creates a new personal workspace)')}`,
+        });
+        fixOptions.push({ value: 'cancel', label: 'Cancel' });
+
+        const fix = await p.select<string>({
+          message: 'How would you like to fix this?',
+          options: fixOptions,
         });
 
+        if (p.isCancel(fix) || fix === 'cancel') {
+          p.cancel('Setup cancelled.');
+          return 1;
+        }
+
+        if (fix.startsWith('grant:')) {
+          const ws = connected.find((w) => `grant:${w.id}` === fix)!;
+          await tryOpenBrowser(ws.installationConfigureUrl!);
+          p.cancel(
+            `Grant access to ${chalk.bold(shortRepo)} in your browser,\n` +
+            `  then re-run ${chalk.bold('vocoder init')}.`,
+          );
+          return 1;
+        }
+
+        // install_new: full install → creates new workspace covering the new account
+        const connectResult = await runGitHubInstallFlow({ api, userToken, yes: options.yes });
         if (!connectResult) {
           p.log.error('GitHub App installation did not complete. Run `vocoder init` again.');
           return 1;
         }
-
         selectedWorkspaceId = connectResult.organizationId;
         selectedWorkspaceName = connectResult.organizationName;
         p.log.success(`Workspace: ${chalk.bold(selectedWorkspaceName)}`);
+
       } else {
-        // OAuth discovery → select installation → claim
-        const installations = await runGitHubDiscoveryFlow({
-          api,
-          userToken,
-          yes: options.yes,
-        });
+        // ── Fallback: no repo context or first-time user — standard select ────
+        if (workspaceData.workspaces.length === 1 && !workspaceData.canCreateWorkspace) {
+          const ws = workspaceData.workspaces[0]!;
+          selectedWorkspaceId = ws.id;
+          selectedWorkspaceName = ws.name;
+          p.log.success(`Workspace: ${chalk.bold(selectedWorkspaceName)}`);
+        } else {
 
-        if (!installations) return 1;
+        const workspaceResult = await selectWorkspace(workspaceData);
 
-        if (installations.length === 0) {
-          p.log.warn('No GitHub installations found. Install the Vocoder GitHub App first.');
-          const installNow = await p.confirm({ message: 'Open GitHub to install the App?' });
-          if (p.isCancel(installNow) || !installNow) return 1;
+        if (workspaceResult.action === 'cancelled') {
+          p.cancel('Setup cancelled.');
+          return 1;
+        }
 
-          const connectResult = await runGitHubInstallFlow({
-            api,
-            userToken,
-            yes: options.yes,
+        if (workspaceResult.action === 'use') {
+          selectedWorkspaceId = workspaceResult.workspace.id;
+          selectedWorkspaceName = workspaceResult.workspace.name;
+          p.log.success(`Workspace: ${chalk.bold(selectedWorkspaceName)}`);
+        } else {
+          // ── New workspace: GitHub connect flow ────────────────────────────────
+          const connectChoice = await p.select<string>({
+            message: 'Connect your new workspace to GitHub',
+            options: [
+              { value: 'install', label: 'Install the Vocoder GitHub App' },
+              { value: 'link', label: 'Link an existing installation' },
+            ],
           });
 
-          if (!connectResult) return 1;
-
-          selectedWorkspaceId = connectResult.organizationId;
-          selectedWorkspaceName = connectResult.organizationName;
-        } else {
-          const selectedInstallationId = await selectGitHubInstallation(
-            installations.map((inst) => ({
-              installationId: inst.installationId,
-              accountLogin: inst.accountLogin,
-              accountType: inst.accountType,
-              isSuspended: inst.isSuspended,
-              conflictLabel: inst.conflictLabel,
-            })),
-            true,
-          );
-
-          if (selectedInstallationId === null) {
+          if (p.isCancel(connectChoice)) {
             p.cancel('Setup cancelled.');
             return 1;
           }
 
-          if (selectedInstallationId === 'install_new') {
-            const connectResult = await runGitHubInstallFlow({
-              api,
-              userToken,
-              yes: options.yes,
-            });
-
-            if (!connectResult) return 1;
-
+          if (connectChoice === 'install') {
+            const connectResult = await runGitHubInstallFlow({ api, userToken, yes: options.yes });
+            if (!connectResult) {
+              p.log.error('GitHub App installation did not complete. Run `vocoder init` again.');
+              return 1;
+            }
             selectedWorkspaceId = connectResult.organizationId;
             selectedWorkspaceName = connectResult.organizationName;
+            p.log.success(`Workspace: ${chalk.bold(selectedWorkspaceName)}`);
           } else {
-            const claimResult = await api.claimCliGitHubInstallation(userToken, {
-              installationId: String(selectedInstallationId),
-              organizationId: null,
-            });
+            const installations = await runGitHubDiscoveryFlow({ api, userToken, yes: options.yes });
+            if (!installations) return 1;
 
-            selectedWorkspaceId = claimResult.organizationId;
-            selectedWorkspaceName = claimResult.organizationName;
+            if (installations.length === 0) {
+              p.log.warn('No GitHub installations found. Install the Vocoder GitHub App first.');
+              const installNow = await p.confirm({ message: 'Open GitHub to install the App?' });
+              if (p.isCancel(installNow) || !installNow) return 1;
+              const connectResult = await runGitHubInstallFlow({ api, userToken, yes: options.yes });
+              if (!connectResult) return 1;
+              selectedWorkspaceId = connectResult.organizationId;
+              selectedWorkspaceName = connectResult.organizationName;
+            } else {
+              const selectedInstallationId = await selectGitHubInstallation(
+                installations.map((inst) => ({
+                  installationId: inst.installationId,
+                  accountLogin: inst.accountLogin,
+                  accountType: inst.accountType,
+                  isSuspended: inst.isSuspended,
+                  conflictLabel: inst.conflictLabel,
+                })),
+                true,
+              );
+
+              if (selectedInstallationId === null) { p.cancel('Setup cancelled.'); return 1; }
+
+              if (selectedInstallationId === 'install_new') {
+                const connectResult = await runGitHubInstallFlow({ api, userToken, yes: options.yes });
+                if (!connectResult) return 1;
+                selectedWorkspaceId = connectResult.organizationId;
+                selectedWorkspaceName = connectResult.organizationName;
+              } else {
+                const claimResult = await api.claimCliGitHubInstallation(userToken, {
+                  installationId: String(selectedInstallationId),
+                  organizationId: null,
+                });
+                selectedWorkspaceId = claimResult.organizationId;
+                selectedWorkspaceName = claimResult.organizationName;
+              }
+            }
+            p.log.success(`Workspace: ${chalk.bold(selectedWorkspaceName)}`);
           }
+        } // closes new workspace else
+        } // closes auto-select else
+      } // closes main scenario if/else chain
+      } // closes cachedInstallations else
+    } // closes if (authOrganizationId) else
+
+    // ── Plan limit pre-flight ────────────────────────────────────────────────────
+    // Check project limits before entering the full config TUI so we can offer
+    // actionable options rather than a hard error at the end.
+    try {
+      const wsCheck = await api.listWorkspaces(userToken);
+      const ws = wsCheck.workspaces.find((w) => w.id === selectedWorkspaceId);
+      if (ws && ws.maxProjects !== -1 && ws.projectCount >= ws.maxProjects) {
+        p.log.warn(
+          `Project limit reached — ${ws.projectCount}/${ws.maxProjects} on your ${chalk.bold(ws.planId)} plan.`,
+        );
+
+        const limitAction = await p.select<string>({
+          message: 'What would you like to do?',
+          options: [
+            { value: 'upgrade', label: 'Upgrade plan' },
+            { value: 'existing', label: 'Use an existing project in this workspace' },
+            { value: 'cancel', label: 'Cancel' },
+          ],
+        });
+
+        if (p.isCancel(limitAction) || limitAction === 'cancel') {
+          p.cancel('Setup cancelled.');
+          return 1;
         }
 
-        p.log.success(`Workspace: ${chalk.bold(selectedWorkspaceName)}`);
+        if (limitAction === 'upgrade') {
+          await tryOpenBrowser(`${apiUrl}/dashboard/billing`);
+          p.cancel('Upgrade your plan in the browser, then re-run `vocoder init`.');
+          return 1;
+        }
+
+        // Use existing project: list, pick, scaffold
+        const existingProjects = await api.listProjects(userToken, selectedWorkspaceId);
+        if (existingProjects.length === 0) {
+          p.log.error('No projects found in this workspace.');
+          return 1;
+        }
+
+        const chosenId = await p.select<string>({
+          message: 'Select a project',
+          options: existingProjects.map((proj) => ({
+            value: proj.id,
+            label: proj.name,
+            hint: `${proj.sourceLocale} → ${proj.targetLocales.join(', ')}`,
+          })),
+        });
+
+        if (p.isCancel(chosenId)) {
+          p.cancel('Setup cancelled.');
+          return 1;
+        }
+
+        const chosen = existingProjects.find((proj) => proj.id === chosenId)!;
+        runScaffold({
+          projectName: chosen.name,
+          organizationName: selectedWorkspaceName,
+          sourceLocale: chosen.sourceLocale,
+          translationTriggers: chosen.translationTriggers,
+        });
+        p.log.info(
+          `Get your project API key at:\n  ${apiUrl}/dashboard/projects/${chosen.id}/settings`,
+        );
+        p.outro("You're all set.");
+        return 0;
       }
-      } // closes if (workspaceResult.action === 'use') else
-      } // closes cachedInstallations.length === 0 else
-      } // closes auto-select else
-    } // closes if (authOrganizationId) else
+    } catch {
+      // Non-fatal: if the check fails, let project creation proceed and
+      // the server will return a proper error if the limit is actually hit.
+    }
 
     // ── Project configuration ────────────────────────────────────────────────────
     const projectResult = await runProjectCreate({

@@ -65,6 +65,13 @@ function parsePayload(raw: string): unknown {
     return null;
   }
 
+  // HTML responses (e.g. Next.js error pages) are never valid API payloads.
+  // Wrapping raw HTML as the error message causes it to leak into the TUI.
+  const trimmed = raw.trimStart();
+  if (trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<html')) {
+    return { message: 'Unexpected response from server (received HTML). Check your network connection or try again.' };
+  }
+
   try {
     return JSON.parse(raw);
   } catch {
@@ -522,18 +529,28 @@ export class VocoderAPI {
 
   // ── Workspaces ────────────────────────────────────────────────────────────────
 
-  async listWorkspaces(userToken: string): Promise<{
+  async listWorkspaces(
+    userToken: string,
+    params?: { repo?: string },
+  ): Promise<{
     workspaces: Array<{
       id: string;
       name: string;
       planId: string;
+      maxProjects: number;
       projectCount: number;
       hasGitHubConnection: boolean;
       connectionLabel: string | null;
+      /** null when no `repo` param was provided */
+      coversRepo: boolean | null;
+      installationConfigureUrl: string | null;
     }>;
     canCreateWorkspace: boolean;
   }> {
-    const response = await fetch(`${this.apiUrl}/api/cli/workspaces`, {
+    const url = new URL(`${this.apiUrl}/api/cli/workspaces`);
+    if (params?.repo) url.searchParams.set('repo', params.repo);
+
+    const response = await fetch(url.toString(), {
       headers: { Authorization: `Bearer ${userToken}` },
     });
 
@@ -552,12 +569,54 @@ export class VocoderAPI {
         id: string;
         name: string;
         planId: string;
+        maxProjects: number;
         projectCount: number;
         hasGitHubConnection: boolean;
         connectionLabel: string | null;
+        coversRepo: boolean | null;
+        installationConfigureUrl: string | null;
       }>;
       canCreateWorkspace: boolean;
     };
+  }
+
+  async listProjects(
+    userToken: string,
+    organizationId: string,
+  ): Promise<
+    Array<{
+      id: string;
+      name: string;
+      sourceLocale: string;
+      targetLocales: string[];
+      translationTriggers: string[];
+    }>
+  > {
+    const url = new URL(`${this.apiUrl}/api/cli/projects`);
+    url.searchParams.set('organizationId', organizationId);
+
+    const response = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${userToken}` },
+    });
+
+    const payload = await readPayload(response);
+
+    if (!response.ok) {
+      throw new VocoderAPIError({
+        message: extractErrorMessage(payload, `Failed to list projects (${response.status})`),
+        status: response.status,
+        payload,
+      });
+    }
+
+    const result = payload as { projects: Array<{
+      id: string;
+      name: string;
+      sourceLocale: string;
+      targetLocales: string[];
+      translationTriggers: string[];
+    }> };
+    return result.projects;
   }
 
   // ── CLI GitHub endpoints ──────────────────────────────────────────────────────

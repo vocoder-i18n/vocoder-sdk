@@ -282,7 +282,10 @@ export async function selectGitHubInstallation(
     }));
 
   if (canInstallNew) {
-    options.push({ value: 'install_new', label: 'Install on a new account' });
+    options.push({
+      value: 'install_new',
+      label: `Install on a new account ${chalk.dim('(creates a new personal workspace)')}`,
+    });
   }
 
   const selected = await p.select<SelectValue>({
