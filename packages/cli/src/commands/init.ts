@@ -1,34 +1,28 @@
 import * as p from '@clack/prompts';
-import chalk from 'chalk';
 
-import { VocoderAPI } from '../utils/api.js';
 import {
   buildInstallCommand,
   detectLocalEcosystem,
   getPackagesToInstall,
 } from '../utils/detect-local.js';
-import { getSetupSnippets } from '../utils/setup-snippets.js';
+import { clearAuthData, readAuthData, writeAuthData } from '../utils/auth-store.js';
+import { runGitHubDiscoveryFlow, runGitHubInstallFlow, selectGitHubInstallation } from '../utils/github-connect.js';
 
 import type { InitOptions } from '../types.js';
-import { resolveGitContext } from '../utils/git-identity.js';
+import { VocoderAPI } from '../utils/api.js';
+import chalk from 'chalk';
+import { execSync } from 'node:child_process';
+import { getSetupSnippets } from '../utils/setup-snippets.js';
 import { config as loadEnv } from 'dotenv';
+import { resolveGitContext } from '../utils/git-identity.js';
+import { runProjectCreate } from '../utils/project-create.js';
+import { selectWorkspace } from '../utils/workspace.js';
+import { spawn } from 'node:child_process';
+import { startCallbackServer } from '../utils/local-server.js';
 
 loadEnv();
-import { execSync } from 'node:child_process';
-import { spawn } from 'node:child_process';
 
 const SUBSCRIPTION_SETTINGS_PATH = '/dashboard/workspace/settings?tab=subscription';
-
-function parseTargetLocales(value?: string): string[] | undefined {
-  if (!value) return undefined;
-
-  const locales = value
-    .split(',')
-    .map((locale: string) => locale.trim())
-    .filter(Boolean);
-
-  return locales.length > 0 ? locales : undefined;
-}
 
 async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
@@ -111,7 +105,6 @@ function runScaffold(params: ScaffoldParams): void {
   p.log.info(`Project:   ${chalk.bold(projectName)}`);
   p.log.info(`Workspace: ${chalk.bold(organizationName)}`);
 
-  // Detect local ecosystem
   const detection = detectLocalEcosystem();
 
   if (detection.ecosystem) {
@@ -120,7 +113,6 @@ function runScaffold(params: ScaffoldParams): void {
     p.log.info(`Detected:  ${chalk.bold(frameworkLabel)} (${pmLabel})`);
   }
 
-  // Install packages
   const packagesToInstall = getPackagesToInstall(detection);
   if (packagesToInstall.length > 0) {
     const installCmd = buildInstallCommand(detection.packageManager, packagesToInstall);
@@ -139,7 +131,6 @@ function runScaffold(params: ScaffoldParams): void {
     p.log.info(`Packages:  ${chalk.green('already installed')}`);
   }
 
-  // Print setup snippets
   const snippets = getSetupSnippets({
     framework: detection.framework,
     ecosystem: detection.ecosystem,
@@ -165,36 +156,270 @@ function runScaffold(params: ScaffoldParams): void {
   p.log.step(`${chalk.bold(`Step ${stepNum}:`)} Wrap translatable strings`);
   printCodeBlock(snippets.wrapStep.code);
 
-  // What's next
   p.log.message('');
   for (const line of snippets.whatsNext.split('\n')) {
     p.log.success(line);
   }
 }
 
+function printMcpSetup(apiKey: string): void {
+  const addCommand = `claude mcp add --scope project --transport stdio \\\n  --env VOCODER_API_KEY=${apiKey} \\\n  vocoder -- npx -y @vocoder/mcp`;
+
+  const teamConfig = JSON.stringify(
+    {
+      mcpServers: {
+        vocoder: {
+          type: 'stdio',
+          command: 'npx',
+          args: ['-y', '@vocoder/mcp'],
+          env: { VOCODER_API_KEY: '${env:VOCODER_API_KEY}' },
+        },
+      },
+    },
+    null,
+    2,
+  );
+
+  p.log.message('');
+  p.log.message(chalk.bold('Use Vocoder with Claude Code'));
+  p.log.message('Run this to add the MCP server to your project:');
+  p.log.message('');
+  printCodeBlock(addCommand);
+  p.log.message('');
+  p.log.message('To share with your team, commit ' + chalk.cyan('.mcp.json') + ' with an env var reference');
+  p.log.message('so each developer supplies their own key:');
+  p.log.message('');
+  printCodeBlock(teamConfig);
+  p.log.message('');
+  p.log.message(chalk.gray('Setup instructions: https://vocoder.app/docs/mcp'));
+}
+
 function printCodeBlock(code: string): void {
   const lines = code.split('\n');
   const maxLen = lines.reduce((max: number, line: string) => Math.max(max, line.length), 0);
-  const bar = chalk.gray('\u2502');
+  const bar = chalk.gray('│');
   const pad = (s: string) => s + ' '.repeat(maxLen - s.length);
 
-  process.stdout.write(`${chalk.gray('\u2502')}\n`);
-  process.stdout.write(`${chalk.gray('\u2502')}  ${chalk.gray('\u250C' + '\u2500'.repeat(maxLen + 2) + '\u2510')}\n`);
+  process.stdout.write(`${chalk.gray('│')}\n`);
+  process.stdout.write(`${chalk.gray('│')}  ${chalk.gray('┌' + '─'.repeat(maxLen + 2) + '┐')}\n`);
   for (const line of lines) {
-    process.stdout.write(`${chalk.gray('\u2502')}  ${bar} ${pad(line)} ${bar}\n`);
+    process.stdout.write(`${chalk.gray('│')}  ${bar} ${pad(line)} ${bar}\n`);
   }
-  process.stdout.write(`${chalk.gray('\u2502')}  ${chalk.gray('\u2514' + '\u2500'.repeat(maxLen + 2) + '\u2518')}\n`);
+  process.stdout.write(`${chalk.gray('│')}  ${chalk.gray('└' + '─'.repeat(maxLen + 2) + '┘')}\n`);
 }
+
+// ── Auth helpers ─────────────────────────────────────────────────────────────
+
+/**
+ * Verify a stored auth token against the API.
+ * Returns user info on success, null if the token is invalid/expired.
+ * On 401, clears the stored token.
+ */
+async function verifyStoredToken(
+  api: VocoderAPI,
+  token: string,
+): Promise<{ userId: string; email: string; name: string | null } | null> {
+  try {
+    return await api.getCliUserInfo(token);
+  } catch {
+    clearAuthData();
+    return null;
+  }
+}
+
+/**
+ * Run the browser authentication flow.
+ * Returns `{ token, userInfo, organizationId? }` on success, or null if cancelled.
+ * When `organizationId` is set, the GitHub App was installed in the same browser
+ * trip — the caller should skip workspace selection and GitHub connect.
+ *
+ * @param reauth - When true, the user has an expired token and already has a workspace.
+ *   Use verificationUrl (auth/cli page) instead of installUrl so we don't create a
+ *   duplicate workspace. The direct-to-GitHub install URL is only for first-time setup.
+ */
+async function runAuthFlow(
+  api: VocoderAPI,
+  options: InitOptions,
+  reauth = false,
+  repoCanonical?: string,
+): Promise<{ token: string; userId: string; email: string; name: string | null; organizationId?: string; discoveryReady?: boolean } | null> {
+  // Try to start a local callback server for instant token delivery.
+  // In --ci mode the browser step is handled externally, so skip the callback
+  // server and go straight to polling — simpler and testable.
+  let server: Awaited<ReturnType<typeof startCallbackServer>> | null = null;
+  if (!options.ci) {
+    try {
+      server = await startCallbackServer();
+    } catch {
+      // Port conflict or other issue — fall back to polling
+    }
+  }
+
+  const session = await api.startCliAuthSession(server?.port, repoCanonical);
+  // Re-auth: user already has a workspace — use verificationUrl (auth/cli page)
+  // so we don't trigger a new GitHub App install and create a duplicate workspace.
+  // First-time: use installUrl to combine Vocoder auth + App install in one trip.
+  const browserUrl = reauth
+    ? session.verificationUrl
+    : (session.installUrl ?? session.verificationUrl);
+  const expiresAt = new Date(session.expiresAt).getTime();
+
+  if (options.ci) {
+    // Machine-readable output for automated test harnesses.
+    // Parsed by e2e/helpers/cli.ts: /^VOCODER_AUTH_URL: (.+)$/m
+    process.stdout.write(`VOCODER_AUTH_URL: ${browserUrl}\n`);
+    // Also emit the session ID separately so tests can expire/complete sessions
+    process.stdout.write(`VOCODER_SESSION_ID: ${session.sessionId}\n`);
+  } else if (process.stdin.isTTY && process.stdout.isTTY && process.env.CI !== 'true') {
+    if (reauth) {
+      // Re-auth: token expired, just sign in — no install choice needed
+      if (!options.yes) {
+        const shouldOpen = await p.confirm({ message: 'Open your browser to sign in again?' });
+        if (p.isCancel(shouldOpen)) {
+          server?.close();
+          p.cancel('Setup cancelled.');
+          return null;
+        }
+        if (!shouldOpen) {
+          p.log.info('Open the URL above manually in your browser to continue.');
+        } else {
+          const opened = await tryOpenBrowser(browserUrl);
+          if (!opened) {
+            p.note(browserUrl, 'Sign In');
+            p.log.info('Open the URL above manually to continue.');
+          }
+        }
+      } else {
+        await tryOpenBrowser(browserUrl);
+      }
+    } else {
+      // First-time setup: let user choose install vs link existing
+      let isLinkFlow = false;
+      if (!options.yes) {
+        const connectChoice = await p.select<string>({
+          message: 'Vocoder needs to be installed on your GitHub account to get started',
+          options: [
+            { value: 'install', label: 'Install GitHub App', hint: 'recommended' },
+            { value: 'link', label: 'Already installed? Link your account' },
+          ],
+        });
+
+        if (p.isCancel(connectChoice)) {
+          server?.close();
+          p.cancel('Setup cancelled.');
+          return null;
+        }
+
+        isLinkFlow = connectChoice === 'link';
+      }
+
+      // For "link": get the OAuth-only URL from the server (no install page shown)
+      let urlToOpen = browserUrl;
+      if (isLinkFlow) {
+        try {
+          const linkSession = await api.startCliGitHubLinkSession(
+            session.sessionId,
+            server?.port,
+          );
+          urlToOpen = linkSession.oauthUrl;
+        } catch {
+          // Fall back to install URL if link-start fails
+          urlToOpen = browserUrl;
+        }
+      }
+
+      // Open browser immediately — no separate confirm needed
+      const opened = await tryOpenBrowser(urlToOpen);
+      if (!opened) {
+        // Only show URL as a fallback if auto-open fails
+        p.log.warn('Could not open your browser automatically.');
+        p.note(urlToOpen, 'GitHub');
+        p.log.info('Open the URL above to continue.');
+      }
+    }
+  }
+
+  const authSpinner = p.spinner();
+  authSpinner.start('Waiting for GitHub authorization...');
+
+  let rawToken: string | null = null;
+  let callbackOrganizationId: string | undefined;
+  let callbackDiscoveryReady = false;
+
+  if (server) {
+    // Fast path: wait for the localhost callback
+    try {
+      const deadline = Math.min(expiresAt, Date.now() + 10 * 60 * 1000);
+      const timeoutMs = deadline - Date.now();
+      const params = await Promise.race([
+        server.waitForCallback(),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+      ]);
+
+      if (params && typeof params.token === 'string') {
+        rawToken = params.token;
+        if (typeof params.organizationId === 'string' && params.organizationId) {
+          callbackOrganizationId = params.organizationId;
+        }
+        // Link flow: callback signals discovery results are cached
+        if (params.discovery_ready === '1') {
+          callbackDiscoveryReady = true;
+        }
+      }
+    } catch {
+      // Fall through to polling
+    } finally {
+      server.close();
+    }
+  }
+
+  if (!rawToken) {
+    // Polling fallback
+    while (Date.now() < expiresAt) {
+      const result = await api.pollCliAuthSession(session.sessionId);
+
+      if (result.status === 'complete') {
+        rawToken = result.token;
+        if (result.organizationId) {
+          callbackOrganizationId = result.organizationId;
+        }
+        break;
+      }
+
+      if (result.status === 'failed') {
+        authSpinner.stop();
+        p.log.error(result.reason);
+        return null;
+      }
+
+      // Still pending — wait 2s before next poll
+      await sleep(2000);
+    }
+  }
+
+  if (!rawToken) {
+    authSpinner.stop();
+    p.log.error('The authentication link expired. Run `vocoder init` again.');
+    return null;
+  }
+
+  // Validate the token and get user info
+  const userInfo = await api.getCliUserInfo(rawToken);
+  authSpinner.stop();
+  p.log.success(`Authenticated as ${chalk.bold(userInfo.email)}`);
+
+  return { token: rawToken, ...userInfo, organizationId: callbackOrganizationId, discoveryReady: callbackDiscoveryReady };
+}
+
+// ── Main command ─────────────────────────────────────────────────────────────
 
 export async function init(options: InitOptions = {}): Promise<number> {
   const apiUrl = options.apiUrl || process.env.VOCODER_API_URL || 'https://vocoder.app';
 
   p.intro('Vocoder Setup');
 
-  const spinner = p.spinner();
-
   try {
-    // ── Detect git context ─────────────────────────────────────────
+    // ── Detect git context ──────────────────────────────────────────────────
     const gitContext = resolveGitContext();
     const identity = gitContext.identity;
 
@@ -204,20 +429,16 @@ export async function init(options: InitOptions = {}): Promise<number> {
       }
     }
 
-    // ── Try fast lookup: does a project already exist for this repo?
+    // ── Fast lookup: does a project already exist for this repo? ────────────
+    // No spinner — this is a fast DB read and we don't want an empty ◇ on miss.
     if (identity) {
-      spinner.start('Checking for existing project...');
-
-      const api = new VocoderAPI({ apiUrl, apiKey: '' });
-      const existing = await api.lookupProjectByRepo({
+      const anonApi = new VocoderAPI({ apiUrl, apiKey: '' });
+      const existing = await anonApi.lookupProjectByRepo({
         repoCanonical: identity.repoCanonical,
         scopePath: identity.repoScopePath,
       });
 
       if (existing) {
-        spinner.stop('Found existing project!');
-        p.outro('Vocoder is already set up for this repository.');
-
         runScaffold({
           projectName: existing.projectName,
           organizationName: existing.organizationName,
@@ -225,108 +446,311 @@ export async function init(options: InitOptions = {}): Promise<number> {
           translationTriggers: existing.translationTriggers ?? ['push'],
         });
 
+        p.outro("Vocoder is already set up for this repository.");
         return 0;
       }
-
-      spinner.stop('No existing project found for this repo.');
     }
 
-    // ── Browser setup flow (new project needed) ────────────────────
-    spinner.start('Creating setup session');
-
+    // ── Auth: check stored token, prompt if missing ─────────────────────────
     const api = new VocoderAPI({ apiUrl, apiKey: '' });
+    let userToken: string;
+    let userEmail: string;
+    let userName: string | null;
 
-    const start = await api.startInitSession({
-      projectName: options.projectName,
-      sourceLocale: options.sourceLocale,
-      targetLocales: parseTargetLocales(options.targetLocales),
-      ...(identity?.repoCanonical ? { repoCanonical: identity.repoCanonical } : {}),
-      ...(identity ? { repoScopePath: identity.repoScopePath } : {}),
-    });
+    // organizationId is set when auth+GitHub install completed in one browser trip
+    let authOrganizationId: string | undefined;
+    // discoveryReady is set when auth completed via link-start OAuth (no install)
+    let authDiscoveryReady = false;
 
-    spinner.stop('Setup session created');
+    const stored = readAuthData();
+    if (stored && stored.apiUrl === apiUrl) {
+      const verified = await verifyStoredToken(api, stored.token);
 
-    const verificationUrlString = start.verificationUrl;
+      if (verified) {
+        p.log.success(`Authenticated as ${chalk.bold(verified.email)}`);
+        userToken = stored.token;
+        userEmail = verified.email;
+        userName = verified.name;
+      } else {
+        p.log.warn('Stored credentials expired — signing in again');
+        const authResult = await runAuthFlow(api, options, /* reauth */ true);
+        if (!authResult) return 1;
+        userToken = authResult.token;
+        userEmail = authResult.email;
+        userName = authResult.name;
+        authOrganizationId = authResult.organizationId;
+        authDiscoveryReady = authResult.discoveryReady ?? false;
 
-    p.log.info('Create a project in your browser to continue.');
-    p.note(verificationUrlString, 'Setup URL');
+        writeAuthData({
+          token: userToken,
+          apiUrl,
+          userId: authResult.userId,
+          email: userEmail,
+          name: userName,
+          createdAt: new Date().toISOString(),
+        });
+      }
+    } else {
+      const authResult = await runAuthFlow(api, options, false, identity?.repoCanonical);
+      if (!authResult) return 1;
+      userToken = authResult.token;
+      userEmail = authResult.email;
+      userName = authResult.name;
+      authOrganizationId = authResult.organizationId;
 
-    // ── Browser open ───────────────────────────────────────────────
-    if (process.stdin.isTTY && process.stdout.isTTY && process.env.CI !== 'true') {
-      const shouldOpen = options.yes
-        ? true
-        : await p.confirm({ message: 'Open this URL in your browser?' });
+      writeAuthData({
+        token: userToken,
+        apiUrl,
+        userId: authResult.userId,
+        email: userEmail,
+        name: userName,
+        createdAt: new Date().toISOString(),
+      });
+    }
 
-      if (p.isCancel(shouldOpen)) {
+    // ── Workspace selection ─────────────────────────────────────────────────────
+    let selectedWorkspaceId: string;
+    let selectedWorkspaceName: string;
+
+    if (authOrganizationId) {
+      // Install path: auth+install completed in one browser trip, workspace already created.
+      const workspaceData = await api.listWorkspaces(userToken);
+      const ws = workspaceData.workspaces.find((w) => w.id === authOrganizationId);
+      selectedWorkspaceId = authOrganizationId;
+      selectedWorkspaceName = ws?.name ?? userEmail;
+      p.log.success(`Connected as ${chalk.bold(userEmail)} — workspace: ${chalk.bold(selectedWorkspaceName)}`);
+    } else {
+      // Always check for cached discovery results first. The cache expires in
+      // 5 minutes so returning users (no recent link flow) fall through cleanly.
+      const discoveryResult = await api.getCliGitHubDiscovery(userToken).catch(() => null);
+      const cachedInstallations = discoveryResult?.installations ?? [];
+
+      if (cachedInstallations.length > 0) {
+        // Warn if none of the discovered installations belong to the org that
+        // owns the current repo — the binding won't be created even if setup succeeds.
+        if (identity?.repoCanonical) {
+          const repoOwner = identity.repoCanonical.split(':')[1]?.split('/')[0]?.toLowerCase();
+          if (repoOwner) {
+            const hasMatchingAccount = cachedInstallations.some(
+              (i) => i.accountLogin.toLowerCase() === repoOwner,
+            );
+            if (!hasMatchingAccount) {
+              p.log.warn(
+                `None of your GitHub App installations belong to "${repoOwner}", ` +
+                `the account that owns this repository.\n` +
+                `  The project will be created but translations won't trigger automatically.\n` +
+                `  To fix: install the Vocoder GitHub App on "${repoOwner}" instead.`,
+              );
+            }
+          }
+        }
+
+        // Auto-select when there's exactly one valid (non-suspended, unclaimed) installation
+        const validInstallations = cachedInstallations.filter(
+          (i) => !i.isSuspended && !i.conflictLabel,
+        );
+
+        let selectedInstallationId: number | string | null = null;
+
+        if (validInstallations.length === 1 && cachedInstallations.length === 1) {
+          // Single installation — claim silently, no prompt needed
+          selectedInstallationId = validInstallations[0]!.installationId;
+        } else {
+          selectedInstallationId = await selectGitHubInstallation(
+            cachedInstallations.map((inst) => ({
+              installationId: inst.installationId,
+              accountLogin: inst.accountLogin,
+              accountType: inst.accountType,
+              isSuspended: inst.isSuspended,
+              conflictLabel: inst.conflictLabel,
+            })),
+            false,
+          );
+        }
+
+        if (selectedInstallationId === null || selectedInstallationId === 'install_new') {
+          p.cancel('Setup cancelled. Re-run `vocoder init` and choose Install GitHub App.');
+          return 1;
+        }
+
+        const claimResult = await api.claimCliGitHubInstallation(userToken, {
+          installationId: String(selectedInstallationId),
+          organizationId: null,
+        });
+        selectedWorkspaceId = claimResult.organizationId;
+        selectedWorkspaceName = claimResult.organizationName;
+        p.log.success(`Workspace: ${chalk.bold(selectedWorkspaceName)}`);
+      } else {
+      const workspaceData = await api.listWorkspaces(userToken);
+
+      // Auto-select when there's exactly one workspace and the plan doesn't
+      // allow creating more — no point showing a single-item select with no
+      // "Create new" option.
+      if (workspaceData.workspaces.length === 1 && !workspaceData.canCreateWorkspace) {
+        const ws = workspaceData.workspaces[0]!;
+        selectedWorkspaceId = ws.id;
+        selectedWorkspaceName = ws.name;
+        p.log.success(`Workspace: ${chalk.bold(selectedWorkspaceName)}`);
+      } else {
+
+      const workspaceResult = await selectWorkspace(workspaceData);
+
+      if (workspaceResult.action === 'cancelled') {
         p.cancel('Setup cancelled.');
         return 1;
       }
 
-      if (shouldOpen) {
-        const opened = await tryOpenBrowser(verificationUrlString);
-        if (opened) {
-          p.log.info('Opened your browser.');
-        } else {
-          p.log.info('Could not open a browser automatically. Use the URL above.');
-        }
-      }
-    }
-
-    // ── Polling ────────────────────────────────────────────────────
-    const expiresAt = new Date(start.expiresAt).getTime();
-    spinner.start('Waiting for setup to complete...');
-
-    while (Date.now() < expiresAt) {
-      const status = await api.getInitSessionStatus({
-        sessionId: start.sessionId,
-        pollToken: start.poll.token,
+      if (workspaceResult.action === 'use') {
+        selectedWorkspaceId = workspaceResult.workspace.id;
+        selectedWorkspaceName = workspaceResult.workspace.name;
+        p.log.success(`Workspace: ${chalk.bold(selectedWorkspaceName)}`);
+      } else {
+      // ── New workspace: GitHub connect flow ──────────────────────────────────
+      const connectChoice = await p.select<string>({
+        message: 'Connect your new workspace to GitHub',
+        options: [
+          { value: 'install', label: 'Install the Vocoder GitHub App' },
+          { value: 'link', label: 'Link an existing installation' },
+        ],
       });
 
-      if (status.status === 'pending') {
-        const pendingMessage = status.message?.trim();
-        if (pendingMessage) {
-          spinner.message(`Waiting for setup to complete... (${pendingMessage})`);
-        }
-        await sleep((status.pollIntervalSeconds || start.poll.intervalSeconds) * 1000);
-        continue;
-      }
-
-      if (status.status === 'failed') {
-        spinner.stop('Setup failed');
-        if (isPlanLimitFailure(status.message)) {
-          printPlanLimitMessage(apiUrl, status.message);
-        } else {
-          p.log.error(status.message);
-        }
-        p.cancel('Setup could not be completed.');
+      if (p.isCancel(connectChoice)) {
+        p.cancel('Setup cancelled.');
         return 1;
       }
 
-      if (status.status === 'completed') {
-        spinner.stop('Setup complete!');
-
-        const { credentials } = status;
-
-        p.outro('Vocoder initialized successfully!');
-
-        runScaffold({
-          projectName: credentials.projectName,
-          organizationName: credentials.organizationName,
-          sourceLocale: credentials.sourceLocale,
-          translationTriggers: credentials.translationTriggers ?? ['push'],
+      if (connectChoice === 'install') {
+        // Full GitHub App install flow
+        const connectResult = await runGitHubInstallFlow({
+          api,
+          userToken,
+          yes: options.yes,
         });
 
-        return 0;
+        if (!connectResult) {
+          p.log.error('GitHub App installation did not complete. Run `vocoder init` again.');
+          return 1;
+        }
+
+        selectedWorkspaceId = connectResult.organizationId;
+        selectedWorkspaceName = connectResult.organizationName;
+        p.log.success(`Workspace: ${chalk.bold(selectedWorkspaceName)}`);
+      } else {
+        // OAuth discovery → select installation → claim
+        const installations = await runGitHubDiscoveryFlow({
+          api,
+          userToken,
+          yes: options.yes,
+        });
+
+        if (!installations) return 1;
+
+        if (installations.length === 0) {
+          p.log.warn('No GitHub installations found. Install the Vocoder GitHub App first.');
+          const installNow = await p.confirm({ message: 'Open GitHub to install the App?' });
+          if (p.isCancel(installNow) || !installNow) return 1;
+
+          const connectResult = await runGitHubInstallFlow({
+            api,
+            userToken,
+            yes: options.yes,
+          });
+
+          if (!connectResult) return 1;
+
+          selectedWorkspaceId = connectResult.organizationId;
+          selectedWorkspaceName = connectResult.organizationName;
+        } else {
+          const selectedInstallationId = await selectGitHubInstallation(
+            installations.map((inst) => ({
+              installationId: inst.installationId,
+              accountLogin: inst.accountLogin,
+              accountType: inst.accountType,
+              isSuspended: inst.isSuspended,
+              conflictLabel: inst.conflictLabel,
+            })),
+            true,
+          );
+
+          if (selectedInstallationId === null) {
+            p.cancel('Setup cancelled.');
+            return 1;
+          }
+
+          if (selectedInstallationId === 'install_new') {
+            const connectResult = await runGitHubInstallFlow({
+              api,
+              userToken,
+              yes: options.yes,
+            });
+
+            if (!connectResult) return 1;
+
+            selectedWorkspaceId = connectResult.organizationId;
+            selectedWorkspaceName = connectResult.organizationName;
+          } else {
+            const claimResult = await api.claimCliGitHubInstallation(userToken, {
+              installationId: String(selectedInstallationId),
+              organizationId: null,
+            });
+
+            selectedWorkspaceId = claimResult.organizationId;
+            selectedWorkspaceName = claimResult.organizationName;
+          }
+        }
+
+        p.log.success(`Workspace: ${chalk.bold(selectedWorkspaceName)}`);
       }
+      } // closes if (workspaceResult.action === 'use') else
+      } // closes cachedInstallations.length === 0 else
+      } // closes auto-select else
+    } // closes if (authOrganizationId) else
+
+    // ── Project configuration ────────────────────────────────────────────────────
+    const projectResult = await runProjectCreate({
+      api,
+      userToken,
+      organizationId: selectedWorkspaceId,
+      defaultName: identity?.repoCanonical
+        ? identity.repoCanonical.split('/').pop()
+        : undefined,
+      defaultSourceLocale: 'en',
+      repoCanonical: identity?.repoCanonical,
+      defaultBranches: ['main'],
+    });
+
+    if (!projectResult) {
+      p.log.error('Project creation failed. Run `vocoder init` again.');
+      return 1;
     }
 
-    // ── Timeout ──────────────────────────────────────────────────
-    spinner.stop('Setup timed out');
-    p.log.error('Setup timed out. Run `vocoder init` again.');
-    p.cancel('Setup could not be completed.');
-    return 1;
+    // Warn if the current repo isn't accessible to the GitHub App installation.
+    // This means translations won't trigger on push until the App is granted access.
+    if (!projectResult.repositoryBound && identity?.repoCanonical) {
+      p.log.warn(
+        `This repository isn't accessible to your GitHub App installation.\n` +
+        `Translations won't run automatically until you grant access.\n\n` +
+        `  To fix: go to your GitHub App installation settings and add this\n` +
+        `  repository to the allowed list, or switch to "All repositories".\n` +
+        (projectResult.configureUrl
+          ? `\n  ${chalk.dim(projectResult.configureUrl)}\n`
+          : ''),
+      );
+    }
+
+    // ── Scaffold + MCP setup ─────────────────────────────────────────────────────
+    runScaffold({
+      projectName: projectResult.projectName,
+      organizationName: selectedWorkspaceName,
+      sourceLocale: projectResult.sourceLocale,
+      translationTriggers: projectResult.translationTriggers,
+    });
+
+    printMcpSetup(projectResult.apiKey);
+
+    p.outro("You're all set.");
+    return 0;
   } catch (error) {
-    spinner.stop();
     if (error instanceof Error) {
       if (isPlanLimitFailure(error.message)) {
         printPlanLimitMessage(apiUrl, error.message);

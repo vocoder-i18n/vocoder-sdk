@@ -23,6 +23,7 @@ export interface SyncPolicyConfig {
 export interface InitOptions {
   apiUrl?: string;
   yes?: boolean;
+  ci?: boolean;
   projectName?: string;
   sourceLocale?: string;
   targetLocales?: string;

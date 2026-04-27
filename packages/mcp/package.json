@@ -1,0 +1,58 @@
+{
+  "name": "@vocoder/mcp",
+  "version": "0.1.0",
+  "description": "MCP server for Vocoder — AI-native i18n tooling",
+  "files": [
+    "dist"
+  ],
+  "bin": {
+    "vocoder-mcp": "dist/index.js"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vocoder/vocoder-sdk.git",
+    "directory": "packages/mcp"
+  },
+  "keywords": [
+    "i18n",
+    "internationalization",
+    "translation",
+    "mcp",
+    "ai",
+    "claude",
+    "cursor",
+    "localization"
+  ],
+  "author": "Vocoder <admin@vocoder.app>",
+  "license": "MIT",
+  "homepage": "https://github.com/vocoder/vocoder-sdk#readme",
+  "bugs": {
+    "url": "https://github.com/vocoder/vocoder-sdk/issues"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@vocoder/cli": "workspace:*",
+    "@vocoder/unplugin": "workspace:*",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.9",
+    "tsup": "^8.0.0",
+    "typescript": "^5.4.0"
+  }
+}

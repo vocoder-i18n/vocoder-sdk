@@ -8,6 +8,12 @@
   "bin": {
     "vocoder": "dist/bin.mjs"
   },
+  "exports": {
+    "./lib": {
+      "types": "./dist/lib.d.ts",
+      "import": "./dist/lib.mjs"
+    }
+  },
   "publishConfig": {
     "access": "public"
   },
@@ -47,6 +53,7 @@
     "@babel/parser": "^7.26.0",
     "@babel/traverse": "^7.26.0",
     "@babel/types": "^7.26.0",
+    "@clack/core": "0.4.1",
     "@clack/prompts": "^0.9.1",
     "chalk": "^5.3.0",
     "commander": "^11.1.0",

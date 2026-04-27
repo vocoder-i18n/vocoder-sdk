@@ -395,6 +395,401 @@ export class VocoderAPI {
     return payload as InitStatusResponse;
   }
 
+  // ── CLI Auth endpoints (no project API key needed) ──────────────────────────
+
+  /**
+   * Start a CLI auth session. Returns `{ sessionId, verificationUrl, expiresAt }`.
+   * `sessionId` is the raw poll token — keep it secret, used for polling.
+   */
+  async startCliAuthSession(callbackPort?: number, repoCanonical?: string): Promise<{
+    sessionId: string;
+    verificationUrl: string;
+    installUrl?: string;
+    expiresAt: string;
+  }> {
+    const response = await fetch(`${this.apiUrl}/api/cli/auth/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...(callbackPort != null ? { callbackPort } : {}),
+        ...(repoCanonical ? { repoCanonical } : {}),
+      }),
+    });
+
+    const payload = await readPayload(response);
+
+    if (!response.ok) {
+      throw new VocoderAPIError({
+        message: extractErrorMessage(payload, `Failed to start auth session (${response.status})`),
+        status: response.status,
+        payload,
+      });
+    }
+
+    return payload as { sessionId: string; verificationUrl: string; installUrl?: string; expiresAt: string };
+  }
+
+  /**
+   * Poll for CLI auth session completion.
+   * Returns `{ token }` on success, throws on failure/expiry.
+   * The server returns HTTP 202 while still pending.
+   */
+  async pollCliAuthSession(pollToken: string): Promise<
+    | { status: 'pending' }
+    | { status: 'complete'; token: string; organizationId?: string }
+    | { status: 'failed'; reason: string }
+  > {
+    const response = await fetch(
+      `${this.apiUrl}/api/cli/auth/session?session=${encodeURIComponent(pollToken)}`,
+    );
+
+    const payload = await readPayload(response);
+
+    if (response.status === 202) {
+      return { status: 'pending' };
+    }
+
+    if (response.status === 410) {
+      return {
+        status: 'failed',
+        reason: extractErrorMessage(payload, 'Auth session expired or failed'),
+      };
+    }
+
+    if (!response.ok) {
+      return {
+        status: 'failed',
+        reason: extractErrorMessage(payload, `Auth session error (${response.status})`),
+      };
+    }
+
+    const result = payload as { token?: string; organizationId?: string };
+    if (!result.token) {
+      return { status: 'failed', reason: 'No token in response' };
+    }
+
+    return {
+      status: 'complete',
+      token: result.token,
+      ...(result.organizationId ? { organizationId: result.organizationId } : {}),
+    };
+  }
+
+  /**
+   * Validate a CLI user token and return the authenticated user's info.
+   * Used by the CLI to verify stored credentials on startup.
+   */
+  async getCliUserInfo(userToken: string): Promise<{
+    userId: string;
+    email: string;
+    name: string | null;
+  }> {
+    const response = await fetch(`${this.apiUrl}/api/cli/auth/me`, {
+      headers: { Authorization: `Bearer ${userToken}` },
+    });
+
+    const payload = await readPayload(response);
+
+    if (!response.ok) {
+      throw new VocoderAPIError({
+        message: extractErrorMessage(payload, `Token validation failed (${response.status})`),
+        status: response.status,
+        payload,
+      });
+    }
+
+    return payload as { userId: string; email: string; name: string | null };
+  }
+
+  /**
+   * Revoke the given CLI user token server-side.
+   */
+  async revokeCliToken(userToken: string): Promise<void> {
+    const response = await fetch(`${this.apiUrl}/api/cli/auth/token`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${userToken}` },
+    });
+
+    if (!response.ok) {
+      const payload = await readPayload(response);
+      throw new VocoderAPIError({
+        message: extractErrorMessage(payload, `Token revocation failed (${response.status})`),
+        status: response.status,
+        payload,
+      });
+    }
+  }
+
+  // ── Workspaces ────────────────────────────────────────────────────────────────
+
+  async listWorkspaces(userToken: string): Promise<{
+    workspaces: Array<{
+      id: string;
+      name: string;
+      planId: string;
+      projectCount: number;
+      hasGitHubConnection: boolean;
+      connectionLabel: string | null;
+    }>;
+    canCreateWorkspace: boolean;
+  }> {
+    const response = await fetch(`${this.apiUrl}/api/cli/workspaces`, {
+      headers: { Authorization: `Bearer ${userToken}` },
+    });
+
+    const payload = await readPayload(response);
+
+    if (!response.ok) {
+      throw new VocoderAPIError({
+        message: extractErrorMessage(payload, `Failed to list workspaces (${response.status})`),
+        status: response.status,
+        payload,
+      });
+    }
+
+    return payload as {
+      workspaces: Array<{
+        id: string;
+        name: string;
+        planId: string;
+        projectCount: number;
+        hasGitHubConnection: boolean;
+        connectionLabel: string | null;
+      }>;
+      canCreateWorkspace: boolean;
+    };
+  }
+
+  // ── CLI GitHub endpoints ──────────────────────────────────────────────────────
+
+  async startCliGitHubInstall(
+    userToken: string,
+    params: { organizationId?: string; callbackPort?: number },
+  ): Promise<{ installUrl: string }> {
+    const response = await fetch(`${this.apiUrl}/api/cli/github/install/start`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${userToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(params),
+    });
+
+    const payload = await readPayload(response);
+
+    if (!response.ok) {
+      throw new VocoderAPIError({
+        message: extractErrorMessage(payload, `Failed to start GitHub install (${response.status})`),
+        status: response.status,
+        payload,
+      });
+    }
+
+    return payload as { installUrl: string };
+  }
+
+  /**
+   * Start the "link existing installation" discovery flow.
+   * Unlike startCliGitHubOAuth, this requires no bearer token — the Vocoder
+   * account is created from the OAuth code in the callback.
+   */
+  async startCliGitHubLinkSession(
+    sessionId: string,
+    callbackPort?: number,
+  ): Promise<{ oauthUrl: string }> {
+    const response = await fetch(`${this.apiUrl}/api/cli/github/oauth/link-start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId, ...(callbackPort != null ? { callbackPort } : {}) }),
+    });
+
+    const payload = await readPayload(response);
+
+    if (!response.ok) {
+      throw new VocoderAPIError({
+        message: extractErrorMessage(payload, `Failed to start GitHub link session (${response.status})`),
+        status: response.status,
+        payload,
+      });
+    }
+
+    return payload as { oauthUrl: string };
+  }
+
+  async startCliGitHubOAuth(
+    userToken: string,
+    params: { organizationId?: string; callbackPort?: number },
+  ): Promise<{ oauthUrl: string }> {
+    const response = await fetch(`${this.apiUrl}/api/cli/github/oauth/start`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${userToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(params),
+    });
+
+    const payload = await readPayload(response);
+
+    if (!response.ok) {
+      throw new VocoderAPIError({
+        message: extractErrorMessage(payload, `Failed to start GitHub OAuth (${response.status})`),
+        status: response.status,
+        payload,
+      });
+    }
+
+    return payload as { oauthUrl: string };
+  }
+
+  async getCliGitHubDiscovery(userToken: string): Promise<{
+    installations: Array<{
+      installationId: number;
+      accountLogin: string;
+      accountType: string;
+      isSuspended: boolean;
+      conflictLabel: string | null;
+    }>;
+  }> {
+    const response = await fetch(`${this.apiUrl}/api/cli/github/discovery`, {
+      headers: { Authorization: `Bearer ${userToken}` },
+    });
+
+    const payload = await readPayload(response);
+
+    if (!response.ok) {
+      throw new VocoderAPIError({
+        message: extractErrorMessage(payload, `Failed to fetch GitHub discovery (${response.status})`),
+        status: response.status,
+        payload,
+      });
+    }
+
+    return payload as {
+      installations: Array<{
+        installationId: number;
+        accountLogin: string;
+        accountType: string;
+        isSuspended: boolean;
+        conflictLabel: string | null;
+      }>;
+    };
+  }
+
+  async claimCliGitHubInstallation(
+    userToken: string,
+    params: { installationId: string; organizationId: string | null },
+  ): Promise<{
+    organizationId: string;
+    organizationName: string;
+    connectionLabel: string;
+    repoCount: number;
+  }> {
+    const response = await fetch(`${this.apiUrl}/api/cli/github/claim`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${userToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(params),
+    });
+
+    const payload = await readPayload(response);
+
+    if (!response.ok) {
+      throw new VocoderAPIError({
+        message: extractErrorMessage(payload, `Failed to claim GitHub installation (${response.status})`),
+        status: response.status,
+        payload,
+      });
+    }
+
+    return payload as {
+      organizationId: string;
+      organizationName: string;
+      connectionLabel: string;
+      repoCount: number;
+    };
+  }
+
+  // ── Locales ───────────────────────────────────────────────────────────────────
+
+  async listLocales(userToken: string): Promise<Array<{ code: string; name: string; nativeName?: string }>> {
+    const response = await fetch(`${this.apiUrl}/api/cli/locales`, {
+      headers: { Authorization: `Bearer ${userToken}` },
+    });
+
+    const payload = await readPayload(response);
+
+    if (!response.ok) {
+      throw new VocoderAPIError({
+        message: extractErrorMessage(payload, `Failed to list locales (${response.status})`),
+        status: response.status,
+        payload,
+      });
+    }
+
+    const result = payload as { locales: Array<{ code: string; name: string; nativeName?: string }> };
+    return result.locales;
+  }
+
+  // ── Project creation ──────────────────────────────────────────────────────────
+
+  async createProject(
+    userToken: string,
+    params: {
+      organizationId: string;
+      name: string;
+      sourceLocale: string;
+      targetLocales: string[];
+      targetBranches: string[];
+      translationTriggers: string[];
+      scopePaths: string[];
+      repoCanonical?: string;
+    },
+  ): Promise<{
+    projectId: string;
+    projectName: string;
+    apiKey: string;
+    sourceLocale: string;
+    targetLocales: string[];
+    translationTriggers: string[];
+    repositoryBound: boolean;
+    configureUrl?: string;
+  }> {
+    const response = await fetch(`${this.apiUrl}/api/cli/projects`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${userToken}`,
+      },
+      body: JSON.stringify(params),
+    });
+
+    const payload = await readPayload(response);
+
+    if (!response.ok) {
+      throw new VocoderAPIError({
+        message: extractErrorMessage(payload, `Failed to create project (${response.status})`),
+        status: response.status,
+        payload,
+      });
+    }
+
+    return payload as {
+      projectId: string;
+      projectName: string;
+      apiKey: string;
+      sourceLocale: string;
+      targetLocales: string[];
+      translationTriggers: string[];
+      repositoryBound: boolean;
+      configureUrl?: string;
+    };
+  }
+
+  // ── Project lookup ────────────────────────────────────────────────────────────
+
   /**
    * Look up whether a project already exists for a given repo + scope.
    * Returns { projectId, projectName, organizationName } or null if not found.

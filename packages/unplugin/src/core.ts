@@ -48,6 +48,85 @@ export function computeFingerprint(repoCanonical: string, scopePath: string, bra
     .slice(0, 12);
 }
 
+const SHA_REGEX = /^[0-9a-f]{40}$/i;
+
+/**
+ * Detect the current commit SHA from CI env vars, fuzzy env scan, or .git files.
+ * Returns null if detection fails — callers should fall back to branch-based fingerprint.
+ *
+ * Priority:
+ * 1. VOCODER_COMMIT_SHA — explicit override
+ * 2. Known platform env vars
+ * 3. Fuzzy scan of all env vars for 40-char hex values
+ * 4. Git file fallback (.git/refs/heads/<branch> or .git/packed-refs)
+ */
+export function detectCommitSha(): string | null {
+  // 1. Explicit override
+  if (process.env.VOCODER_COMMIT_SHA && SHA_REGEX.test(process.env.VOCODER_COMMIT_SHA)) {
+    return process.env.VOCODER_COMMIT_SHA;
+  }
+
+  // 2. Known platform env vars
+  const knownSha =
+    process.env.GITHUB_SHA ||
+    process.env.VERCEL_GIT_COMMIT_SHA ||
+    process.env.CI_COMMIT_SHA ||
+    process.env.BITBUCKET_COMMIT ||
+    process.env.CIRCLE_SHA1 ||
+    process.env.RENDER_GIT_COMMIT;
+
+  if (knownSha && SHA_REGEX.test(knownSha)) return knownSha;
+
+  // 3. Fuzzy scan — look for any env var whose key suggests a SHA and value looks like one.
+  // Sort entries deterministically (by key) so the result is stable across runs.
+  const fuzzyMatch = Object.entries(process.env)
+    .filter(([key, value]) => /sha|commit/i.test(key) && value && SHA_REGEX.test(value))
+    .sort(([a], [b]) => a.localeCompare(b))[0];
+  if (fuzzyMatch?.[1]) return fuzzyMatch[1];
+
+  // 4. Git file fallback
+  try {
+    const gitDir = findGitDir(process.cwd());
+    if (!gitDir) return null;
+
+    const headPath = resolve(gitDir, 'HEAD');
+    const headContent = readFileSync(headPath, 'utf-8').trim();
+
+    // Detached HEAD — HEAD contains the SHA directly
+    if (SHA_REGEX.test(headContent)) return headContent;
+
+    // Symbolic ref — resolve to branch SHA
+    const branchMatch = headContent.match(/^ref: refs\/heads\/(.+)$/);
+    if (branchMatch?.[1]) {
+      const branch = branchMatch[1];
+
+      // Try loose ref file first
+      const refPath = resolve(gitDir, 'refs', 'heads', branch);
+      if (existsSync(refPath)) {
+        const sha = readFileSync(refPath, 'utf-8').trim();
+        if (SHA_REGEX.test(sha)) return sha;
+      }
+
+      // Fall back to packed-refs
+      const packedRefsPath = resolve(gitDir, 'packed-refs');
+      if (existsSync(packedRefsPath)) {
+        const packedRefs = readFileSync(packedRefsPath, 'utf-8');
+        const target = `refs/heads/${branch}`;
+        for (const line of packedRefs.split('\n')) {
+          if (line.endsWith(target)) {
+            const sha = line.split(' ')[0]?.trim();
+            if (sha && SHA_REGEX.test(sha)) return sha;
+          }
+        }
+      }
+    }
+  } catch {
+    // Non-fatal
+  }
+
+  return null;
+}
+
 /**
  * Detect the current git branch from CI env vars or .git/HEAD.
  * No execSync — reads .git/HEAD directly for safety in build plugins.
@@ -97,16 +176,63 @@ function findGitDir(startDir: string): string | null {
 }
 
 /**
- * Detect the repository identity by reading .git/config.
- * Returns the canonical repo identifier and scope path (for monorepos).
- * No execSync — reads files directly for safety in build plugins.
+ * Detect the repository identity from CI environment variables or .git/config.
+ * CI env vars are checked first so Docker builds and shallow clones work
+ * without a .git directory. Falls back to .git/config for local development.
  */
 export function detectRepoIdentity(): RepoIdentity | null {
+  const fromEnv = detectRepoIdentityFromEnv();
+  if (fromEnv) return fromEnv;
+  return detectRepoIdentityFromGit();
+}
+
+function detectRepoIdentityFromEnv(): RepoIdentity | null {
+  // GitHub Actions: GITHUB_REPOSITORY = "owner/repo"
+  if (process.env.GITHUB_REPOSITORY) {
+    const canonical = `github:${process.env.GITHUB_REPOSITORY.toLowerCase()}`;
+    return { repoCanonical: canonical, scopePath: '' };
+  }
+
+  // Vercel: VERCEL_GIT_REPO_OWNER + VERCEL_GIT_REPO_SLUG
+  if (process.env.VERCEL_GIT_REPO_OWNER && process.env.VERCEL_GIT_REPO_SLUG) {
+    const provider = (process.env.VERCEL_GIT_PROVIDER ?? 'github').toLowerCase();
+    const ownerRepo = `${process.env.VERCEL_GIT_REPO_OWNER}/${process.env.VERCEL_GIT_REPO_SLUG}`.toLowerCase();
+    const canonical = provider === 'github' ? `github:${ownerRepo}`
+      : provider === 'gitlab' ? `gitlab:${ownerRepo}`
+      : provider === 'bitbucket' ? `bitbucket:${ownerRepo}`
+      : `git:${ownerRepo}`;
+    return { repoCanonical: canonical, scopePath: '' };
+  }
+
+  // GitLab CI: CI_PROJECT_PATH = "owner/repo", CI_SERVER_HOST for non-gitlab.com
+  if (process.env.CI_PROJECT_PATH) {
+    const host = process.env.CI_SERVER_HOST ?? 'gitlab.com';
+    const ownerRepo = process.env.CI_PROJECT_PATH.toLowerCase();
+    const canonical = host.includes('gitlab.com') ? `gitlab:${ownerRepo}` : `git:${host}/${ownerRepo}`;
+    return { repoCanonical: canonical, scopePath: '' };
+  }
+
+  // Bitbucket Pipelines: BITBUCKET_REPO_FULL_NAME = "owner/repo"
+  if (process.env.BITBUCKET_REPO_FULL_NAME) {
+    const canonical = `bitbucket:${process.env.BITBUCKET_REPO_FULL_NAME.toLowerCase()}`;
+    return { repoCanonical: canonical, scopePath: '' };
+  }
+
+  // CircleCI: CIRCLE_PROJECT_USERNAME + CIRCLE_PROJECT_REPONAME
+  if (process.env.CIRCLE_PROJECT_USERNAME && process.env.CIRCLE_PROJECT_REPONAME) {
+    const ownerRepo = `${process.env.CIRCLE_PROJECT_USERNAME}/${process.env.CIRCLE_PROJECT_REPONAME}`.toLowerCase();
+    const canonical = `github:${ownerRepo}`;
+    return { repoCanonical: canonical, scopePath: '' };
+  }
+
+  return null;
+}
+
+function detectRepoIdentityFromGit(): RepoIdentity | null {
   const cwd = process.cwd();
   const gitDir = findGitDir(cwd);
   if (!gitDir) return null;
 
-  // Read remote URL from .git/config
   const configPath = resolve(gitDir, 'config');
   if (!existsSync(configPath)) return null;
 
