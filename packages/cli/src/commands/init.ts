@@ -717,6 +717,7 @@ export async function init(options: InitOptions = {}): Promise<number> {
       defaultSourceLocale: 'en',
       repoCanonical: identity?.repoCanonical,
       defaultBranches: ['main'],
+      defaultScopePath: identity?.repoScopePath,
     });
 
     if (!projectResult) {

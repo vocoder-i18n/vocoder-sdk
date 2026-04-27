@@ -158,9 +158,10 @@ npm install @radix-ui/react-dropdown-menu lucide-react
 // Next.js App Router
 import { cookies } from 'next/headers';
 
-export default function RootLayout({ children }) {
+export default async function RootLayout({ children }) {
+  const cookieStore = await cookies();
   return (
-    <VocoderProvider cookies={cookies().toString()}>
+    <VocoderProvider cookies={cookieStore.toString()}>
       {children}
     </VocoderProvider>
   );

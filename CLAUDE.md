@@ -4,7 +4,7 @@ This file provides guidance to Claude Code when working with the Vocoder SDK mon
 
 ## 📝 README Synchronization (CRITICAL)
 
-**MANDATORY**: When modifying functionality in any package, you MUST update the corresponding README to reflect the change. READMEs are the primary user-facing documentation for this SDK.
+**MANDATORY**: When modifying functionality in any package, you MUST update the corresponding README to reflect the change. READMEs are the primary user-facing documentation for this SDK. Ensure that all documentation is written in a professional, user-friendly tone that aligns with open source best practices. Do not expose sensitive business logic or concerns ever.
 
 ### README Files and Their Scope
 

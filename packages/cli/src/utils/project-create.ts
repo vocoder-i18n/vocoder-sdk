@@ -17,6 +17,12 @@ export interface ProjectCreateParams {
   repoCanonical?: string;
   /** Default target branches */
   defaultBranches?: string[];
+  /**
+   * Auto-detected scope path (CWD relative to git root).
+   * Non-empty when running from a subdirectory of the repo — monorepo use case.
+   * e.g. "apps/web"
+   */
+  defaultScopePath?: string;
 }
 
 export interface ProjectCreateResult {
@@ -95,6 +101,22 @@ export async function runProjectCreate(
   // Target: all locales (regional variants matter for translation targets)
   const localeOptions = buildLocaleOptions(rawLocales);
 
+  // ── Scope path (monorepo) ───────────────────────────────────────────────────
+  // Pre-fill with the auto-detected subdir path. Empty = entire repo.
+  const rawScope = await p.text({
+    message: 'App directory (leave blank for the entire repo)',
+    placeholder: 'e.g. apps/web',
+    initialValue: params.defaultScopePath ?? '',
+    validate(value) {
+      const v = value.trim();
+      if (!v) return; // blank is valid — means root
+      if (v.startsWith('/')) return 'Use a relative path, not an absolute path';
+      if (v.includes('..')) return 'Path must not contain ".."';
+    },
+  });
+  if (p.isCancel(rawScope)) return null;
+  const scopePath = (rawScope as string).trim();
+
   // ── Source locale ───────────────────────────────────────────────────────────
   const sourceLocale = await searchSelectLocale(
     languageOptions,
@@ -154,7 +176,7 @@ export async function runProjectCreate(
       targetLocales,
       targetBranches,
       translationTriggers: ['push'],
-      scopePaths: [],
+      scopePaths: scopePath ? [scopePath] : [],
       repoCanonical,
     });
 
