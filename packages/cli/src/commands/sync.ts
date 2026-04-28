@@ -7,6 +7,7 @@ import type {
 	EffectiveSyncMode,
 	ExtractedString,
 	LimitErrorResponse,
+	LocalesMap,
 	ProjectConfig,
 	RequestedSyncMode,
 	SyncPolicyConfig,
@@ -22,7 +23,7 @@ import {
 	resolveGitRepositoryIdentity,
 } from "../utils/git-identity.js";
 
-type LocaleMetadataMap = Record<string, { nativeName: string; dir?: "rtl" }>;
+type LocaleMetadataMap = LocalesMap;
 type TranslationMap = Record<string, Record<string, string>>;
 type TranslationArtifactSource = "fresh" | "local-cache" | "api-snapshot";
 

@@ -1,3 +1,10 @@
+export interface LocaleInfo {
+	nativeName: string;
+	dir?: "rtl";
+}
+
+export type LocalesMap = Record<string, LocaleInfo>;
+
 export interface TranslateOptions {
 	branch?: string;
 	force?: boolean;
@@ -91,7 +98,7 @@ export interface TranslationStatusResponse {
 		progress: number;
 	}>;
 	translations?: Record<string, Record<string, string>>;
-	localeMetadata?: Record<string, { nativeName: string; dir?: "rtl" }>;
+	localeMetadata?: LocalesMap;
 	errorMessage?: string;
 }
 
@@ -103,7 +110,7 @@ export interface TranslationSnapshotResponse {
 	snapshotBatchId?: string;
 	completedAt?: string | null;
 	translations?: Record<string, Record<string, string>>;
-	localeMetadata?: Record<string, { nativeName: string; dir?: "rtl" }>;
+	localeMetadata?: LocalesMap;
 }
 
 export interface LimitErrorResponse {

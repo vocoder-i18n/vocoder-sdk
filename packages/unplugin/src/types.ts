@@ -20,7 +20,7 @@ export interface VocoderTranslationData {
 	config: {
 		sourceLocale: string;
 		targetLocales: string[];
-		locales: Record<string, { nativeName: string; dir?: string }>;
+		locales: Record<string, { nativeName: string; dir?: "rtl" }>;
 	};
 	translations: Record<string, Record<string, string>>;
 	updatedAt: string | null;

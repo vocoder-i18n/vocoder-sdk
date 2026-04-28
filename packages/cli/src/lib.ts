@@ -2,6 +2,8 @@ export type {
 	APIProjectConfig,
 	ExtractedString,
 	LimitErrorResponse,
+	LocaleInfo,
+	LocalesMap,
 	SyncPolicyConfig,
 	SyncPolicyErrorResponse,
 	TranslationBatchResponse,
