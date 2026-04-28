@@ -1,4 +1,6 @@
 import { execSync, spawn } from "node:child_process";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import * as p from "@clack/prompts";
 import chalk from "chalk";
 import { config as loadEnv } from "dotenv";
@@ -145,70 +147,127 @@ function runScaffold(params: ScaffoldParams): void {
 		targetBranches,
 	});
 
-	let stepNum = 1;
+	const steps: Array<{ label: string; hint: string; code: string }> = [];
 
 	if (snippets.pluginStep) {
-		p.log.message("");
-		p.log.step(
-			`${chalk.bold(`Step ${stepNum}:`)} Add the plugin to ${chalk.cyan(snippets.pluginStep.file)}`,
-		);
-		printCodeBlock(snippets.pluginStep.code);
-		stepNum++;
+		steps.push({
+			label: snippets.pluginStep.file,
+			hint: "register the build plugin so Vocoder can extract your strings",
+			code: snippets.pluginStep.code,
+		});
 	}
 
 	if (snippets.providerStep) {
+		steps.push({
+			label: snippets.providerStep.file,
+			hint: "wrap your app so translations load at runtime",
+			code: snippets.providerStep.code,
+		});
+	}
+
+	steps.push({
+		label: "wrap translatable text",
+		hint: "mark strings for extraction — Vocoder picks these up on push",
+		code: snippets.wrapStep.code,
+	});
+
+	p.log.message("");
+	p.log.message(chalk.bold("Finish setup in your code"));
+	p.log.message("");
+
+	for (let i = 0; i < steps.length; i++) {
+		const step = steps[i]!;
 		p.log.step(
-			`${chalk.bold(`Step ${stepNum}:`)} Add the provider to ${chalk.cyan(snippets.providerStep.file)}`,
+			`${chalk.bold(step.label)}  ${chalk.dim(`— ${step.hint}`)}`,
 		);
-		printCodeBlock(snippets.providerStep.code);
-		stepNum++;
+		printCodeBlock(step.code);
+		if (i < steps.length - 1) p.log.message("");
 	}
 
-	p.log.step(`${chalk.bold(`Step ${stepNum}:`)} Wrap translatable strings`);
-	printCodeBlock(snippets.wrapStep.code);
-
 	p.log.message("");
-	for (const line of snippets.whatsNext.split("\n")) {
-		p.log.success(line);
+	const branchList =
+		targetBranches.length > 0
+			? targetBranches.map((b) => chalk.cyan(b)).join(" or ")
+			: chalk.cyan("your target branch");
+	p.log.success(
+		`Push to ${branchList} to trigger your first translation run.`,
+	);
+	p.log.message(chalk.gray("  Docs: https://vocoder.app/docs/getting-started"));
+}
+
+function writeApiKeyToEnv(apiKey: string): boolean {
+	const envPath = join(process.cwd(), ".env");
+	if (!existsSync(envPath)) return false;
+
+	try {
+		const content = readFileSync(envPath, "utf-8");
+		const keyLine = `VOCODER_API_KEY=${apiKey}`;
+		let updated: string;
+
+		if (/^VOCODER_API_KEY=/m.test(content)) {
+			updated = content.replace(/^VOCODER_API_KEY=.*/m, keyLine);
+		} else {
+			const sep = content.length > 0 && !content.endsWith("\n") ? "\n" : "";
+			updated = `${content}${sep}${keyLine}\n`;
+		}
+
+		writeFileSync(envPath, updated);
+		return true;
+	} catch {
+		return false;
 	}
 }
 
-function printMcpSetup(apiKey: string): void {
-	const addCommand = `claude mcp add --scope project --transport stdio \\\n  --env VOCODER_API_KEY=${apiKey} \\\n  vocoder -- npx -y @vocoder/mcp`;
-
-	const teamConfig = JSON.stringify(
-		{
-			mcpServers: {
-				vocoder: {
-					type: "stdio",
-					command: "npx",
-					args: ["-y", "@vocoder/mcp"],
-					// biome-ignore lint/suspicious/noTemplateCurlyInString: MCP config template, not a JS template literal
-					env: { VOCODER_API_KEY: "${env:VOCODER_API_KEY}" },
-				},
-			},
-		},
-		null,
-		2,
-	);
+function printApiKey(apiKey: string): void {
+	const saved = writeApiKeyToEnv(apiKey);
 
 	p.log.message("");
-	p.log.message(chalk.bold("Use Vocoder with Claude Code"));
-	p.log.message("Run this to add the MCP server to your project:");
-	p.log.message("");
-	printCodeBlock(addCommand);
-	p.log.message("");
-	p.log.message(
-		"To share with your team, commit " +
-			chalk.cyan(".mcp.json") +
-			" with an env var reference",
-	);
-	p.log.message("so each developer supplies their own key:");
-	p.log.message("");
-	printCodeBlock(teamConfig);
-	p.log.message("");
-	p.log.message(chalk.gray("Setup instructions: https://vocoder.app/docs/mcp"));
+	p.log.message(chalk.bold("Your API Key"));
+	printCodeBlock(`VOCODER_API_KEY=${apiKey}`);
+	if (saved) {
+		p.log.success(chalk.dim("Saved to .env"));
+	} else {
+		p.log.message(chalk.dim("  Add the above to your .env file"));
+	}
 }
+
+// TODO: uncomment when @vocoder/mcp is published and functional
+// function printMcpSetup(apiKey: string): void {
+// 	const addCommand = `claude mcp add --scope project --transport stdio \\\n  --env VOCODER_API_KEY=${apiKey} \\\n  vocoder -- npx -y @vocoder/mcp`;
+//
+// 	const teamConfig = JSON.stringify(
+// 		{
+// 			mcpServers: {
+// 				vocoder: {
+// 					type: "stdio",
+// 					command: "npx",
+// 					args: ["-y", "@vocoder/mcp"],
+// 					env: { VOCODER_API_KEY: "${env:VOCODER_API_KEY}" },
+// 				},
+// 			},
+// 		},
+// 		null,
+// 		2,
+// 	);
+//
+// 	p.log.message("");
+// 	p.log.message(chalk.bold("Use Vocoder with Claude Code"));
+// 	p.log.message("");
+// 	p.log.message("Run once to register the MCP server (embeds your key locally):");
+// 	printCodeBlock(addCommand);
+// 	p.log.message("");
+// 	p.log.message(
+// 		"To share with your team, commit " +
+// 			chalk.cyan(".mcp.json") +
+// 			" with an env var reference —",
+// 	);
+// 	p.log.message(
+// 		"each developer sets " + chalk.cyan("VOCODER_API_KEY") + " in their own .env:",
+// 	);
+// 	printCodeBlock(teamConfig);
+// 	p.log.message("");
+// 	p.log.message(chalk.gray("Docs: https://vocoder.app/docs/mcp"));
+// }
 
 function printCodeBlock(code: string): void {
 	const lines = code.split("\n");
@@ -540,7 +599,7 @@ export async function init(options: InitOptions = {}): Promise<number> {
 							exactMatch.projectId,
 						);
 						spinner.stop("New API key generated");
-						printMcpSetup(apiKey);
+						printApiKey(apiKey);
 					} catch (err) {
 						spinner.stop("Failed to generate key");
 						const msg = err instanceof Error ? err.message : String(err);
@@ -1124,13 +1183,13 @@ export async function init(options: InitOptions = {}): Promise<number> {
 			);
 		}
 
-		// ── Scaffold + MCP setup ─────────────────────────────────────────────────────
+		// ── Scaffold + API key ───────────────────────────────────────────────────────
 		runScaffold({
 			sourceLocale: projectResult.sourceLocale,
 			targetBranches: projectResult.targetBranches,
 		});
 
-		printMcpSetup(projectResult.apiKey);
+		printApiKey(projectResult.apiKey);
 
 		p.outro("You're all set.");
 		return 0;

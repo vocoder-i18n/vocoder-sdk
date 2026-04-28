@@ -11,7 +11,7 @@ npm install -g @vocoder/cli
 Or use without installing:
 
 ```bash
-npx vocoder <command>
+npx @vocoder/cli <command>
 ```
 
 ## Commands
@@ -56,14 +56,19 @@ The CLI opens the Vocoder GitHub App installation page. Authorizing the App crea
 
 ◒  Creating project...
 
-◆  Step 1: Add the plugin to vite.config.ts
-◆  Step 2: Wrap your app with VocoderProvider
-◆  Step 3: Mark strings for translation with <T>
+◆  Finish setup in your code
 
-◆  Use Vocoder with Claude Code
-│  claude mcp add --scope project --transport stdio \
-│    --env VOCODER_API_KEY=vc_xxxx \
-│    vocoder -- npx -y @vocoder/mcp
+◆  vite.config.ts  — register the build plugin so Vocoder can extract your strings
+◆  your root layout or App component  — wrap your app so translations load at runtime
+◆  wrap translatable text  — mark strings for extraction — Vocoder picks these up on push
+
+✓  Push to main to trigger your first translation run.
+
+◆  Your API Key
+│  ┌─────────────────────────────────────────┐
+│  │ VOCODER_API_KEY=vcp_xxxx               │
+│  └─────────────────────────────────────────┘
+✓  Saved to .env
 
 ◇  You're all set.
 ```

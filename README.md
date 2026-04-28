@@ -23,7 +23,7 @@ Your app ships with translations baked in. No runtime API calls needed for initi
 ### 1. Initialize your project
 
 ```bash
-npx vocoder init
+npx @vocoder/cli init
 ```
 
 This connects your repository to Vocoder. No config files or API keys are needed in your codebase -- the build plugin auto-detects your git repository and branch.
@@ -84,7 +84,7 @@ const message = t('Hello, world!');
 Or auto-wrap existing strings:
 
 ```bash
-npx vocoder wrap
+npx @vocoder/cli sync
 ```
 
 ### 5. Push to git
