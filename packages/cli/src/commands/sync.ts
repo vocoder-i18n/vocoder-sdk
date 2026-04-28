@@ -40,11 +40,27 @@ type LocalSnapshotCache = {
   sourceLocale: string;
   targetLocales: string[];
   savedAt: string;
+  stringsHash?: string;
   snapshotBatchId?: string;
   completedAt?: string | null;
   localeMetadata?: LocaleMetadataMap;
   translations: TranslationMap;
 };
+
+function computeStringsHash(texts: string[]): string {
+  const sorted = [...texts].sort();
+  return createHash('sha256').update(sorted.join('\0')).digest('hex').slice(0, 16);
+}
+
+function readCachedStringsHash(projectRoot: string, branch: string): string | null {
+  const filePath = getCacheFilePath(projectRoot, branch);
+  if (!existsSync(filePath)) return null;
+  try {
+    const raw = JSON.parse(readFileSync(filePath, 'utf-8')) as unknown;
+    if (isRecord(raw) && typeof raw.stringsHash === 'string') return raw.stringsHash;
+  } catch { /* ignore */ }
+  return null;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -103,13 +119,8 @@ function parseTranslations(value: unknown): TranslationMap | null {
 }
 
 function getCacheFilePath(projectRoot: string, branch: string): string {
-  const slug = branch
-    .replace(/[^a-zA-Z0-9._-]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 40);
   const branchHash = createHash('sha1').update(branch).digest('hex').slice(0, 12);
-  const filename = `${slug || 'branch'}-${branchHash}.json`;
-  return join(projectRoot, 'node_modules', '.vocoder', 'cache', 'sync', filename);
+  return join(projectRoot, 'node_modules', '.vocoder', 'cache', 'sync', `${branchHash}.json`);
 }
 
 function readLocalSnapshotCache(params: {
@@ -170,6 +181,7 @@ function writeLocalSnapshotCache(params: {
   localeMetadata?: LocaleMetadataMap;
   snapshotBatchId?: string;
   completedAt?: string | null;
+  stringsHash?: string;
 }): string {
   const cacheFilePath = getCacheFilePath(params.projectRoot, params.branch);
   mkdirSync(join(params.projectRoot, 'node_modules', '.vocoder', 'cache', 'sync'), {
@@ -182,6 +194,7 @@ function writeLocalSnapshotCache(params: {
     sourceLocale: params.sourceLocale,
     targetLocales: params.targetLocales,
     savedAt: new Date().toISOString(),
+    ...(params.stringsHash ? { stringsHash: params.stringsHash } : {}),
     ...(params.snapshotBatchId ? { snapshotBatchId: params.snapshotBatchId } : {}),
     ...(params.completedAt ? { completedAt: params.completedAt } : {}),
     ...(params.localeMetadata ? { localeMetadata: params.localeMetadata } : {}),
@@ -313,9 +326,7 @@ function getSyncPolicyErrorGuidance(
     if (error.branch) {
       lines.push(`Current branch: ${error.branch}`);
     }
-    if (error.targetBranches && error.targetBranches.length > 0) {
-      lines.push(`Allowed branches: ${error.targetBranches.join(', ')}`);
-    }
+    // targetBranches removed — configure branches in project settings
     lines.push('Update your project target branches in the dashboard if needed.');
     return lines;
   }
@@ -446,7 +457,7 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
     const config: ProjectConfig = {
       ...localConfig,
       ...apiConfig,
-      extractionPattern: mergedConfig.extractionPattern,
+      includePattern: mergedConfig.includePattern,
       excludePattern: mergedConfig.excludePattern,
       timeout: waitTimeoutMs,
     };
@@ -463,14 +474,14 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
       return 0;
     }
 
-    const patternsDisplay = Array.isArray(config.extractionPattern)
-      ? config.extractionPattern.join(', ')
-      : config.extractionPattern;
+    const patternsDisplay = Array.isArray(config.includePattern)
+      ? config.includePattern.join(', ')
+      : config.includePattern;
 
     spinner.start(`Extracting strings from ${patternsDisplay}`);
     const extractor = new StringExtractor();
     const extractedStrings = await extractor.extractFromProject(
-      config.extractionPattern,
+      config.includePattern,
       projectRoot,
       config.excludePattern,
     );
@@ -526,6 +537,17 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
       p.log.info(
         `Deduped ${extractedStrings.length} extracted entries into ${stringEntries.length} unique source strings`,
       );
+    }
+
+    // Local hash check — skip API submission if strings haven't changed since last sync.
+    const currentHash = computeStringsHash(sourceStrings);
+    if (!options.force) {
+      const cachedHash = readCachedStringsHash(projectRoot, branch);
+      if (cachedHash && cachedHash === currentHash) {
+        const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+        p.outro(`Up to date (${duration}s)`);
+        return 0;
+      }
     }
 
     spinner.start('Submitting strings to Vocoder API');
@@ -702,6 +724,7 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
         targetLocales: config.targetLocales,
         translations: finalTranslations,
         localeMetadata: artifacts.localeMetadata,
+        stringsHash: currentHash,
         snapshotBatchId:
           artifacts.snapshotBatchId ??
           (artifacts.source === 'fresh'
@@ -735,9 +758,6 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(1);
     p.outro(`Sync complete! (${duration}s)`);
-
-    p.log.info('Translations will be injected at build time by @vocoder/unplugin.');
-    p.log.info('Just use <VocoderProvider> and <T> — no manual imports needed.');
     return 0;
   } catch (error) {
     spinner.stop();

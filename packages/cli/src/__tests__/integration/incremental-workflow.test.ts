@@ -34,7 +34,7 @@ describe.skipIf(process.env.RUN_INTEGRATION !== 'true')('Incremental Workflow In
         nonBlockingMode: 'best-effort',
         defaultMaxWaitMs: 60000,
       },
-      extractionPattern: 'src/**/*.{tsx,jsx}',
+      includePattern: 'src/**/*.{tsx,jsx}',
       timeout: 120000,
     };
 

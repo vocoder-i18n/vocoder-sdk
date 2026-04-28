@@ -26,6 +26,7 @@ export const isRefreshAvailable =
   fingerprint !== null && apiUrl !== null;
 
 const refreshCache = new Map<string, Record<string, string>>();
+const checkedLocales = new Set<string>(); // locales confirmed up-to-date (304)
 const inflightRequests = new Map<string, Promise<Record<string, string> | null>>();
 
 /**
@@ -39,6 +40,8 @@ export async function checkForUpdates(
 
   // Return cached result if we already refreshed this locale
   if (refreshCache.has(locale)) return refreshCache.get(locale) ?? null;
+  // Already checked — server confirmed up-to-date
+  if (checkedLocales.has(locale)) return null;
 
   // Deduplicate concurrent requests for the same locale
   const inflight = inflightRequests.get(locale);
@@ -53,7 +56,10 @@ export async function checkForUpdates(
         headers: { Accept: 'application/json' },
       });
 
-      if (response.status === 304) return null;
+      if (response.status === 304) {
+        checkedLocales.add(locale);
+        return null;
+      }
       if (!response.ok) return null;
 
       const translations = (await response.json()) as Record<string, string>;

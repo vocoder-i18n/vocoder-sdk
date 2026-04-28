@@ -40,19 +40,19 @@ export interface LocalConfig {
   apiUrl: string;
 }
 
-// Project configuration (from API)
 export interface APIProjectConfig {
   projectName: string;
   organizationName: string;
   sourceLocale: string;
   targetLocales: string[];
   targetBranches: string[];
+  primaryBranch?: string;
   syncPolicy: SyncPolicyConfig;
 }
 
 // Combined configuration used by CLI
 export interface ProjectConfig extends LocalConfig, APIProjectConfig {
-  extractionPattern: string | string[];
+  includePattern: string | string[];
   excludePattern?: string | string[];
   timeout: number;
 }
@@ -134,7 +134,7 @@ export interface SyncPolicyErrorResponse {
   errorCode: 'BRANCH_NOT_ALLOWED' | 'PROJECT_REPOSITORY_MISMATCH';
   message: string;
   branch?: string;
-  targetBranches?: string[];
+  // targetBranches removed
   boundRepoLabel?: string | null;
   boundScopePath?: string | null;
 }
@@ -172,6 +172,6 @@ export type InitStatusResponse =
         projectName: string;
         sourceLocale: string;
         targetLocales: string[];
-        translationTriggers?: string[];
+        targetBranches?: string[];
       };
     };

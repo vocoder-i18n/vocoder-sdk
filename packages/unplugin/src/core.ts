@@ -36,16 +36,72 @@ export type RepoIdentity = {
 };
 
 /**
- * Compute the opaque fingerprint from repo identity + branch.
- * Formula: sha256(repoCanonical + ":" + scopePath + ":" + branch).slice(0, 12)
+ * Compute the opaque fingerprint from app directory + commit identifier.
+ * Formula: sha256(appDir + ":" + identifier).slice(0, 12)
+ *
+ * - appDir: path of this app relative to the repo root (empty string for single-app repos)
+ * - identifier: commit SHA (preferred) or branch name (local dev fallback)
  *
  * Must match the server-side formula in lib/vocoder/fingerprint.ts.
  */
-export function computeFingerprint(repoCanonical: string, scopePath: string, branch: string): string {
+export function computeFingerprint(appDir: string, identifier: string): string {
   return createHash('sha256')
-    .update(`${repoCanonical}:${scopePath}:${branch}`)
+    .update(`${appDir}:${identifier}`)
     .digest('hex')
     .slice(0, 12);
+}
+
+/**
+ * Detect the app directory (path relative to repo root) for fingerprint computation.
+ *
+ * Priority:
+ * 1. Explicit appDir option passed to the plugin
+ * 2. Git-based: relative(gitRoot, cwd) — works in most CI environments (full clone)
+ * 3. Workspace root: look for pnpm-workspace.yaml / turbo.json / workspaces in package.json
+ * 4. '' fallback — correct for single-app repositories
+ */
+export function detectAppDir(explicitAppDir?: string): string {
+  if (typeof explicitAppDir === 'string') return explicitAppDir;
+
+  const cwd = process.cwd();
+
+  // Git-based detection (most reliable — works in GitHub Actions, Vercel, GitLab CI, Netlify)
+  const gitDir = findGitDir(cwd);
+  if (gitDir) {
+    const gitRoot = dirname(gitDir);
+    const rel = relative(gitRoot, cwd).replace(/\\/g, '/').trim();
+    if (rel && rel !== '.' && !rel.startsWith('..')) return rel;
+    return '';
+  }
+
+  // Workspace root detection (works in Docker builds without .git)
+  const workspaceRoot = findWorkspaceRoot(cwd);
+  if (workspaceRoot) {
+    const rel = relative(workspaceRoot, cwd).replace(/\\/g, '/').trim();
+    if (rel && rel !== '.' && !rel.startsWith('..')) return rel;
+  }
+
+  return '';
+}
+
+function findWorkspaceRoot(startDir: string): string | null {
+  let dir = startDir;
+  for (let i = 0; i < 20; i++) {
+    if (existsSync(resolve(dir, 'pnpm-workspace.yaml'))) return dir;
+    if (existsSync(resolve(dir, 'turbo.json'))) return dir;
+    if (existsSync(resolve(dir, 'lerna.json'))) return dir;
+    const pkgPath = resolve(dir, 'package.json');
+    if (existsSync(pkgPath)) {
+      try {
+        const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as unknown;
+        if (pkg && typeof pkg === 'object' && 'workspaces' in pkg) return dir;
+      } catch { /* ignore */ }
+    }
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
 }
 
 const SHA_REGEX = /^[0-9a-f]{40}$/i;

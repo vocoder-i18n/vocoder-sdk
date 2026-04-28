@@ -2,6 +2,7 @@ import { createUnplugin } from 'unplugin';
 import type { VocoderPluginOptions, VocoderTranslationData } from './types';
 import {
   computeFingerprint,
+  detectAppDir,
   detectBranch,
   detectCommitSha,
   detectRepoIdentity,
@@ -10,7 +11,7 @@ import {
 } from './core';
 
 export type { VocoderPluginOptions, VocoderTranslationData };
-export { computeFingerprint, detectBranch, detectCommitSha, detectRepoIdentity } from './core';
+export { computeFingerprint, detectAppDir, detectBranch, detectCommitSha, detectRepoIdentity } from './core';
 
 const VIRTUAL_PREFIX = 'virtual:vocoder/';
 const STRIPPED_PREFIX = 'vocoder/';
@@ -38,28 +39,18 @@ export const unplugin = createUnplugin((options: VocoderPluginOptions | undefine
         return;
       }
 
-      const identity = detectRepoIdentity();
-      if (!identity) {
-        console.warn(
-          '[vocoder] Could not detect repository identity from CI env vars or .git/config.\n' +
-          '  Set VOCODER_FINGERPRINT env var to bypass automatic detection.\n' +
-          '  Translations will not be loaded for this build.'
-        );
-        return;
-      }
-
+      const appDir = detectAppDir(options?.appDir);
       const commitSha = detectCommitSha();
       const branch = detectBranch();
 
       if (commitSha) {
-        fingerprint = computeFingerprint(identity.repoCanonical, identity.scopePath, commitSha);
-        console.log(`[vocoder] ${identity.repoCanonical}${identity.scopePath ? ` (${identity.scopePath})` : ''} @ ${commitSha.slice(0, 8)} → ${fingerprint}`);
+        fingerprint = computeFingerprint(appDir, commitSha);
+        console.log(`[vocoder]${appDir ? ` (${appDir})` : ''} @ ${commitSha.slice(0, 8)} → ${fingerprint}`);
       } else {
         // Local dev fallback: no git SHA available, use branch name.
-        // In CI, commit SHA should always be present via GITHUB_SHA or similar.
         console.warn('[vocoder] Could not detect commit SHA — using branch name for fingerprint (local dev mode).');
-        fingerprint = computeFingerprint(identity.repoCanonical, identity.scopePath, branch);
-        console.log(`[vocoder] ${identity.repoCanonical}${identity.scopePath ? ` (${identity.scopePath})` : ''} @ ${branch} (branch) → ${fingerprint}`);
+        fingerprint = computeFingerprint(appDir, branch);
+        console.log(`[vocoder]${appDir ? ` (${appDir})` : ''} @ ${branch} (branch) → ${fingerprint}`);
       }
 
       data = await fetchTranslations(fingerprint, apiUrl);

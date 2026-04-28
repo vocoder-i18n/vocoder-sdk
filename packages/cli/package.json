@@ -1,6 +1,6 @@
 {
   "name": "@vocoder/cli",
-  "version": "0.1.11",
+  "version": "0.1.16",
   "description": "CLI tool for Vocoder translation workflow",
   "files": [
     "dist"

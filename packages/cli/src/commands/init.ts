@@ -9,13 +9,13 @@ import { clearAuthData, readAuthData, writeAuthData } from '../utils/auth-store.
 import { runGitHubDiscoveryFlow, runGitHubInstallFlow, selectGitHubInstallation } from '../utils/github-connect.js';
 
 import type { InitOptions } from '../types.js';
-import { VocoderAPI } from '../utils/api.js';
+import { VocoderAPI, VocoderAPIError } from '../utils/api.js';
 import chalk from 'chalk';
 import { execSync } from 'node:child_process';
 import { getSetupSnippets } from '../utils/setup-snippets.js';
 import { config as loadEnv } from 'dotenv';
 import { resolveGitContext } from '../utils/git-identity.js';
-import { runProjectCreate } from '../utils/project-create.js';
+import { runProjectAppCreate, runProjectCreate } from '../utils/project-create.js';
 import { selectWorkspace } from '../utils/workspace.js';
 import { spawn } from 'node:child_process';
 import { startCallbackServer } from '../utils/local-server.js';
@@ -93,17 +93,12 @@ function printPlanLimitMessage(apiUrl: string, message: string): void {
 }
 
 interface ScaffoldParams {
-  projectName: string;
-  organizationName: string;
   sourceLocale: string;
-  translationTriggers: string[];
+  targetBranches: string[];
 }
 
 function runScaffold(params: ScaffoldParams): void {
-  const { projectName, organizationName, sourceLocale, translationTriggers } = params;
-
-  p.log.info(`Project:   ${chalk.bold(projectName)}`);
-  p.log.info(`Workspace: ${chalk.bold(organizationName)}`);
+  const { sourceLocale, targetBranches } = params;
 
   const detection = detectLocalEcosystem();
 
@@ -135,7 +130,7 @@ function runScaffold(params: ScaffoldParams): void {
     framework: detection.framework,
     ecosystem: detection.ecosystem,
     sourceLocale,
-    translationTriggers,
+    targetBranches,
   });
 
   let stepNum = 1;
@@ -213,16 +208,23 @@ function printCodeBlock(code: string): void {
 /**
  * Verify a stored auth token against the API.
  * Returns user info on success, null if the token is invalid/expired.
- * On 401, clears the stored token.
+ * Always clears the stored token on failure.
+ *
+ * Returns `{ userGone: true }` when the server confirms the user no longer
+ * exists (404) — callers should treat this as a first-time setup, not a reauth.
  */
 async function verifyStoredToken(
   api: VocoderAPI,
   token: string,
-): Promise<{ userId: string; email: string; name: string | null } | null> {
+): Promise<{ userId: string; email: string; name: string | null } | { userGone: true } | null> {
   try {
     return await api.getCliUserInfo(token);
-  } catch {
+  } catch (err) {
     clearAuthData();
+    // 404 = user record deleted — treat as first-time, not reauth
+    if (err instanceof VocoderAPIError && err.status === 404) {
+      return { userGone: true };
+    }
     return null;
   }
 }
@@ -405,8 +407,7 @@ async function runAuthFlow(
 
   // Validate the token and get user info
   const userInfo = await api.getCliUserInfo(rawToken);
-  authSpinner.stop();
-  p.log.success(`Authenticated as ${chalk.bold(userInfo.email)}`);
+  authSpinner.stop(`Authenticated as ${chalk.bold(userInfo.email)}`);
 
   return { token: rawToken, ...userInfo, organizationId: callbackOrganizationId, discoveryReady: callbackDiscoveryReady };
 }
@@ -416,7 +417,7 @@ async function runAuthFlow(
 export async function init(options: InitOptions = {}): Promise<number> {
   const apiUrl = options.apiUrl || process.env.VOCODER_API_URL || 'https://vocoder.app';
 
-  p.intro('Vocoder Setup');
+  p.intro(chalk.bold('Vocoder Setup'));
 
   try {
     // ── Detect git context ──────────────────────────────────────────────────
@@ -431,23 +432,48 @@ export async function init(options: InitOptions = {}): Promise<number> {
 
     // ── Fast lookup: does a project already exist for this repo? ────────────
     // No spinner — this is a fast DB read and we don't want an empty ◇ on miss.
+    let existingAppsForRepo: Array<{
+      scopePath: string;
+      projectId: string;
+      projectName: string;
+      organizationName: string;
+    }> = [];
+    let repoProjectId: string | null = null;
+    let repoProjectName: string | null = null;
+
     if (identity) {
       const anonApi = new VocoderAPI({ apiUrl, apiKey: '' });
-      const existing = await anonApi.lookupProjectByRepo({
+      const lookup = await anonApi.lookupProjectByRepo({
         repoCanonical: identity.repoCanonical,
         scopePath: identity.repoScopePath,
       });
 
-      if (existing) {
-        runScaffold({
-          projectName: existing.projectName,
-          organizationName: existing.organizationName,
-          sourceLocale: existing.sourceLocale ?? 'en',
-          translationTriggers: existing.translationTriggers ?? ['push'],
-        });
-
+      // Exact match: this scope is already configured — confirm and exit.
+      if (lookup.exactMatch) {
+        const { exactMatch } = lookup;
+        p.log.success(`Project: ${chalk.bold(exactMatch.projectName)}`);
+        p.log.info(`Branches: ${chalk.cyan((exactMatch.targetBranches ?? ['main']).join(', '))}`);
         p.outro("Vocoder is already set up for this repository.");
         return 0;
+      }
+
+      // Whole-repo app exists: covers this repo from any directory — confirm and exit.
+      if (lookup.hasWholeRepoApp) {
+        const wholeRepo = lookup.existingApps.find((a) => a.scopePath === '');
+        if (wholeRepo) {
+          p.log.success(`Project: ${chalk.bold(wholeRepo.projectName)}`);
+          p.outro("Vocoder is already set up for this repository.");
+          return 0;
+        }
+      }
+
+      // Other scoped apps exist: this repo has a project but not for this scope.
+      // Store for display + validation in the app directory prompt.
+      if (lookup.existingApps.length > 0) {
+        existingAppsForRepo = lookup.existingApps;
+        // All apps belong to the same project (one project per repo)
+        repoProjectId = lookup.existingApps[0]?.projectId ?? null;
+        repoProjectName = lookup.existingApps[0]?.projectName ?? null;
       }
     }
 
@@ -459,27 +485,31 @@ export async function init(options: InitOptions = {}): Promise<number> {
 
     // organizationId is set when auth+GitHub install completed in one browser trip
     let authOrganizationId: string | undefined;
-    // discoveryReady is set when auth completed via link-start OAuth (no install)
-    let authDiscoveryReady = false;
 
     const stored = readAuthData();
     if (stored && stored.apiUrl === apiUrl) {
       const verified = await verifyStoredToken(api, stored.token);
 
-      if (verified) {
+      if (verified && !('userGone' in verified)) {
         p.log.success(`Authenticated as ${chalk.bold(verified.email)}`);
         userToken = stored.token;
         userEmail = verified.email;
         userName = verified.name;
       } else {
-        p.log.warn('Stored credentials expired — signing in again');
-        const authResult = await runAuthFlow(api, options, /* reauth */ true);
+        // userGone = user deleted from DB → full first-time flow (installUrl)
+        // null = token expired → reauth via verificationUrl
+        const isFirstTime = verified !== null && 'userGone' in verified;
+        if (isFirstTime) {
+          p.log.warn('Account not found — starting fresh setup');
+        } else {
+          p.log.warn('Stored credentials expired — signing in again');
+        }
+        const authResult = await runAuthFlow(api, options, /* reauth */ !isFirstTime, identity?.repoCanonical);
         if (!authResult) return 1;
         userToken = authResult.token;
         userEmail = authResult.email;
         userName = authResult.name;
         authOrganizationId = authResult.organizationId;
-        authDiscoveryReady = authResult.discoveryReady ?? false;
 
         writeAuthData({
           token: userToken,
@@ -761,9 +791,43 @@ export async function init(options: InitOptions = {}): Promise<number> {
       } // closes cachedInstallations else
     } // closes if (authOrganizationId) else
 
+    // ── Add-app path: repo already has a project with scoped apps ───────────────
+    // Skip plan limit check — we're adding a ProjectApp to an existing project,
+    // not creating a new one. Run the project config prompts then call
+    // POST /api/cli/project/apps.
+    if (repoProjectId && repoProjectName && existingAppsForRepo.length > 0) {
+      p.log.info(
+        `${chalk.bold(repoProjectName)} is already set up for this repo.\n` +
+        `  Configured apps: ${existingAppsForRepo
+          .map((a) => chalk.cyan(a.scopePath || '(entire repo)'))
+          .join(', ')}`,
+      );
+
+      const appResult = await runProjectAppCreate({
+        api,
+        userToken,
+        projectId: repoProjectId,
+        projectName: repoProjectName,
+        organizationName: selectedWorkspaceName,
+        repoCanonical: identity?.repoCanonical,
+        defaultScopePath: identity?.repoScopePath,
+        existingApps: existingAppsForRepo,
+      });
+
+      if (!appResult) {
+        p.log.error('App setup failed. Run `vocoder init` again.');
+        return 1;
+      }
+
+      runScaffold({
+        sourceLocale: appResult.sourceLocale,
+        targetBranches: appResult.targetBranches,
+      });
+      p.outro("You're all set.");
+      return 0;
+    }
+
     // ── Plan limit pre-flight ────────────────────────────────────────────────────
-    // Check project limits before entering the full config TUI so we can offer
-    // actionable options rather than a hard error at the end.
     try {
       const wsCheck = await api.listWorkspaces(userToken);
       const ws = wsCheck.workspaces.find((w) => w.id === selectedWorkspaceId);
@@ -772,13 +836,24 @@ export async function init(options: InitOptions = {}): Promise<number> {
           `Project limit reached — ${ws.projectCount}/${ws.maxProjects} on your ${chalk.bold(ws.planId)} plan.`,
         );
 
+        // If we're in a known repo, offer to connect an existing project to it.
+        // This handles the case where the project exists but the repo binding
+        // is missing (e.g. was lost in a migration or never created).
+        const hasRepoContext = !!identity?.repoCanonical;
+
+        const options: Array<{ value: string; label: string }> = [];
+        if (hasRepoContext) {
+          options.push({
+            value: 'connect',
+            label: 'Connect this repo to an existing project',
+          });
+        }
+        options.push({ value: 'upgrade', label: 'Upgrade plan' });
+        options.push({ value: 'cancel', label: 'Cancel' });
+
         const limitAction = await p.select<string>({
           message: 'What would you like to do?',
-          options: [
-            { value: 'upgrade', label: 'Upgrade plan' },
-            { value: 'existing', label: 'Use an existing project in this workspace' },
-            { value: 'cancel', label: 'Cancel' },
-          ],
+          options,
         });
 
         if (p.isCancel(limitAction) || limitAction === 'cancel') {
@@ -787,12 +862,12 @@ export async function init(options: InitOptions = {}): Promise<number> {
         }
 
         if (limitAction === 'upgrade') {
-          await tryOpenBrowser(`${apiUrl}/dashboard/billing`);
+          await tryOpenBrowser(`${apiUrl}${SUBSCRIPTION_SETTINGS_PATH}`);
           p.cancel('Upgrade your plan in the browser, then re-run `vocoder init`.');
           return 1;
         }
 
-        // Use existing project: list, pick, scaffold
+        // connect: list projects in this workspace, pick one, create ProjectApp binding
         const existingProjects = await api.listProjects(userToken, selectedWorkspaceId);
         if (existingProjects.length === 0) {
           p.log.error('No projects found in this workspace.');
@@ -800,11 +875,10 @@ export async function init(options: InitOptions = {}): Promise<number> {
         }
 
         const chosenId = await p.select<string>({
-          message: 'Select a project',
+          message: 'Which project should this repo be connected to?',
           options: existingProjects.map((proj) => ({
             value: proj.id,
             label: proj.name,
-            hint: `${proj.sourceLocale} → ${proj.targetLocales.join(', ')}`,
           })),
         });
 
@@ -814,21 +888,32 @@ export async function init(options: InitOptions = {}): Promise<number> {
         }
 
         const chosen = existingProjects.find((proj) => proj.id === chosenId)!;
-        runScaffold({
+
+        const appResult = await runProjectAppCreate({
+          api,
+          userToken,
+          projectId: chosen.id,
           projectName: chosen.name,
           organizationName: selectedWorkspaceName,
-          sourceLocale: chosen.sourceLocale,
-          translationTriggers: chosen.translationTriggers,
+          repoCanonical: identity?.repoCanonical,
+          defaultScopePath: identity?.repoScopePath,
+          existingApps: [],
         });
-        p.log.info(
-          `Get your project API key at:\n  ${apiUrl}/dashboard/projects/${chosen.id}/settings`,
-        );
+
+        if (!appResult) {
+          p.log.error('Setup failed. Run `vocoder init` again.');
+          return 1;
+        }
+
+        runScaffold({
+          sourceLocale: appResult.sourceLocale,
+          targetBranches: appResult.targetBranches,
+        });
         p.outro("You're all set.");
         return 0;
       }
     } catch {
-      // Non-fatal: if the check fails, let project creation proceed and
-      // the server will return a proper error if the limit is actually hit.
+      // Non-fatal
     }
 
     // ── Project configuration ────────────────────────────────────────────────────
@@ -844,6 +929,7 @@ export async function init(options: InitOptions = {}): Promise<number> {
       defaultBranches: ['main'],
       defaultScopePath: identity?.repoScopePath,
     });
+
 
     if (!projectResult) {
       p.log.error('Project creation failed. Run `vocoder init` again.');
@@ -866,10 +952,8 @@ export async function init(options: InitOptions = {}): Promise<number> {
 
     // ── Scaffold + MCP setup ─────────────────────────────────────────────────────
     runScaffold({
-      projectName: projectResult.projectName,
-      organizationName: selectedWorkspaceName,
       sourceLocale: projectResult.sourceLocale,
-      translationTriggers: projectResult.translationTriggers,
+      targetBranches: projectResult.targetBranches,
     });
 
     printMcpSetup(projectResult.apiKey);

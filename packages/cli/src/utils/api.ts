@@ -168,6 +168,7 @@ export class VocoderAPI {
 			sourceLocale: string;
 			targetLocales: string[];
 			targetBranches: string[];
+			primaryBranch?: string;
 			syncPolicy?: {
 				blockingBranches?: string[];
 				blockingMode?: "required" | "best-effort";
@@ -181,7 +182,8 @@ export class VocoderAPI {
 			organizationName: data.organizationName,
 			sourceLocale: data.sourceLocale,
 			targetLocales: data.targetLocales,
-			targetBranches: data.targetBranches,
+			targetBranches: data.targetBranches ?? ["main"],
+			primaryBranch: data.primaryBranch,
 			syncPolicy: {
 				blockingBranches: data.syncPolicy?.blockingBranches ?? ["main", "master"],
 				blockingMode: data.syncPolicy?.blockingMode ?? "required",
@@ -589,7 +591,7 @@ export class VocoderAPI {
       name: string;
       sourceLocale: string;
       targetLocales: string[];
-      translationTriggers: string[];
+      targetBranches: string[];
     }>
   > {
     const url = new URL(`${this.apiUrl}/api/cli/projects`);
@@ -614,7 +616,7 @@ export class VocoderAPI {
       name: string;
       sourceLocale: string;
       targetLocales: string[];
-      translationTriggers: string[];
+      targetBranches: string[];
     }> };
     return result.projects;
   }
@@ -802,7 +804,6 @@ export class VocoderAPI {
       sourceLocale: string;
       targetLocales: string[];
       targetBranches: string[];
-      translationTriggers: string[];
       scopePaths: string[];
       repoCanonical?: string;
     },
@@ -812,7 +813,7 @@ export class VocoderAPI {
     apiKey: string;
     sourceLocale: string;
     targetLocales: string[];
-    translationTriggers: string[];
+    targetBranches: string[];
     repositoryBound: boolean;
     configureUrl?: string;
   }> {
@@ -841,7 +842,7 @@ export class VocoderAPI {
       apiKey: string;
       sourceLocale: string;
       targetLocales: string[];
-      translationTriggers: string[];
+      targetBranches: string[];
       repositoryBound: boolean;
       configureUrl?: string;
     };
@@ -850,19 +851,29 @@ export class VocoderAPI {
   // ── Project lookup ────────────────────────────────────────────────────────────
 
   /**
-   * Look up whether a project already exists for a given repo + scope.
-   * Returns { projectId, projectName, organizationName } or null if not found.
+   * Look up all project apps for a given repo. Returns info about exact matches,
+   * existing apps in other scopes, and whether a whole-repo app exists.
+   * No auth required.
    */
   async lookupProjectByRepo(params: {
     repoCanonical: string;
     scopePath: string;
   }): Promise<{
-    projectId: string;
-    projectName: string;
-    organizationName: string;
-    sourceLocale?: string;
-    translationTriggers?: string[];
-  } | null> {
+    exactMatch: {
+      projectId: string;
+      projectName: string;
+      organizationName: string;
+      sourceLocale?: string;
+      targetBranches?: string[];
+    } | null;
+    existingApps: Array<{
+      scopePath: string;
+      projectId: string;
+      projectName: string;
+      organizationName: string;
+    }>;
+    hasWholeRepoApp: boolean;
+  }> {
     try {
       const response = await fetch(`${this.apiUrl}/api/cli/init/lookup`, {
         method: 'POST',
@@ -873,18 +884,77 @@ export class VocoderAPI {
         }),
       });
 
-      if (response.status === 404) return null;
-      if (!response.ok) return null;
+      if (!response.ok) {
+        return { exactMatch: null, existingApps: [], hasWholeRepoApp: false };
+      }
 
       return (await response.json()) as {
-        projectId: string;
-        projectName: string;
-        organizationName: string;
-        sourceLocale?: string;
-        translationTriggers?: string[];
+        exactMatch: {
+          projectId: string;
+          projectName: string;
+          organizationName: string;
+          sourceLocale?: string;
+          targetBranches?: string[];
+        } | null;
+        existingApps: Array<{
+          scopePath: string;
+          projectId: string;
+          projectName: string;
+          organizationName: string;
+        }>;
+        hasWholeRepoApp: boolean;
       };
     } catch {
-      return null;
+      return { exactMatch: null, existingApps: [], hasWholeRepoApp: false };
     }
+  }
+
+  /**
+   * Add a new ProjectApp to an existing project (monorepo: new app directory).
+   * Does not check plan limits — no new project is created.
+   */
+  async createProjectApp(
+    userToken: string,
+    params: {
+      projectId: string;
+      scopePath: string;
+      sourceLocale: string;
+      targetLocales: string[];
+      targetBranches: string[];
+      repoCanonical: string;
+    },
+  ): Promise<{
+    appId: string;
+    projectId: string;
+    projectName: string;
+    apiKey: string;
+    scopePath: string;
+  }> {
+    const response = await fetch(`${this.apiUrl}/api/cli/project/apps`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${userToken}`,
+      },
+      body: JSON.stringify(params),
+    });
+
+    const payload = await readPayload(response);
+
+    if (!response.ok) {
+      throw new VocoderAPIError({
+        message: extractErrorMessage(payload, `Failed to create project app (${response.status})`),
+        status: response.status,
+        payload,
+      });
+    }
+
+    return payload as {
+      appId: string;
+      projectId: string;
+      projectName: string;
+      apiKey: string;
+      scopePath: string;
+    };
   }
 }

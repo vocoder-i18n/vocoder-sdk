@@ -14,15 +14,15 @@ export function getSetupSnippets(params: {
   framework: DetectedFramework;
   ecosystem: DetectedEcosystem;
   sourceLocale: string;
-  translationTriggers: string[];
+  targetBranches: string[];
 }): SetupSnippets {
-  const { framework, ecosystem, sourceLocale, translationTriggers } = params;
+  const { framework, ecosystem, sourceLocale } = params;
 
   return {
     pluginStep: getPluginSnippet(framework, ecosystem),
     providerStep: getProviderSnippet(ecosystem, sourceLocale),
     wrapStep: getWrapSnippet(ecosystem),
-    whatsNext: getWhatsNextMessage(translationTriggers),
+    whatsNext: 'Push to a target branch to trigger translations.',
   };
 }
 
@@ -195,23 +195,3 @@ import { T } from '@vocoder/vue';
   }
 }
 
-function getWhatsNextMessage(triggers: string[]): string {
-  const parts: string[] = [];
-
-  if (triggers.includes('push')) {
-    parts.push('Push to a target branch to trigger translations.');
-  }
-  if (triggers.includes('pull_request')) {
-    parts.push('Open a pull request to trigger translations.');
-  }
-  if (triggers.includes('manual')) {
-    parts.push('Run `vocoder sync` to extract and translate.');
-  }
-
-  // Fallback for unknown or empty triggers
-  if (parts.length === 0) {
-    parts.push('Push to a target branch to trigger translations.');
-  }
-
-  return parts.join('\n');
-}

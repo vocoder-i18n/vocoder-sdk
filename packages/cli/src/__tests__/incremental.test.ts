@@ -30,7 +30,7 @@ describe('Incremental Translation Workflow', () => {
         nonBlockingMode: 'best-effort',
         defaultMaxWaitMs: 60000,
       },
-      extractionPattern: 'src/**/*.{tsx,jsx}',
+      includePattern: 'src/**/*.{tsx,jsx}',
       timeout: 60000,
     };
 

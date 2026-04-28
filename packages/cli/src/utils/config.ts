@@ -38,7 +38,7 @@ export async function getMergedConfig(
   verbose: boolean = false,
   _startDir?: string
 ): Promise<{
-  extractionPattern: string[];
+  includePattern: string[];
   excludePattern: string[];
   apiKey?: string;
   apiUrl?: string;
@@ -46,7 +46,7 @@ export async function getMergedConfig(
   maxWaitMs?: number;
   noFallback: boolean;
   configSources: {
-    extractionPattern: string;
+    includePattern: string;
     excludePattern: string;
     apiKey: string;
     apiUrl: string;
@@ -56,7 +56,7 @@ export async function getMergedConfig(
   };
 }> {
   const configSources = {
-    extractionPattern: 'default',
+    includePattern: 'default',
     excludePattern: 'default',
     apiKey: 'environment',
     apiUrl: 'default',
@@ -67,13 +67,34 @@ export async function getMergedConfig(
 
   // 1. Defaults
   const defaults = {
-    extractionPattern: ['src/**/*.{tsx,jsx,ts,js}'],
-    excludePattern: [] as string[],
+    includePattern: ['**/*.{tsx,jsx,ts,js}'],
+    excludePattern: [
+      '**/node_modules/**',
+      '**/.next/**',
+      '**/.nuxt/**',
+      '**/.svelte-kit/**',
+      '**/.output/**',
+      '**/dist/**',
+      '**/build/**',
+      '**/out/**',
+      '**/.vite/**',
+      '**/.turbo/**',
+      '**/coverage/**',
+      '**/.cache/**',
+      '**/*.min.js',
+      '**/*.min.ts',
+      '**/__generated__/**',
+      '**/*.test.*',
+      '**/*.spec.*',
+      '**/*.stories.*',
+      '**/__tests__/**',
+    ],
     apiUrl: 'https://vocoder.app',
   };
 
   // 2. Environment variables
-  const envExtractionPattern = process.env.VOCODER_EXTRACTION_PATTERN;
+  const envExtractionPattern = process.env.VOCODER_INCLUDE_PATTERN;
+  const envExcludePattern = process.env.VOCODER_EXCLUDE_PATTERN;
   const envApiUrl = process.env.VOCODER_API_URL;
   const envSyncMode = process.env.VOCODER_SYNC_MODE;
   const envSyncMaxWaitMs = process.env.VOCODER_SYNC_MAX_WAIT_MS;
@@ -82,15 +103,15 @@ export async function getMergedConfig(
   // 3. Merge with priority: CLI > env > defaults
 
   // Extract patterns (include)
-  let extractionPattern: string[];
+  let includePattern: string[];
   if (cliOptions.include && cliOptions.include.length > 0) {
-    extractionPattern = cliOptions.include;
-    configSources.extractionPattern = 'CLI flag';
+    includePattern = cliOptions.include;
+    configSources.includePattern = 'CLI flag';
   } else if (envExtractionPattern) {
-    extractionPattern = [envExtractionPattern];
-    configSources.extractionPattern = 'environment';
+    includePattern = [envExtractionPattern];
+    configSources.includePattern = 'environment';
   } else {
-    extractionPattern = defaults.extractionPattern;
+    includePattern = defaults.includePattern;
   }
 
   // Exclude patterns
@@ -98,6 +119,9 @@ export async function getMergedConfig(
   if (cliOptions.exclude && cliOptions.exclude.length > 0) {
     excludePattern = cliOptions.exclude;
     configSources.excludePattern = 'CLI flag';
+  } else if (envExcludePattern) {
+    excludePattern = envExcludePattern.split(',').map((p: string) => p.trim()).filter(Boolean);
+    configSources.excludePattern = 'environment';
   } else {
     excludePattern = defaults.excludePattern;
   }
@@ -152,7 +176,7 @@ export async function getMergedConfig(
   // Log config sources in verbose mode
   if (verbose) {
     console.log(chalk.dim('\n   Configuration sources:'));
-    console.log(chalk.dim(`     Include patterns: ${configSources.extractionPattern}`));
+    console.log(chalk.dim(`     Include patterns: ${configSources.includePattern}`));
     if (excludePattern.length > 0) {
       console.log(chalk.dim(`     Exclude patterns: ${configSources.excludePattern}`));
     }
@@ -166,7 +190,7 @@ export async function getMergedConfig(
   }
 
   return {
-    extractionPattern,
+    includePattern,
     excludePattern,
     apiKey,
     apiUrl,

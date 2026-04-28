@@ -18,18 +18,19 @@ describe('Config Merging', () => {
     const cliOptions: TranslateOptions = {};
     const merged = await getMergedConfig(cliOptions, false);
 
-    expect(merged.extractionPattern).toEqual(['src/**/*.{tsx,jsx,ts,js}']);
-    expect(merged.excludePattern).toEqual([]);
+    expect(merged.includePattern).toEqual(['**/*.{tsx,jsx,ts,js}']);
+    expect(merged.excludePattern).toContain('**/node_modules/**');
+    expect(merged.excludePattern).toContain('**/.next/**');
   });
 
   it('should use environment variable when provided', async () => {
-    process.env.VOCODER_EXTRACTION_PATTERN = 'from-env/**/*.tsx';
+    process.env.VOCODER_INCLUDE_PATTERN = 'from-env/**/*.tsx';
 
     const cliOptions: TranslateOptions = {};
     const merged = await getMergedConfig(cliOptions, false);
 
-    expect(merged.extractionPattern).toEqual(['from-env/**/*.tsx']);
-    expect(merged.configSources.extractionPattern).toBe('environment');
+    expect(merged.includePattern).toEqual(['from-env/**/*.tsx']);
+    expect(merged.configSources.includePattern).toBe('environment');
   });
 
   it('should support multiple CLI include flags', async () => {
@@ -39,7 +40,7 @@ describe('Config Merging', () => {
 
     const merged = await getMergedConfig(cliOptions, false);
 
-    expect(merged.extractionPattern).toEqual([
+    expect(merged.includePattern).toEqual([
       'src/**/*.tsx',
       'components/**/*.tsx',
       'pages/**/*.tsx',
@@ -68,8 +69,8 @@ describe('Config Merging', () => {
 
     const merged = await getMergedConfig(cliOptions, false);
 
-    expect(merged.extractionPattern).toEqual(['src/**/*.{tsx,jsx,ts,js}']);
-    expect(merged.excludePattern).toEqual([]);
+    expect(merged.includePattern).toEqual(['**/*.{tsx,jsx,ts,js}']);
+    expect(merged.excludePattern).toContain('**/node_modules/**');
   });
 
   it('should handle very long pattern arrays', async () => {
@@ -81,15 +82,15 @@ describe('Config Merging', () => {
 
     const merged = await getMergedConfig(cliOptions, false);
 
-    expect(merged.extractionPattern).toEqual(manyPatterns);
-    expect(merged.extractionPattern.length).toBe(50);
+    expect(merged.includePattern).toEqual(manyPatterns);
+    expect(merged.includePattern.length).toBe(50);
   });
 
   it('should show config sources in verbose mode', async () => {
     const cliOptions: TranslateOptions = {};
     const merged = await getMergedConfig(cliOptions, true);
 
-    expect(merged.configSources.extractionPattern).toBe('default');
+    expect(merged.configSources.includePattern).toBe('default');
     expect(merged.configSources.apiUrl).toBe('default');
   });
 });

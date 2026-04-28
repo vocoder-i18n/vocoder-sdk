@@ -5,6 +5,13 @@ import type { LocaleOption } from './locale-search.js';
 import { searchMultiSelectLocales, searchSelectLocale } from './locale-search.js';
 import { detectGitBranches, filterableBranchSelect } from './branch-select.js';
 
+export interface ExistingApp {
+  scopePath: string;
+  projectId: string;
+  projectName: string;
+  organizationName: string;
+}
+
 export interface ProjectCreateParams {
   api: VocoderAPI;
   userToken: string;
@@ -25,13 +32,35 @@ export interface ProjectCreateParams {
   defaultScopePath?: string;
 }
 
+export interface ProjectAppCreateParams {
+  api: VocoderAPI;
+  userToken: string;
+  projectId: string;
+  projectName: string;
+  organizationName: string;
+  repoCanonical?: string;
+  defaultScopePath?: string;
+  /** Existing apps to display and validate against */
+  existingApps: ExistingApp[];
+}
+
+export interface ProjectAppCreateResult {
+  projectId: string;
+  projectName: string;
+  apiKey: string;
+  scopePath: string;
+  sourceLocale: string;
+  targetLocales: string[];
+  targetBranches: string[];
+}
+
 export interface ProjectCreateResult {
   projectId: string;
   projectName: string;
   apiKey: string;
   sourceLocale: string;
   targetLocales: string[];
-  translationTriggers: string[];
+  targetBranches: string[];
   repositoryBound: boolean;
   configureUrl?: string;
 }
@@ -102,20 +131,26 @@ export async function runProjectCreate(
   const localeOptions = buildLocaleOptions(rawLocales);
 
   // ── Scope path (monorepo) ───────────────────────────────────────────────────
-  // Pre-fill with the auto-detected subdir path. Empty = entire repo.
-  const rawScope = await p.text({
-    message: 'App directory (leave blank for the entire repo)',
-    placeholder: 'e.g. apps/web',
-    initialValue: params.defaultScopePath ?? '',
-    validate(value) {
-      const v = value.trim();
-      if (!v) return; // blank is valid — means root
-      if (v.startsWith('/')) return 'Use a relative path, not an absolute path';
-      if (v.includes('..')) return 'Path must not contain ".."';
-    },
-  });
-  if (p.isCancel(rawScope)) return null;
-  const scopePath = (rawScope as string).trim();
+  let scopePath: string;
+  if (params.defaultScopePath) {
+    // Auto-detected from CWD — confirm silently, same pattern as project name.
+    scopePath = params.defaultScopePath;
+    p.log.success(`App directory: ${chalk.bold(scopePath)}`);
+  } else {
+    const rawScope = await p.text({
+      message: 'App directory (leave blank for the entire repo)',
+      placeholder: 'e.g. apps/web, packages/frontend',
+      initialValue: '',
+      validate(value) {
+        const v = value.trim();
+        if (!v) return;
+        if (v.startsWith('/')) return 'Use a relative path, not an absolute path';
+        if (v.includes('..')) return 'Path must not contain ".."';
+      },
+    });
+    if (p.isCancel(rawScope)) return null;
+    scopePath = ((rawScope as string | undefined) ?? '').trim();
+  }
 
   // ── Source locale ───────────────────────────────────────────────────────────
   const sourceLocale = await searchSelectLocale(
@@ -141,18 +176,22 @@ export async function runProjectCreate(
     p.log.warn('No target languages selected — you can add them later from the dashboard.');
   }
 
-  // ── Target branches ─────────────────────────────────────────────────────────
+  // ── Branch triggers — per-trigger selection ────────────────────────────────
+  // Ask which branches should fire for each trigger type. Branches can appear
+  // in both push and PR (they get both triggers). Manual is mutually exclusive:
+  // a branch cannot be both automatic (push/PR) and manual-only.
   const detected = detectGitBranches();
   const initialBranches = params.defaultBranches?.length
     ? params.defaultBranches
     : [detected.defaultBranch];
 
-  let targetBranches: string[] = [];
+  // Step 1: push (required)
+  let pushBranches: string[] = [];
   {
     let initial = initialBranches;
-    while (targetBranches.length === 0) {
+    while (pushBranches.length === 0) {
       const result = await filterableBranchSelect({
-        message: 'Target branches (translations will run when you push to these)',
+        message: 'Which branches should trigger translations?',
         branches: detected.branches,
         defaultBranch: detected.defaultBranch,
         initialValues: initial,
@@ -162,10 +201,12 @@ export async function runProjectCreate(
         p.log.warn('At least one branch is required. Please select at least one.');
         initial = [detected.defaultBranch];
       } else {
-        targetBranches = result;
+        pushBranches = result;
       }
     }
   }
+
+  const targetBranches = pushBranches;
 
   // ── Create project ──────────────────────────────────────────────────────────
   try {
@@ -175,7 +216,6 @@ export async function runProjectCreate(
       sourceLocale,
       targetLocales,
       targetBranches,
-      translationTriggers: ['push'],
       scopePaths: scopePath ? [scopePath] : [],
       repoCanonical,
     });
@@ -185,6 +225,135 @@ export async function runProjectCreate(
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     p.log.error(`Failed to create project: ${message}`);
+    return null;
+  }
+}
+
+/**
+ * Configure and create a new ProjectApp under an existing project.
+ * Used when the repo already has a project (monorepo: adding a new app directory).
+ * No plan limit check runs — only a new ProjectApp is created, not a new Project.
+ */
+export async function runProjectAppCreate(
+  params: ProjectAppCreateParams,
+): Promise<ProjectAppCreateResult | null> {
+  const { api, userToken, projectId, projectName, repoCanonical } = params;
+  const existingScopes = new Set(params.existingApps.map((a) => a.scopePath));
+
+  // ── Fetch available locales ─────────────────────────────────────────────────
+  let rawLocales: Array<{ code: string; name: string; nativeName?: string }>;
+  try {
+    rawLocales = await api.listLocales(userToken);
+  } catch {
+    p.log.error('Failed to fetch supported locales. Check your connection and try again.');
+    return null;
+  }
+
+  const languageOptions = buildLanguageOptions(rawLocales);
+  const localeOptions = buildLocaleOptions(rawLocales);
+
+  // ── App directory ───────────────────────────────────────────────────────────
+  let scopePath: string;
+  if (params.defaultScopePath && !existingScopes.has(params.defaultScopePath)) {
+    // Auto-detected scope is new — confirm silently.
+    scopePath = params.defaultScopePath;
+    p.log.success(`App directory: ${chalk.bold(scopePath)}`);
+  } else {
+    // Show existing apps so the user knows what's already configured.
+    if (params.existingApps.length > 0) {
+      const configuredList = params.existingApps
+        .map((a) => chalk.dim(a.scopePath || '(entire repo)'))
+        .join(', ');
+      p.log.info(`Already configured: ${configuredList}`);
+    }
+
+    const hasWholeRepoApp = existingScopes.has('');
+
+    const rawScope = await p.text({
+      message: 'App directory for this new app',
+      placeholder: 'e.g. apps/backend',
+      initialValue: params.defaultScopePath ?? '',
+      validate(value) {
+        const v = value.trim();
+        if (!v && hasWholeRepoApp) return 'This project already covers the entire repo.';
+        if (!v) return 'App directory is required when other apps already exist.';
+        if (v.startsWith('/')) return 'Use a relative path, not an absolute path.';
+        if (v.includes('..')) return 'Path must not contain "..".';
+        if (existingScopes.has(v)) return `"${v}" is already configured. Choose a different directory.`;
+      },
+    });
+    if (p.isCancel(rawScope)) return null;
+    scopePath = ((rawScope as string | undefined) ?? '').trim();
+  }
+
+  // ── Source locale ───────────────────────────────────────────────────────────
+  const sourceLocale = await searchSelectLocale(
+    languageOptions,
+    'Source language',
+    'en',
+  );
+  if (sourceLocale === null) return null;
+
+  // ── Target locales ──────────────────────────────────────────────────────────
+  const targetOptions = localeOptions.filter((opt) => opt.bcp47 !== sourceLocale);
+  const targetLocales = await searchMultiSelectLocales(
+    targetOptions,
+    'Target languages',
+  );
+  if (targetLocales === null) return null;
+  if (targetLocales.length === 0) {
+    p.log.warn('No target languages selected — you can add them later from the dashboard.');
+  }
+
+  // ── Branch triggers — per-trigger selection (same logic as runProjectCreate) ─
+  const detectedApp = detectGitBranches();
+
+  let appPushBranches: string[] = [];
+  {
+    let initial = [detectedApp.defaultBranch];
+    while (appPushBranches.length === 0) {
+      const result = await filterableBranchSelect({
+        message: 'Which branches should trigger translations?',
+        branches: detectedApp.branches,
+        defaultBranch: detectedApp.defaultBranch,
+        initialValues: initial,
+      });
+      if (result === null) return null;
+      if (result.length === 0) {
+        p.log.warn('At least one branch is required.');
+        initial = [detectedApp.defaultBranch];
+      } else {
+        appPushBranches = result;
+      }
+    }
+  }
+
+  const targetBranches = appPushBranches;
+
+  // ── Create the ProjectApp ───────────────────────────────────────────────────
+  try {
+    const result = await api.createProjectApp(userToken, {
+      projectId,
+      scopePath,
+      sourceLocale,
+      targetLocales,
+      targetBranches,
+      repoCanonical: repoCanonical ?? '',
+    });
+
+    p.log.success(`App ${chalk.bold(scopePath)} added to ${chalk.bold(projectName)}!`);
+    return {
+      projectId: result.projectId,
+      projectName: result.projectName,
+      apiKey: result.apiKey,
+      scopePath: result.scopePath,
+      sourceLocale,
+      targetLocales,
+      targetBranches,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    p.log.error(`Failed to add app: ${message}`);
     return null;
   }
 }

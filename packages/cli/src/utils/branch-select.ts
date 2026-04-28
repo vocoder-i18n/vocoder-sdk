@@ -131,6 +131,8 @@ function buildList(
   filter: string,
   customPatterns: string[],
   addCursor: boolean,
+  optional = false,
+  excludedPatterns: Set<string> = new Set(),
 ): string {
   const lines: string[] = [];
   const end = Math.min(filtered.length, scrollOffset + MAX_VISIBLE);
@@ -159,7 +161,8 @@ function buildList(
     !customPatterns.includes(trimmed);
 
   if (isNewPattern) {
-    const err = validateBranchPattern(trimmed);
+    const err = validateBranchPattern(trimmed)
+      ?? (excludedPatterns.has(trimmed) ? 'Already used for automatic translation' : null);
     const icon = addCursor ? grn('◻') : dim('◻');
     const label = err
       ? `${ylw('+')}  ${dim(`"${trimmed}" — ${err}`)}`
@@ -171,7 +174,11 @@ function buildList(
 
   const hidden = filtered.length - (end - scrollOffset);
   if (hidden > 0) lines.push(dim(`${S_BAR}  ${hidden} more`));
-  if (selected.size > 0) lines.push(dim(`${S_BAR}  ${selected.size} selected — Enter to confirm`));
+  if (selected.size > 0) {
+    lines.push(dim(`${S_BAR}  ${selected.size} selected — Enter to confirm`));
+  } else if (optional) {
+    lines.push(dim(`${S_BAR}  Enter to skip`));
+  }
 
   return lines.join('\n');
 }
@@ -183,8 +190,14 @@ export async function filterableBranchSelect(params: {
   branches: string[];
   defaultBranch: string;
   initialValues?: string[];
+  /** When true, empty selection is accepted (Enter = skip) */
+  optional?: boolean;
+  /** Branches already claimed by other trigger types — block custom entry of these */
+  excludedPatterns?: string[];
 }): Promise<string[] | null> {
   const { message, branches, defaultBranch } = params;
+  const optional = params.optional ?? false;
+  const excludedSet = new Set(params.excludedPatterns ?? []);
 
   let filter = '';
   let cursor = 0;
@@ -216,7 +229,7 @@ export async function filterableBranchSelect(params: {
   const prompt = new (Prompt as any)(
     {
       validate() {
-        if (selected.size === 0) return 'At least one branch is required.';
+        if (!optional && selected.size === 0) return 'At least one branch is required.';
         return undefined;
       },
       render(this: { state: string; error: string }) {
@@ -241,7 +254,7 @@ export async function filterableBranchSelect(params: {
             return [
               hdr.trimEnd(),
               `${ylw(S_BAR)}  ${dim('/')} ${hint}`,
-              buildList(filtered, cursor, scrollOffset, selected, filter, customPatterns, addCursor),
+              buildList(filtered, cursor, scrollOffset, selected, filter, customPatterns, addCursor, optional, excludedSet),
               `${ylw(S_BAR_END)}  ${ylw(this.error)}`,
               '',
             ].join('\n');
@@ -249,7 +262,7 @@ export async function filterableBranchSelect(params: {
             return [
               hdr.trimEnd(),
               `${cyan(S_BAR)}  ${dim('/')} ${hint}`,
-              buildList(filtered, cursor, scrollOffset, selected, filter, customPatterns, addCursor),
+              buildList(filtered, cursor, scrollOffset, selected, filter, customPatterns, addCursor, optional, excludedSet),
               `${cyan(S_BAR_END)}`,
               '',
             ].join('\n');
@@ -287,7 +300,8 @@ export async function filterableBranchSelect(params: {
       case 'space':
         if (addCursor) {
           const t = filter.trim();
-          const err = validateBranchPattern(t);
+          const err = validateBranchPattern(t)
+            ?? (excludedSet.has(t) ? 'Already used for automatic translation' : null);
           if (!err) {
             customPatterns.push(t);
             selected.add(t);
@@ -313,5 +327,5 @@ export async function filterableBranchSelect(params: {
 
   const result = await prompt.prompt();
   if (isCancel(result)) return null;
-  return result as string[];
+  return result as unknown as string[];
 }
