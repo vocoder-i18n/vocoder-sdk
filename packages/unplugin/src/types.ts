@@ -9,6 +9,11 @@ export interface VocoderPluginOptions {
 	 * Merged with built-in excludes (node_modules, dist, build, .next, etc.).
 	 */
 	exclude?: string | string[];
+	/**
+	 * Enable verbose build-time logging: extraction patterns, timing, fetch URL.
+	 * @default false
+	 */
+	verbose?: boolean;
 }
 
 export interface VocoderTranslationData {

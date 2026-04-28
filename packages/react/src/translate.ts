@@ -6,6 +6,7 @@ import { formatMessage } from "./utils/formatMessage";
  */
 let globalTranslations: Record<string, Record<string, string>> = {};
 let globalLocale: string = "en";
+let globalSourceLocale: string = "";
 
 /**
  * Set global translations (called by VocoderProvider)
@@ -23,6 +24,14 @@ export function _setGlobalTranslations(
  */
 export function _setGlobalLocale(locale: string): void {
 	globalLocale = locale;
+}
+
+/**
+ * Set source locale (called by VocoderProvider on mount)
+ * @internal
+ */
+export function _setSourceLocale(locale: string): void {
+	globalSourceLocale = locale;
 }
 
 /**
@@ -66,6 +75,15 @@ export function t(text: string, values?: Record<string, any>): string {
 		!!localeTranslations && Object.hasOwn(localeTranslations, text);
 
 	if (!hasTranslation) {
+		if (
+			process.env.NODE_ENV === "development" &&
+			globalSourceLocale &&
+			globalLocale !== globalSourceLocale
+		) {
+			console.warn(
+				`[vocoder] Missing translation for locale "${globalLocale}": "${text.length > 60 ? `${text.slice(0, 60)}…` : text}"`,
+			);
+		}
 		return text;
 	}
 

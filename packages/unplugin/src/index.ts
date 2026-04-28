@@ -50,13 +50,19 @@ export const unplugin = createUnplugin(
 		}
 
 		async function runInit(): Promise<InitResult> {
+			const verbose = options.verbose ?? false;
+
 			// VOCODER_FINGERPRINT: manual escape hatch for unusual environments.
 			if (process.env.VOCODER_FINGERPRINT) {
 				const fp = process.env.VOCODER_FINGERPRINT;
 				console.log(
 					`[vocoder] Using fingerprint from VOCODER_FINGERPRINT env var → ${fp}`,
 				);
+				const fetchStart = Date.now();
 				const d = await fetchTranslations(fp, apiUrl);
+				if (verbose) {
+					console.log(`[vocoder] Fetch took ${Date.now() - fetchStart}ms`);
+				}
 				return { fingerprint: fp, data: d };
 			}
 
@@ -79,17 +85,46 @@ export const unplugin = createUnplugin(
 				};
 			}
 
+			if (verbose) {
+				const includePatterns = options.include ?? ["**/*.{tsx,jsx,ts,js}"];
+				const patterns = Array.isArray(includePatterns)
+					? includePatterns.join(", ")
+					: includePatterns;
+				console.log(`[vocoder] Scanning: ${patterns}`);
+				if (options.exclude) {
+					const excl = Array.isArray(options.exclude)
+						? options.exclude.join(", ")
+						: options.exclude;
+					console.log(`[vocoder] Excluding: ${excl}`);
+				}
+			}
+
+			const extractStart = Date.now();
 			const sourceTexts = await extractSourceTexts(
 				process.cwd(),
 				options.include,
 				options.exclude,
 			);
+			if (verbose) {
+				console.log(
+					`[vocoder] Extraction: ${sourceTexts.length} string(s) in ${Date.now() - extractStart}ms`,
+				);
+			}
+
 			const fp = computeFingerprint(shortCode, sourceTexts);
 			console.log(
 				`[vocoder] ${sourceTexts.length} string(s) → fingerprint ${fp}`,
 			);
 
+			if (verbose) {
+				console.log(`[vocoder] Fetching: ${apiUrl}/api/t/${fp}`);
+			}
+
+			const fetchStart = Date.now();
 			const d = await fetchTranslations(fp, apiUrl);
+			if (verbose) {
+				console.log(`[vocoder] Fetch: ${Date.now() - fetchStart}ms`);
+			}
 
 			if (d.config.sourceLocale) {
 				const localeCount = d.config.targetLocales.length;

@@ -16,7 +16,11 @@ import {
 	loadLocale,
 	loadLocaleSync,
 } from "./runtime";
-import { _setGlobalLocale, _setGlobalTranslations } from "./translate";
+import {
+	_setGlobalLocale,
+	_setGlobalTranslations,
+	_setSourceLocale,
+} from "./translate";
 import type {
 	LocalesMap,
 	TranslationsMap,
@@ -136,9 +140,12 @@ export const VocoderProvider: React.FC<VocoderProviderProps> = ({
 		() => hydrationData?.locales ?? getLocales(),
 	);
 
-	const [defaultLocale, setDefaultLocale] = useState(
-		() => hydrationData?.defaultLocale || getConfig().sourceLocale || "en",
-	);
+	const [defaultLocale, setDefaultLocale] = useState(() => {
+		const src =
+			hydrationData?.defaultLocale || getConfig().sourceLocale || "en";
+		_setSourceLocale(src);
+		return src;
+	});
 
 	const [locale, setLocaleState] = useState<string>(() => {
 		if (hydrationData?.locale) {

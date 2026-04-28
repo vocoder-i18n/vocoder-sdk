@@ -151,8 +151,12 @@ export async function loadLocale(
 			_loadedTranslations[locale] = translations || {};
 			return _loadedTranslations[locale]!;
 		} catch (error) {
-			console.error(`Failed to load translations for locale: ${locale}`, error);
+			console.error(`[vocoder] Failed to load translations for locale: ${locale}`, error);
 		}
+	} else if (process.env.NODE_ENV === "development" && _manifestLoaded) {
+		console.warn(
+			`[vocoder] No loader for locale "${locale}" — not in build manifest. Check your target locales config and rebuild.`,
+		);
 	}
 
 	return {};

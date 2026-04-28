@@ -1,3 +1,4 @@
+import * as p from "@clack/prompts";
 import chalk from "chalk";
 import { config as loadEnv } from "dotenv";
 import type {
@@ -197,22 +198,20 @@ export async function getMergedConfig(
 
 	// Log config sources in verbose mode
 	if (verbose) {
-		console.log(chalk.dim("\n   Configuration sources:"));
-		console.log(
-			chalk.dim(`     Include patterns: ${configSources.includePattern}`),
-		);
-		if (excludePattern.length > 0) {
-			console.log(
-				chalk.dim(`     Exclude patterns: ${configSources.excludePattern}`),
-			);
-		}
-		console.log(chalk.dim(`     API key: ${configSources.apiKey}`));
-		console.log(chalk.dim(`     API URL: ${configSources.apiUrl}\n`));
-		console.log(chalk.dim(`     Sync mode: ${configSources.mode}`));
-		if (maxWaitMs) {
-			console.log(chalk.dim(`     Max wait: ${configSources.maxWaitMs}`));
-		}
-		console.log(chalk.dim(`     No fallback: ${configSources.noFallback}\n`));
+		const lines = [
+			`Include patterns: ${chalk.cyan(configSources.includePattern)}`,
+			...(excludePattern.length > 0
+				? [`Exclude patterns: ${chalk.cyan(configSources.excludePattern)}`]
+				: []),
+			`API key:          ${chalk.cyan(configSources.apiKey)}`,
+			`API URL:          ${chalk.cyan(configSources.apiUrl)}`,
+			`Sync mode:        ${chalk.cyan(configSources.mode)}`,
+			...(maxWaitMs
+				? [`Max wait:         ${chalk.cyan(String(configSources.maxWaitMs))}`]
+				: []),
+			`No fallback:      ${chalk.cyan(String(configSources.noFallback))}`,
+		];
+		p.note(lines.join("\n"), "Configuration sources");
 	}
 
 	return {
