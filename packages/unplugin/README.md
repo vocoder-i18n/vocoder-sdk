@@ -66,6 +66,36 @@ await esbuild.build({
 
 ---
 
+## Configuration
+
+All options are optional. Pass them to the plugin factory:
+
+```ts
+// vite.config.ts
+import vocoder from '@vocoder/unplugin/vite';
+
+export default defineConfig({
+  plugins: [
+    vocoder({
+      // Glob patterns for files to scan for translatable strings.
+      // Default: ["**/*.{tsx,jsx,ts,js}"]
+      include: ['src/**/*.{tsx,jsx}'],
+
+      // Additional glob patterns to exclude. Always merged with built-in
+      // excludes (node_modules, dist, build, .next, .nuxt, etc.).
+      exclude: ['**/*.stories.tsx', 'src/mocks/**'],
+    }),
+  ],
+});
+```
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `include` | `string \| string[]` | `["**/*.{tsx,jsx,ts,js}"]` | Files to scan for `<T>` and `t()` calls |
+| `exclude` | `string \| string[]` | — | Extra patterns to skip (merged with built-in excludes) |
+
+---
+
 ## How It Works
 
 The plugin runs at build time and performs the following steps:
@@ -90,7 +120,7 @@ The plugin runs at build time and performs the following steps:
 
 ## Zero Configuration
 
-No configuration files, API keys, or environment variables are required. Everything is auto-detected from your git repository and CI environment.
+No configuration files or environment variables are required for basic use. Repository identity, branch, and commit SHA are all auto-detected. `include`/`exclude` options are available for non-standard project layouts.
 
 ---
 

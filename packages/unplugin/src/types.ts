@@ -1,5 +1,15 @@
-// Reserved for future plugin options.
-export interface VocoderPluginOptions {}
+export interface VocoderPluginOptions {
+	/**
+	 * Glob pattern(s) for files to include in string extraction.
+	 * @default ["**\/*.{tsx,jsx,ts,js}"]
+	 */
+	include?: string | string[];
+	/**
+	 * Glob pattern(s) for files to exclude from string extraction.
+	 * Merged with built-in excludes (node_modules, dist, build, .next, etc.).
+	 */
+	exclude?: string | string[];
+}
 
 export interface VocoderTranslationData {
 	config: {

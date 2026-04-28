@@ -126,9 +126,13 @@ Reads `VOCODER_API_KEY` from environment or `.env`. Detects `<T>` and `t()` usag
 
 | Flag | Description |
 |---|---|
+| `--include <glob>` | Glob pattern for files to scan (repeatable). Default: `**/*.{tsx,jsx,ts,js}` |
+| `--exclude <glob>` | Glob pattern to skip (repeatable). Merged with built-in excludes |
 | `--locale <code>` | Sync only this target locale |
 | `--dry-run` | Show what would be synced without submitting |
 | `--verbose` | Show extraction and sync details |
+
+Patterns can also be set via env vars: `VOCODER_INCLUDE_PATTERN` and `VOCODER_EXCLUDE_PATTERN` (comma-separated).
 
 ---
 

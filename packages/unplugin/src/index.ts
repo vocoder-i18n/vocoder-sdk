@@ -20,7 +20,7 @@ const STRIPPED_PREFIX = "vocoder/";
 const RESOLVED_PREFIX = "\0virtual:vocoder/";
 
 export const unplugin = createUnplugin(
-	(_options: VocoderPluginOptions | undefined = {}) => {
+	(options: VocoderPluginOptions | undefined = {}) => {
 		// Load .env before reading env vars — build plugins run before bundler's own .env loading
 		loadEnvFile();
 
@@ -60,7 +60,11 @@ export const unplugin = createUnplugin(
 					return;
 				}
 
-				const sourceTexts = await extractSourceTexts(process.cwd());
+				const sourceTexts = await extractSourceTexts(
+					process.cwd(),
+					options.include,
+					options.exclude,
+				);
 				fingerprint = computeFingerprint(shortCode, sourceTexts);
 				console.log(
 					`[vocoder] ${sourceTexts.length} string(s) → fingerprint ${fingerprint}`,

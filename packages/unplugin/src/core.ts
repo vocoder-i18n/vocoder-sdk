@@ -61,11 +61,16 @@ export function computeFingerprint(
  * Extract source text strings from the project for fingerprint computation.
  * Uses StringExtractor but returns only the text values — keys/metadata not needed here.
  */
-export async function extractSourceTexts(cwd: string): Promise<string[]> {
+export async function extractSourceTexts(
+	cwd: string,
+	include?: string | string[],
+	exclude?: string | string[],
+): Promise<string[]> {
 	const extractor = new StringExtractor();
 	const results = await extractor.extractFromProject(
-		["**/*.{tsx,jsx,ts,js}"],
+		include ?? ["**/*.{tsx,jsx,ts,js}"],
 		cwd,
+		exclude,
 	);
 	return results.map((r) => r.text);
 }
