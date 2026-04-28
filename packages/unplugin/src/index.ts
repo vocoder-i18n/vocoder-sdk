@@ -19,76 +19,95 @@ const VIRTUAL_PREFIX = "virtual:vocoder/";
 const STRIPPED_PREFIX = "vocoder/";
 const RESOLVED_PREFIX = "\0virtual:vocoder/";
 
+// Shared across all compiler instances in the same process (Next.js runs server + client + edge).
+// Keyed by cwd + apiUrl + include/exclude so different plugin configs stay isolated.
+type InitResult = { fingerprint: string; data: VocoderTranslationData };
+const _initCache = new Map<string, Promise<InitResult>>();
+
 export const unplugin = createUnplugin(
 	(options: VocoderPluginOptions | undefined = {}) => {
 		// Load .env before reading env vars — build plugins run before bundler's own .env loading
 		loadEnvFile();
 
 		const apiUrl = process.env.VOCODER_API_URL ?? "https://vocoder.app";
+		const cacheKey = [
+			process.cwd(),
+			apiUrl,
+			JSON.stringify(options.include ?? null),
+			JSON.stringify(options.exclude ?? null),
+		].join("|");
 
 		let fingerprint: string;
 		let data: VocoderTranslationData | null = null;
-		let initPromise: Promise<void> | null = null;
 
-		function init(): Promise<void> {
-			if (initPromise) return initPromise;
-			initPromise = (async () => {
-				// VOCODER_FINGERPRINT: manual escape hatch for unusual environments.
-				if (process.env.VOCODER_FINGERPRINT) {
-					fingerprint = process.env.VOCODER_FINGERPRINT;
-					console.log(
-						`[vocoder] Using fingerprint from VOCODER_FINGERPRINT env var → ${fingerprint}`,
-					);
-					data = await fetchTranslations(fingerprint, apiUrl);
-					return;
-				}
+		async function init(): Promise<void> {
+			if (!_initCache.has(cacheKey)) {
+				_initCache.set(cacheKey, runInit());
+			}
+			const result = await _initCache.get(cacheKey)!;
+			fingerprint = result.fingerprint;
+			data = result.data;
+		}
 
-				const apiKey = process.env.VOCODER_API_KEY ?? "";
-				const shortCode = apiKey.startsWith("vcp_")
-					? apiKey.slice(4, 14)
-					: null;
+		async function runInit(): Promise<InitResult> {
+			// VOCODER_FINGERPRINT: manual escape hatch for unusual environments.
+			if (process.env.VOCODER_FINGERPRINT) {
+				const fp = process.env.VOCODER_FINGERPRINT;
+				console.log(
+					`[vocoder] Using fingerprint from VOCODER_FINGERPRINT env var → ${fp}`,
+				);
+				const d = await fetchTranslations(fp, apiUrl);
+				return { fingerprint: fp, data: d };
+			}
 
-				if (!shortCode) {
-					console.warn(
-						"[vocoder] VOCODER_API_KEY missing or not a project key (vcp_...). Translations not loaded.",
-					);
-					data = {
+			const apiKey = process.env.VOCODER_API_KEY ?? "";
+			const shortCode = apiKey.startsWith("vcp_")
+				? apiKey.slice(4, 14)
+				: null;
+
+			if (!shortCode) {
+				console.warn(
+					"[vocoder] VOCODER_API_KEY missing or not a project key (vcp_...). Translations not loaded.",
+				);
+				return {
+					fingerprint: "",
+					data: {
 						config: { sourceLocale: "", targetLocales: [], locales: {} },
 						translations: {},
 						updatedAt: null,
-					};
-					return;
-				}
+					},
+				};
+			}
 
-				const sourceTexts = await extractSourceTexts(
-					process.cwd(),
-					options.include,
-					options.exclude,
+			const sourceTexts = await extractSourceTexts(
+				process.cwd(),
+				options.include,
+				options.exclude,
+			);
+			const fp = computeFingerprint(shortCode, sourceTexts);
+			console.log(
+				`[vocoder] ${sourceTexts.length} string(s) → fingerprint ${fp}`,
+			);
+
+			const d = await fetchTranslations(fp, apiUrl);
+
+			if (d.config.sourceLocale) {
+				const localeCount = d.config.targetLocales.length;
+				const stringCount = Object.values(d.translations).reduce(
+					(sum: number, t: Record<string, string>) =>
+						sum + Object.keys(t).length,
+					0,
 				);
-				fingerprint = computeFingerprint(shortCode, sourceTexts);
 				console.log(
-					`[vocoder] ${sourceTexts.length} string(s) → fingerprint ${fingerprint}`,
+					`[vocoder] Loaded ${localeCount} locale(s), ${stringCount} translation(s)`,
 				);
+			} else {
+				console.log(
+					"[vocoder] No translations available yet — source text will be shown.",
+				);
+			}
 
-				data = await fetchTranslations(fingerprint, apiUrl);
-
-				if (data.config.sourceLocale) {
-					const localeCount = data.config.targetLocales.length;
-					const stringCount = Object.values(data.translations).reduce(
-						(sum: number, t: Record<string, string>) =>
-							sum + Object.keys(t).length,
-						0,
-					);
-					console.log(
-						`[vocoder] Loaded ${localeCount} locale(s), ${stringCount} translation(s)`,
-					);
-				} else {
-					console.log(
-						"[vocoder] No translations available yet — source text will be shown.",
-					);
-				}
-			})();
-			return initPromise;
+			return { fingerprint: fp, data: d };
 		}
 
 		function getDefineValues(): Record<string, string> {
