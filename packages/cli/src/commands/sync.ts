@@ -575,7 +575,22 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 		const currentHash = computeStringsHash(sourceStrings);
 		if (!options.force) {
 			const cachedHash = readCachedStringsHash(projectRoot, branch);
+			if (options.verbose) {
+				const cacheFile = getCacheFilePath(projectRoot, branch);
+				if (cachedHash) {
+					p.log.info(
+						`Local cache: ${chalk.dim(cacheFile)}\n  cached hash ${chalk.cyan(cachedHash.slice(0, 8))}… vs current ${chalk.cyan(currentHash.slice(0, 8))}… — ${cachedHash === currentHash ? chalk.green("match") : chalk.yellow("changed")}`,
+					);
+				} else {
+					p.log.info(`No local cache found at ${chalk.dim(cacheFile)} — will submit to API`);
+				}
+			}
 			if (cachedHash && cachedHash === currentHash) {
+				if (options.verbose) {
+					p.log.info(
+						"Skipping API submission — delete node_modules/.vocoder to force a fresh sync",
+					);
+				}
 				const duration = ((Date.now() - startTime) / 1000).toFixed(1);
 				p.outro(`Up to date (${duration}s)`);
 				return 0;
