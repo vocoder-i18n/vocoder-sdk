@@ -542,11 +542,11 @@ export async function init(options: InitOptions = {}): Promise<number> {
 						);
 						spinner.stop("New API key generated");
 						printMcpSetup(apiKey);
-					} catch {
+					} catch (err) {
 						spinner.stop("Failed to generate key");
-						p.log.error(
-							"Could not generate API key. Try again or generate one from the dashboard.",
-						);
+						const msg = err instanceof Error ? err.message : String(err);
+						p.log.error(`Could not generate API key: ${msg}`);
+						p.log.info("Try again or generate one from the dashboard.");
 						return 1;
 					}
 				}
