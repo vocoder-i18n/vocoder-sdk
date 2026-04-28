@@ -328,9 +328,8 @@ async function runAuthFlow(
 					return null;
 				}
 				if (!shouldOpen) {
-					p.log.info(
-						"Open the URL above manually in your browser to continue.",
-					);
+					p.note(browserUrl, "Sign In");
+					p.log.info("Open the URL above manually in your browser to continue.");
 				} else {
 					const opened = await tryOpenBrowser(browserUrl);
 					if (!opened) {
