@@ -6,7 +6,7 @@ import { searchMultiSelectLocales, searchSelectLocale } from './locale-search.js
 import { detectGitBranches, filterableBranchSelect } from './branch-select.js';
 
 export interface ExistingApp {
-  scopePath: string;
+  appDir: string;
   projectId: string;
   projectName: string;
   organizationName: string;
@@ -29,7 +29,7 @@ export interface ProjectCreateParams {
    * Non-empty when running from a subdirectory of the repo — monorepo use case.
    * e.g. "apps/web"
    */
-  defaultScopePath?: string;
+  defaultAppDir?: string;
 }
 
 export interface ProjectAppCreateParams {
@@ -39,7 +39,7 @@ export interface ProjectAppCreateParams {
   projectName: string;
   organizationName: string;
   repoCanonical?: string;
-  defaultScopePath?: string;
+  defaultAppDir?: string;
   /** Existing apps to display and validate against */
   existingApps: ExistingApp[];
 }
@@ -48,7 +48,7 @@ export interface ProjectAppCreateResult {
   projectId: string;
   projectName: string;
   apiKey: string;
-  scopePath: string;
+  appDir: string;
   sourceLocale: string;
   targetLocales: string[];
   targetBranches: string[];
@@ -131,11 +131,11 @@ export async function runProjectCreate(
   const localeOptions = buildLocaleOptions(rawLocales);
 
   // ── Scope path (monorepo) ───────────────────────────────────────────────────
-  let scopePath: string;
-  if (params.defaultScopePath) {
+  let appDir: string;
+  if (params.defaultAppDir) {
     // Auto-detected from CWD — confirm silently, same pattern as project name.
-    scopePath = params.defaultScopePath;
-    p.log.success(`App directory: ${chalk.bold(scopePath)}`);
+    appDir = params.defaultAppDir;
+    p.log.success(`App directory: ${chalk.bold(appDir)}`);
   } else {
     const rawScope = await p.text({
       message: 'App directory (leave blank for the entire repo)',
@@ -149,7 +149,7 @@ export async function runProjectCreate(
       },
     });
     if (p.isCancel(rawScope)) return null;
-    scopePath = ((rawScope as string | undefined) ?? '').trim();
+    appDir = ((rawScope as string | undefined) ?? '').trim();
   }
 
   // ── Source locale ───────────────────────────────────────────────────────────
@@ -216,7 +216,7 @@ export async function runProjectCreate(
       sourceLocale,
       targetLocales,
       targetBranches,
-      scopePaths: scopePath ? [scopePath] : [],
+      appDirs: appDir ? [appDir] : [],
       repoCanonical,
     });
 
@@ -238,7 +238,7 @@ export async function runProjectAppCreate(
   params: ProjectAppCreateParams,
 ): Promise<ProjectAppCreateResult | null> {
   const { api, userToken, projectId, projectName, repoCanonical } = params;
-  const existingScopes = new Set(params.existingApps.map((a) => a.scopePath));
+  const existingScopes = new Set(params.existingApps.map((a) => a.appDir));
 
   // ── Fetch available locales ─────────────────────────────────────────────────
   let rawLocales: Array<{ code: string; name: string; nativeName?: string }>;
@@ -253,16 +253,16 @@ export async function runProjectAppCreate(
   const localeOptions = buildLocaleOptions(rawLocales);
 
   // ── App directory ───────────────────────────────────────────────────────────
-  let scopePath: string;
-  if (params.defaultScopePath && !existingScopes.has(params.defaultScopePath)) {
+  let appDir: string;
+  if (params.defaultAppDir && !existingScopes.has(params.defaultAppDir)) {
     // Auto-detected scope is new — confirm silently.
-    scopePath = params.defaultScopePath;
-    p.log.success(`App directory: ${chalk.bold(scopePath)}`);
+    appDir = params.defaultAppDir;
+    p.log.success(`App directory: ${chalk.bold(appDir)}`);
   } else {
     // Show existing apps so the user knows what's already configured.
     if (params.existingApps.length > 0) {
       const configuredList = params.existingApps
-        .map((a) => chalk.dim(a.scopePath || '(entire repo)'))
+        .map((a) => chalk.dim(a.appDir || '(entire repo)'))
         .join(', ');
       p.log.info(`Already configured: ${configuredList}`);
     }
@@ -272,7 +272,7 @@ export async function runProjectAppCreate(
     const rawScope = await p.text({
       message: 'App directory for this new app',
       placeholder: 'e.g. apps/backend',
-      initialValue: params.defaultScopePath ?? '',
+      initialValue: params.defaultAppDir ?? '',
       validate(value) {
         const v = value.trim();
         if (!v && hasWholeRepoApp) return 'This project already covers the entire repo.';
@@ -283,7 +283,7 @@ export async function runProjectAppCreate(
       },
     });
     if (p.isCancel(rawScope)) return null;
-    scopePath = ((rawScope as string | undefined) ?? '').trim();
+    appDir = ((rawScope as string | undefined) ?? '').trim();
   }
 
   // ── Source locale ───────────────────────────────────────────────────────────
@@ -334,19 +334,19 @@ export async function runProjectAppCreate(
   try {
     const result = await api.createProjectApp(userToken, {
       projectId,
-      scopePath,
+      appDir,
       sourceLocale,
       targetLocales,
       targetBranches,
       repoCanonical: repoCanonical ?? '',
     });
 
-    p.log.success(`App ${chalk.bold(scopePath)} added to ${chalk.bold(projectName)}!`);
+    p.log.success(`App ${chalk.bold(appDir)} added to ${chalk.bold(projectName)}!`);
     return {
       projectId: result.projectId,
       projectName: result.projectName,
       apiKey: result.apiKey,
-      scopePath: result.scopePath,
+      appDir: result.appDir,
       sourceLocale,
       targetLocales,
       targetBranches,

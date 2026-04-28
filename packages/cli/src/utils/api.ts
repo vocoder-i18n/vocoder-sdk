@@ -268,8 +268,8 @@ export class VocoderAPI {
 	          : {}),
 	        ...(options?.clientRunId ? { clientRunId: options.clientRunId } : {}),
 	        ...(repoIdentity?.repoCanonical ? { repoCanonical: repoIdentity.repoCanonical } : {}),
-	        ...(repoIdentity?.repoScopePath !== undefined
-	          ? { repoScopePath: repoIdentity.repoScopePath }
+	        ...(repoIdentity?.repoAppDir !== undefined
+	          ? { repoAppDir: repoIdentity.repoAppDir }
           : {}),
       }),
     }, 'Translation submission failed');
@@ -355,7 +355,7 @@ export class VocoderAPI {
     sourceLocale?: string;
     targetLocales?: string[];
     repoCanonical?: string;
-    repoScopePath?: string;
+    repoAppDir?: string;
   }): Promise<InitStartResponse> {
     const response = await fetch(`${this.apiUrl}/api/cli/init/start`, {
       method: 'POST',
@@ -804,7 +804,7 @@ export class VocoderAPI {
       sourceLocale: string;
       targetLocales: string[];
       targetBranches: string[];
-      scopePaths: string[];
+      appDirs: string[];
       repoCanonical?: string;
     },
   ): Promise<{
@@ -857,7 +857,7 @@ export class VocoderAPI {
    */
   async lookupProjectByRepo(params: {
     repoCanonical: string;
-    scopePath: string;
+    appDir: string;
   }): Promise<{
     exactMatch: {
       projectId: string;
@@ -867,7 +867,7 @@ export class VocoderAPI {
       targetBranches?: string[];
     } | null;
     existingApps: Array<{
-      scopePath: string;
+      appDir: string;
       projectId: string;
       projectName: string;
       organizationName: string;
@@ -880,7 +880,7 @@ export class VocoderAPI {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           repo: params.repoCanonical,
-          scopePath: params.scopePath,
+          appDir: params.appDir,
         }),
       });
 
@@ -897,7 +897,7 @@ export class VocoderAPI {
           targetBranches?: string[];
         } | null;
         existingApps: Array<{
-          scopePath: string;
+          appDir: string;
           projectId: string;
           projectName: string;
           organizationName: string;
@@ -917,7 +917,7 @@ export class VocoderAPI {
     userToken: string,
     params: {
       projectId: string;
-      scopePath: string;
+      appDir: string;
       sourceLocale: string;
       targetLocales: string[];
       targetBranches: string[];
@@ -928,7 +928,7 @@ export class VocoderAPI {
     projectId: string;
     projectName: string;
     apiKey: string;
-    scopePath: string;
+    appDir: string;
   }> {
     const response = await fetch(`${this.apiUrl}/api/cli/project/apps`, {
       method: 'POST',
@@ -954,7 +954,7 @@ export class VocoderAPI {
       projectId: string;
       projectName: string;
       apiKey: string;
-      scopePath: string;
+      appDir: string;
     };
   }
 }

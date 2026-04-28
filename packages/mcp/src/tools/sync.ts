@@ -47,7 +47,7 @@ export async function runSync(input: SyncInput, client: VocoderClient): Promise<
     })),
     targetLocales: config.targetLocales,
     repoCanonical: identity?.repoCanonical,
-    repoScopePath: identity?.scopePath || undefined,
+    repoAppDir: identity?.appDir || undefined,
     requestedMode: input.mode ?? 'auto',
   });
 

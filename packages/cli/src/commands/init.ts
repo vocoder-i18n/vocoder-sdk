@@ -433,7 +433,7 @@ export async function init(options: InitOptions = {}): Promise<number> {
     // ── Fast lookup: does a project already exist for this repo? ────────────
     // No spinner — this is a fast DB read and we don't want an empty ◇ on miss.
     let existingAppsForRepo: Array<{
-      scopePath: string;
+      appDir: string;
       projectId: string;
       projectName: string;
       organizationName: string;
@@ -445,7 +445,7 @@ export async function init(options: InitOptions = {}): Promise<number> {
       const anonApi = new VocoderAPI({ apiUrl, apiKey: '' });
       const lookup = await anonApi.lookupProjectByRepo({
         repoCanonical: identity.repoCanonical,
-        scopePath: identity.repoScopePath,
+        appDir: identity.repoAppDir,
       });
 
       // Exact match: this scope is already configured — confirm and exit.
@@ -459,7 +459,7 @@ export async function init(options: InitOptions = {}): Promise<number> {
 
       // Whole-repo app exists: covers this repo from any directory — confirm and exit.
       if (lookup.hasWholeRepoApp) {
-        const wholeRepo = lookup.existingApps.find((a) => a.scopePath === '');
+        const wholeRepo = lookup.existingApps.find((a) => a.appDir === '');
         if (wholeRepo) {
           p.log.success(`Project: ${chalk.bold(wholeRepo.projectName)}`);
           p.outro("Vocoder is already set up for this repository.");
@@ -799,7 +799,7 @@ export async function init(options: InitOptions = {}): Promise<number> {
       p.log.info(
         `${chalk.bold(repoProjectName)} is already set up for this repo.\n` +
         `  Configured apps: ${existingAppsForRepo
-          .map((a) => chalk.cyan(a.scopePath || '(entire repo)'))
+          .map((a) => chalk.cyan(a.appDir || '(entire repo)'))
           .join(', ')}`,
       );
 
@@ -810,7 +810,7 @@ export async function init(options: InitOptions = {}): Promise<number> {
         projectName: repoProjectName,
         organizationName: selectedWorkspaceName,
         repoCanonical: identity?.repoCanonical,
-        defaultScopePath: identity?.repoScopePath,
+        defaultAppDir: identity?.repoAppDir,
         existingApps: existingAppsForRepo,
       });
 
@@ -896,7 +896,7 @@ export async function init(options: InitOptions = {}): Promise<number> {
           projectName: chosen.name,
           organizationName: selectedWorkspaceName,
           repoCanonical: identity?.repoCanonical,
-          defaultScopePath: identity?.repoScopePath,
+          defaultAppDir: identity?.repoAppDir,
           existingApps: [],
         });
 
@@ -927,7 +927,7 @@ export async function init(options: InitOptions = {}): Promise<number> {
       defaultSourceLocale: 'en',
       repoCanonical: identity?.repoCanonical,
       defaultBranches: ['main'],
-      defaultScopePath: identity?.repoScopePath,
+      defaultAppDir: identity?.repoAppDir,
     });
 
 

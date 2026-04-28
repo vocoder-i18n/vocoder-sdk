@@ -90,7 +90,7 @@ describe('VocoderAPI submitTranslation', () => {
       },
       {
         repoCanonical: 'github:owner/repo',
-        repoScopePath: 'src',
+        repoAppDir: 'src',
       },
     );
 
@@ -99,7 +99,7 @@ describe('VocoderAPI submitTranslation', () => {
 
     expect(body.stringEntries).toEqual(entries);
     expect(body.repoCanonical).toBe('github:owner/repo');
-    expect(body.repoScopePath).toBe('src');
+    expect(body.repoAppDir).toBe('src');
     expect(body.requestedMode).toBe('best-effort');
     expect(body.requestedMaxWaitMs).toBe(15000);
     expect(body.clientRunId).toBe('run_123');

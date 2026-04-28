@@ -32,7 +32,7 @@ export function loadEnvFile(): void {
 
 export type RepoIdentity = {
   repoCanonical: string;
-  scopePath: string;
+  appDir: string;
 };
 
 /**
@@ -246,7 +246,7 @@ function detectRepoIdentityFromEnv(): RepoIdentity | null {
   // GitHub Actions: GITHUB_REPOSITORY = "owner/repo"
   if (process.env.GITHUB_REPOSITORY) {
     const canonical = `github:${process.env.GITHUB_REPOSITORY.toLowerCase()}`;
-    return { repoCanonical: canonical, scopePath: '' };
+    return { repoCanonical: canonical, appDir: '' };
   }
 
   // Vercel: VERCEL_GIT_REPO_OWNER + VERCEL_GIT_REPO_SLUG
@@ -257,7 +257,7 @@ function detectRepoIdentityFromEnv(): RepoIdentity | null {
       : provider === 'gitlab' ? `gitlab:${ownerRepo}`
       : provider === 'bitbucket' ? `bitbucket:${ownerRepo}`
       : `git:${ownerRepo}`;
-    return { repoCanonical: canonical, scopePath: '' };
+    return { repoCanonical: canonical, appDir: '' };
   }
 
   // GitLab CI: CI_PROJECT_PATH = "owner/repo", CI_SERVER_HOST for non-gitlab.com
@@ -265,20 +265,20 @@ function detectRepoIdentityFromEnv(): RepoIdentity | null {
     const host = process.env.CI_SERVER_HOST ?? 'gitlab.com';
     const ownerRepo = process.env.CI_PROJECT_PATH.toLowerCase();
     const canonical = host.includes('gitlab.com') ? `gitlab:${ownerRepo}` : `git:${host}/${ownerRepo}`;
-    return { repoCanonical: canonical, scopePath: '' };
+    return { repoCanonical: canonical, appDir: '' };
   }
 
   // Bitbucket Pipelines: BITBUCKET_REPO_FULL_NAME = "owner/repo"
   if (process.env.BITBUCKET_REPO_FULL_NAME) {
     const canonical = `bitbucket:${process.env.BITBUCKET_REPO_FULL_NAME.toLowerCase()}`;
-    return { repoCanonical: canonical, scopePath: '' };
+    return { repoCanonical: canonical, appDir: '' };
   }
 
   // CircleCI: CIRCLE_PROJECT_USERNAME + CIRCLE_PROJECT_REPONAME
   if (process.env.CIRCLE_PROJECT_USERNAME && process.env.CIRCLE_PROJECT_REPONAME) {
     const ownerRepo = `${process.env.CIRCLE_PROJECT_USERNAME}/${process.env.CIRCLE_PROJECT_REPONAME}`.toLowerCase();
     const canonical = `github:${ownerRepo}`;
-    return { repoCanonical: canonical, scopePath: '' };
+    return { repoCanonical: canonical, appDir: '' };
   }
 
   return null;
@@ -305,9 +305,9 @@ function detectRepoIdentityFromGit(): RepoIdentity | null {
     // Compute scope path: relative path from git root to cwd
     const gitRoot = dirname(gitDir);
     const rel = relative(gitRoot, cwd).replace(/\\/g, '/').trim();
-    const scopePath = (rel && rel !== '.' && !rel.startsWith('..')) ? rel : '';
+    const appDir = (rel && rel !== '.' && !rel.startsWith('..')) ? rel : '';
 
-    return { repoCanonical, scopePath };
+    return { repoCanonical, appDir };
   } catch {
     return null;
   }
