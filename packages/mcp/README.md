@@ -48,7 +48,7 @@ Add to your IDE's MCP config (`.cursor/mcp.json` or `.windsurf/mcp.json`):
 }
 ```
 
-Get your project API key by running `vocoder init` in your project directory.
+Get your project API key by running `npx @vocoder/cli init` in your project directory.
 
 ---
 

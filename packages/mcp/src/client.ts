@@ -6,7 +6,7 @@ import type {
 } from "@vocoder/cli/lib";
 
 export const NO_API_KEY_MESSAGE =
-	"VOCODER_API_KEY is not set. Run `vocoder init` to get an API key, then add it to your MCP server config as VOCODER_API_KEY.";
+	"VOCODER_API_KEY is not set. Run `npx @vocoder/cli init` to get an API key, then add it to your MCP server config as VOCODER_API_KEY.";
 
 export interface SyncBody {
 	branch: string;

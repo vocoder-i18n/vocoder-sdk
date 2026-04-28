@@ -42,7 +42,7 @@ export function runSetup(input: SetupInput, hasApiKey: boolean): SetupResult {
 
 	const authNextStep = hasApiKey
 		? null
-		: "Run `vocoder init` to connect this project to Vocoder and get your API key. Then add it to your MCP config as VOCODER_API_KEY.";
+		: "Run `npx @vocoder/cli init` to connect this project to Vocoder and get your API key. Then add it to your MCP config as VOCODER_API_KEY.";
 
 	const parts = [snippets.whatsNext, authNextStep].filter(Boolean);
 
