@@ -1,6 +1,6 @@
 {
   "name": "@vocoder/mcp",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "MCP server for Vocoder — AI-native i18n tooling",
   "files": [
     "dist"
@@ -47,6 +47,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@vocoder/cli": "workspace:*",
+    "@vocoder/extractor": "workspace:*",
     "@vocoder/unplugin": "workspace:*",
     "zod": "^3.24.0"
   },

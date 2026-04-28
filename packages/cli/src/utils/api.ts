@@ -271,6 +271,7 @@ export class VocoderAPI {
 	        ...(repoIdentity?.repoAppDir !== undefined
 	          ? { repoAppDir: repoIdentity.repoAppDir }
           : {}),
+		        ...(repoIdentity?.commitSha ? { commitSha: repoIdentity.commitSha } : {}),
       }),
     }, 'Translation submission failed');
   }
@@ -619,6 +620,32 @@ export class VocoderAPI {
       targetBranches: string[];
     }> };
     return result.projects;
+  }
+
+  async regenerateProjectApiKey(
+    userToken: string,
+    projectId: string,
+  ): Promise<{ apiKey: string }> {
+    const response = await fetch(`${this.apiUrl}/api/cli/project/regenerate-key`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${userToken}`,
+      },
+      body: JSON.stringify({ projectId }),
+    });
+
+    const payload = await readPayload(response);
+
+    if (!response.ok) {
+      throw new VocoderAPIError({
+        message: extractErrorMessage(payload, `Failed to regenerate API key (${response.status})`),
+        status: response.status,
+        payload,
+      });
+    }
+
+    return payload as { apiKey: string };
   }
 
   // ── CLI GitHub endpoints ──────────────────────────────────────────────────────

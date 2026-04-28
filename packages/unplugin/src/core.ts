@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve, dirname, relative } from 'node:path';
+import { StringExtractor } from '@vocoder/extractor';
 import type { VocoderPluginOptions, VocoderTranslationData } from './types';
 
 /**
@@ -36,72 +37,28 @@ export type RepoIdentity = {
 };
 
 /**
- * Compute the opaque fingerprint from app directory + commit identifier.
- * Formula: sha256(appDir + ":" + identifier).slice(0, 12)
+ * Compute the content-hash fingerprint from project short code + sorted source strings.
+ * Formula: sha256(shortCode + ":" + sorted(sourceTexts).join('\0')).slice(0, 12)
  *
- * - appDir: path of this app relative to the repo root (empty string for single-app repos)
- * - identifier: commit SHA (preferred) or branch name (local dev fallback)
- *
+ * Pure function of source content — no git, no CI env vars required.
  * Must match the server-side formula in lib/vocoder/fingerprint.ts.
  */
-export function computeFingerprint(appDir: string, identifier: string): string {
+export function computeFingerprint(shortCode: string, sourceTexts: string[]): string {
+  const sorted = [...sourceTexts].sort();
   return createHash('sha256')
-    .update(`${appDir}:${identifier}`)
+    .update(`${shortCode}:${sorted.join('\0')}`)
     .digest('hex')
     .slice(0, 12);
 }
 
 /**
- * Detect the app directory (path relative to repo root) for fingerprint computation.
- *
- * Priority:
- * 1. Explicit appDir option passed to the plugin
- * 2. Git-based: relative(gitRoot, cwd) — works in most CI environments (full clone)
- * 3. Workspace root: look for pnpm-workspace.yaml / turbo.json / workspaces in package.json
- * 4. '' fallback — correct for single-app repositories
+ * Extract source text strings from the project for fingerprint computation.
+ * Uses StringExtractor but returns only the text values — keys/metadata not needed here.
  */
-export function detectAppDir(explicitAppDir?: string): string {
-  if (typeof explicitAppDir === 'string') return explicitAppDir;
-
-  const cwd = process.cwd();
-
-  // Git-based detection (most reliable — works in GitHub Actions, Vercel, GitLab CI, Netlify)
-  const gitDir = findGitDir(cwd);
-  if (gitDir) {
-    const gitRoot = dirname(gitDir);
-    const rel = relative(gitRoot, cwd).replace(/\\/g, '/').trim();
-    if (rel && rel !== '.' && !rel.startsWith('..')) return rel;
-    return '';
-  }
-
-  // Workspace root detection (works in Docker builds without .git)
-  const workspaceRoot = findWorkspaceRoot(cwd);
-  if (workspaceRoot) {
-    const rel = relative(workspaceRoot, cwd).replace(/\\/g, '/').trim();
-    if (rel && rel !== '.' && !rel.startsWith('..')) return rel;
-  }
-
-  return '';
-}
-
-function findWorkspaceRoot(startDir: string): string | null {
-  let dir = startDir;
-  for (let i = 0; i < 20; i++) {
-    if (existsSync(resolve(dir, 'pnpm-workspace.yaml'))) return dir;
-    if (existsSync(resolve(dir, 'turbo.json'))) return dir;
-    if (existsSync(resolve(dir, 'lerna.json'))) return dir;
-    const pkgPath = resolve(dir, 'package.json');
-    if (existsSync(pkgPath)) {
-      try {
-        const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as unknown;
-        if (pkg && typeof pkg === 'object' && 'workspaces' in pkg) return dir;
-      } catch { /* ignore */ }
-    }
-    const parent = dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  return null;
+export async function extractSourceTexts(cwd: string): Promise<string[]> {
+  const extractor = new StringExtractor();
+  const results = await extractor.extractFromProject(['**/*.{tsx,jsx,ts,js}'], cwd);
+  return results.map((r) => r.text);
 }
 
 const SHA_REGEX = /^[0-9a-f]{40}$/i;

@@ -22,10 +22,18 @@ export interface VocoderContextValue {
   /** True when initial translations are ready for render */
   isReady: boolean;
   locale: string;
+  /** Text direction for the current locale. 'rtl' for Arabic, Hebrew, etc. 'ltr' for all others. */
+  dir: 'ltr' | 'rtl';
   locales?: LocalesMap;
   setLocale: (locale: string) => Promise<void>;
   t: (text: string) => string;
   hasTranslation: (text: string) => boolean;
+}
+
+export interface VocoderProviderServerProps {
+  children: React.ReactNode;
+  locale?: string;
+  translations?: Record<string, string>;
 }
 
 export interface VocoderProviderProps {
@@ -38,6 +46,15 @@ export interface VocoderProviderProps {
    * @example Next.js Pages: context.req.headers.cookie
    */
   cookies?: string;
+  /**
+   * Automatically apply `dir` and `lang` attributes to `document.documentElement`
+   * when the locale changes. Enables RTL layout for Arabic, Hebrew, etc. via CSS
+   * frameworks that respond to `[dir="rtl"]` (Tailwind `rtl:` variants, etc.).
+   *
+   * On by default — set to false only if you manage document direction yourself.
+   * @default true
+   */
+  applyDir?: boolean;
 }
 
 export interface TProps {

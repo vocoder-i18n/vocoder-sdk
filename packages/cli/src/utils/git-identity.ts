@@ -3,13 +3,38 @@ import { relative, resolve } from 'path';
 
 export type GitRepositoryIdentity = {
   repoCanonical: string;
-  repoScopePath: string;
+  repoAppDir: string;
 };
 
 export type GitContext = {
   identity: GitRepositoryIdentity | null;
   warnings: string[];
 };
+
+const SHA_REGEX = /^[0-9a-f]{40}$/i;
+
+/**
+ * Detect the current commit SHA from CI env vars or git.
+ * Must produce the same result as detectCommitSha() in @vocoder/unplugin
+ * so fingerprints computed by CLI sync and unplugin build match.
+ */
+export function detectCommitSha(): string | null {
+  if (process.env.VOCODER_COMMIT_SHA && SHA_REGEX.test(process.env.VOCODER_COMMIT_SHA)) {
+    return process.env.VOCODER_COMMIT_SHA;
+  }
+
+  const knownSha =
+    process.env.GITHUB_SHA ||
+    process.env.VERCEL_GIT_COMMIT_SHA ||
+    process.env.CI_COMMIT_SHA ||
+    process.env.BITBUCKET_COMMIT ||
+    process.env.CIRCLE_SHA1 ||
+    process.env.RENDER_GIT_COMMIT;
+
+  if (knownSha && SHA_REGEX.test(knownSha)) return knownSha;
+
+  return safeExec('git rev-parse HEAD');
+}
 
 function safeExec(command: string): string | null {
   try {
@@ -98,20 +123,20 @@ export function resolveGitRepositoryIdentity(): GitRepositoryIdentity | null {
 
   const repositoryRoot = safeExec('git rev-parse --show-toplevel');
   const currentDirectory = process.cwd();
-  let repoScopePath = '';
+  let repoAppDir = '';
   if (repositoryRoot) {
     const relativePath = relative(resolve(repositoryRoot), resolve(currentDirectory))
       .replace(/\\/g, '/')
       .trim();
 
     if (relativePath && relativePath !== '.' && !relativePath.startsWith('..')) {
-      repoScopePath = relativePath;
+      repoAppDir = relativePath;
     }
   }
 
   return {
     repoCanonical: toCanonical(parsed.host, parsed.ownerRepoPath),
-    repoScopePath,
+    repoAppDir,
   };
 }
 

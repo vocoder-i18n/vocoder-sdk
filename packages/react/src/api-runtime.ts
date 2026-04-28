@@ -14,12 +14,21 @@ declare const __VOCODER_FINGERPRINT__: string | undefined;
 declare const __VOCODER_API_URL__: string | undefined;
 declare const __VOCODER_BUILD_TS__: number | undefined;
 
+// Define constants injected by @vocoder/unplugin (Vite, webpack).
+// Fall back to process.env.* for Next.js Turbopack which doesn't apply DefinePlugin.
+// Use || null so empty string (DefinePlugin default before buildStart runs)
+// falls through to the process.env.* injected via next.config.js env field.
 const fingerprint =
-  typeof __VOCODER_FINGERPRINT__ !== 'undefined' ? __VOCODER_FINGERPRINT__ : null;
+  (typeof __VOCODER_FINGERPRINT__ !== 'undefined' ? __VOCODER_FINGERPRINT__ || null : null) ??
+  (typeof process !== 'undefined' ? process.env.VOCODER_FINGERPRINT || null : null);
 const apiUrl =
-  typeof __VOCODER_API_URL__ !== 'undefined' ? __VOCODER_API_URL__ : null;
+  (typeof __VOCODER_API_URL__ !== 'undefined' ? __VOCODER_API_URL__ || null : null) ??
+  (typeof process !== 'undefined' ? process.env.VOCODER_API_URL || null : null);
 const buildTs =
-  typeof __VOCODER_BUILD_TS__ !== 'undefined' ? __VOCODER_BUILD_TS__ : null;
+  (typeof __VOCODER_BUILD_TS__ !== 'undefined' ? __VOCODER_BUILD_TS__ || null : null) ??
+  (typeof process !== 'undefined' && process.env.VOCODER_BUILD_TS
+    ? Number(process.env.VOCODER_BUILD_TS)
+    : null);
 
 /** Whether the build-time constants are available for background refresh. */
 export const isRefreshAvailable =

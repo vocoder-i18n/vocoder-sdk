@@ -19,7 +19,7 @@ import { getMergedConfig, validateLocalConfig } from '../utils/config.js';
 import { StringExtractor } from '../utils/extract.js';
 import chalk from 'chalk';
 import { join } from 'path';
-import { resolveGitRepositoryIdentity } from '../utils/git-identity.js';
+import { detectCommitSha, resolveGitRepositoryIdentity } from '../utils/git-identity.js';
 
 type LocaleMetadataMap = Record<string, { nativeName: string; dir?: 'rtl' }>;
 type TranslationMap = Record<string, Record<string, string>>;
@@ -529,6 +529,7 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
         'Could not detect git remote origin. Sync will continue without repo metadata.',
       );
     }
+    const commitSha = detectCommitSha() ?? undefined;
 
     const stringEntries = buildStringEntries(extractedStrings);
     const sourceStrings = stringEntries.map((entry) => entry.text);
@@ -561,7 +562,7 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
         requestedMaxWaitMs: waitTimeoutMs,
         clientRunId: randomUUID(),
       },
-      repoIdentity ?? undefined,
+      repoIdentity ? { ...repoIdentity, commitSha } : { commitSha },
     );
 
     spinner.stop(`Submitted to API - Batch ${chalk.cyan(batchResponse.batchId)}`);

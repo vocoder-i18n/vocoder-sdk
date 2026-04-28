@@ -448,11 +448,35 @@ export async function init(options: InitOptions = {}): Promise<number> {
         appDir: identity.repoAppDir,
       });
 
-      // Exact match: this scope is already configured — confirm and exit.
+      // Exact match: this scope is already configured.
       if (lookup.exactMatch) {
         const { exactMatch } = lookup;
         p.log.success(`Project: ${chalk.bold(exactMatch.projectName)}`);
         p.log.info(`Branches: ${chalk.cyan((exactMatch.targetBranches ?? ['main']).join(', '))}`);
+
+        const needsKey = await p.confirm({
+          message: 'Need to regenerate your API key?',
+        });
+
+        if (!p.isCancel(needsKey) && needsKey) {
+          // Auth required — run sign-in flow before generating key
+          const anonApi = new VocoderAPI({ apiUrl, apiKey: '' });
+          const authResult = await runAuthFlow(anonApi, options, /* reauth */ true);
+          if (!authResult) return 1;
+
+          const spinner = p.spinner();
+          spinner.start('Generating new API key...');
+          try {
+            const { apiKey } = await anonApi.regenerateProjectApiKey(authResult.token, exactMatch.projectId);
+            spinner.stop('New API key generated');
+            printMcpSetup(apiKey);
+          } catch {
+            spinner.stop('Failed to generate key');
+            p.log.error('Could not generate API key. Try again or generate one from the dashboard.');
+            return 1;
+          }
+        }
+
         p.outro("Vocoder is already set up for this repository.");
         return 0;
       }

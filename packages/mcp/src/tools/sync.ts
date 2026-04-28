@@ -1,4 +1,4 @@
-import { StringExtractor } from '@vocoder/cli/lib';
+import { StringExtractor } from '@vocoder/extractor';
 import { detectBranch, detectCommitSha, detectRepoIdentity } from '@vocoder/unplugin';
 import type { VocoderClient } from '../client.js';
 

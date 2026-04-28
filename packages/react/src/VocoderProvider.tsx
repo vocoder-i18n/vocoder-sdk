@@ -102,6 +102,7 @@ function buildHydrationOnServer(
 export const VocoderProvider: React.FC<VocoderProviderProps> = ({
   children,
   cookies: cookieString,
+  applyDir = true,
 }) => {
   // ── Hydration (computed once, never changes) ─────────────────────
   const [hydration] = useState(() => {
@@ -224,6 +225,14 @@ export const VocoderProvider: React.FC<VocoderProviderProps> = ({
     _setGlobalTranslations(translations);
   }, [locale, translations]);
 
+  // ── Apply dir/lang to document.documentElement (opt-in) ──────────
+  useEffect(() => {
+    if (!applyDir || typeof document === 'undefined') return;
+    const dir = locales?.[locale]?.dir ?? 'ltr';
+    document.documentElement.dir = dir;
+    document.documentElement.lang = locale;
+  }, [applyDir, locale, locales]);
+
   // ── Background refresh ───────────────────────────────────────────
   useEffect(() => {
     if (!isRefreshAvailable || !isInitialized || !locale) return;
@@ -301,6 +310,7 @@ export const VocoderProvider: React.FC<VocoderProviderProps> = ({
     getDisplayName,
     isReady,
     locale,
+    dir: (locales?.[locale]?.dir ?? 'ltr') as 'ltr' | 'rtl',
     locales,
     setLocale,
     t,

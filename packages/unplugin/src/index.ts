@@ -2,22 +2,19 @@ import { createUnplugin } from 'unplugin';
 import type { VocoderPluginOptions, VocoderTranslationData } from './types';
 import {
   computeFingerprint,
-  detectAppDir,
-  detectBranch,
-  detectCommitSha,
-  detectRepoIdentity,
+  extractSourceTexts,
   fetchTranslations,
   loadEnvFile,
 } from './core';
 
 export type { VocoderPluginOptions, VocoderTranslationData };
-export { computeFingerprint, detectAppDir, detectBranch, detectCommitSha, detectRepoIdentity } from './core';
+export { computeFingerprint, detectBranch, detectCommitSha, detectRepoIdentity } from './core';
 
 const VIRTUAL_PREFIX = 'virtual:vocoder/';
 const STRIPPED_PREFIX = 'vocoder/';
 const RESOLVED_PREFIX = '\0virtual:vocoder/';
 
-export const unplugin = createUnplugin((options: VocoderPluginOptions | undefined = {}) => {
+export const unplugin = createUnplugin((_options: VocoderPluginOptions | undefined = {}) => {
   // Load .env before reading env vars — build plugins run before bundler's own .env loading
   loadEnvFile();
 
@@ -30,8 +27,7 @@ export const unplugin = createUnplugin((options: VocoderPluginOptions | undefine
   function init(): Promise<void> {
     if (initPromise) return initPromise;
     initPromise = (async () => {
-      // VOCODER_FINGERPRINT allows manual override for Docker builds or
-      // environments where git context and CI env vars are both unavailable.
+      // VOCODER_FINGERPRINT: manual escape hatch for unusual environments.
       if (process.env.VOCODER_FINGERPRINT) {
         fingerprint = process.env.VOCODER_FINGERPRINT;
         console.log(`[vocoder] Using fingerprint from VOCODER_FINGERPRINT env var → ${fingerprint}`);
@@ -39,19 +35,18 @@ export const unplugin = createUnplugin((options: VocoderPluginOptions | undefine
         return;
       }
 
-      const appDir = detectAppDir(options?.appDir);
-      const commitSha = detectCommitSha();
-      const branch = detectBranch();
+      const apiKey = process.env.VOCODER_API_KEY ?? '';
+      const shortCode = apiKey.startsWith('vcp_') ? apiKey.slice(4, 14) : null;
 
-      if (commitSha) {
-        fingerprint = computeFingerprint(appDir, commitSha);
-        console.log(`[vocoder]${appDir ? ` (${appDir})` : ''} @ ${commitSha.slice(0, 8)} → ${fingerprint}`);
-      } else {
-        // Local dev fallback: no git SHA available, use branch name.
-        console.warn('[vocoder] Could not detect commit SHA — using branch name for fingerprint (local dev mode).');
-        fingerprint = computeFingerprint(appDir, branch);
-        console.log(`[vocoder]${appDir ? ` (${appDir})` : ''} @ ${branch} (branch) → ${fingerprint}`);
+      if (!shortCode) {
+        console.warn('[vocoder] VOCODER_API_KEY missing or not a project key (vcp_...). Translations not loaded.');
+        data = { config: { sourceLocale: '', targetLocales: [], locales: {} }, translations: {}, updatedAt: null };
+        return;
       }
+
+      const sourceTexts = await extractSourceTexts(process.cwd());
+      fingerprint = computeFingerprint(shortCode, sourceTexts);
+      console.log(`[vocoder] ${sourceTexts.length} string(s) → fingerprint ${fingerprint}`);
 
       data = await fetchTranslations(fingerprint, apiUrl);
 

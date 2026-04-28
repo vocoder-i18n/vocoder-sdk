@@ -31,7 +31,8 @@ export interface InitOptions {
 
 export interface RepoIdentityPayload {
   repoCanonical?: string;
-  repoScopePath?: string;
+  repoAppDir?: string;
+  commitSha?: string;
 }
 
 // Local configuration (from env vars)
@@ -57,14 +58,7 @@ export interface ProjectConfig extends LocalConfig, APIProjectConfig {
   timeout: number;
 }
 
-export interface ExtractedString {
-  key: string;
-  text: string;
-  file: string;
-  line: number;
-  context?: string;
-  formality?: 'formal' | 'informal' | 'neutral' | 'auto';
-}
+export type { ExtractedString } from '@vocoder/extractor';
 
 export interface TranslationStringEntry {
   key: string;

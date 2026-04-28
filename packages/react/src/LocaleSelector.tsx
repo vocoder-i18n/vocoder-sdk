@@ -89,7 +89,7 @@ export const LocaleSelector: React.FC<LocaleSelectorProps> = ({
   className = '',
   iconSize = 20,
   locales: localesProp,
-  sortBy = 'source',
+  sortBy = 'native',
 }) => {
   const { locale, setLocale, availableLocales, getDisplayName, locales: localesFromContext } = useVocoder();
 
@@ -203,7 +203,7 @@ export const LocaleSelector: React.FC<LocaleSelectorProps> = ({
   };
 
   const itemStyles: React.CSSProperties = {
-    padding: '10px 12px',
+    padding: '7px 12px',
     cursor: 'pointer',
     borderRadius: '4px',
     fontSize: '14px',
@@ -264,24 +264,7 @@ export const LocaleSelector: React.FC<LocaleSelectorProps> = ({
                 >
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <span>
-                      {locales?.[lang]
-                        ? (() => {
-                            // Check if regional variant (has hyphen: pt-BR, en-US, etc.)
-                            const isRegional = lang.includes('-');
-                            const displayName = getDisplayName(lang);
-                            const nativeName = locales[lang]!.nativeName;
-
-                            if (isRegional) {
-                              // Regional: Just show display name (already includes region)
-                              return displayName;
-                            } else {
-                              // Base language: Show display + native if different
-                              return nativeName && nativeName !== displayName
-                                ? `${displayName} (${nativeName})`
-                                : displayName;
-                            }
-                          })()
-                        : lang.toUpperCase()}
+                      {locales?.[lang]?.nativeName || lang}
                     </span>
                     {isActive && (
                       <span style={{ marginLeft: '8px', fontSize: '12px' }}>✓</span>
