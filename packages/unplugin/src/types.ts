@@ -1,13 +1,12 @@
 // Reserved for future plugin options.
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface VocoderPluginOptions {}
 
 export interface VocoderTranslationData {
-  config: {
-    sourceLocale: string;
-    targetLocales: string[];
-    locales: Record<string, { nativeName: string; dir?: string }>;
-  };
-  translations: Record<string, Record<string, string>>;
-  updatedAt: string | null;
+	config: {
+		sourceLocale: string;
+		targetLocales: string[];
+		locales: Record<string, { nativeName: string; dir?: string }>;
+	};
+	translations: Record<string, Record<string, string>>;
+	updatedAt: string | null;
 }

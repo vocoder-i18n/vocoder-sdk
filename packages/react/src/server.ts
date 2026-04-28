@@ -1,5 +1,5 @@
-export { VocoderProviderServer } from './VocoderProviderServer';
-export type { VocoderProviderServerProps } from './types';
+export type { VocoderProviderServerProps } from "./types";
+export { VocoderProviderServer } from "./VocoderProviderServer";
 
 /**
  * Returns the text direction for a given locale using the locale metadata
@@ -20,8 +20,8 @@ export type { VocoderProviderServerProps } from './types';
  * ```
  */
 export function getLocaleDir(
-  locale: string,
-  locales?: Record<string, { dir?: string }>,
-): 'ltr' | 'rtl' {
-  return (locales?.[locale]?.dir ?? 'ltr') as 'ltr' | 'rtl';
+	locale: string,
+	locales?: Record<string, { dir?: string }>,
+): "ltr" | "rtl" {
+	return (locales?.[locale]?.dir ?? "ltr") as "ltr" | "rtl";
 }

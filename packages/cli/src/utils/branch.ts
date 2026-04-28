@@ -1,9 +1,9 @@
-import { execSync } from 'child_process';
+import { execSync } from "node:child_process";
 
 const REGEX_SPECIAL_CHARS = /[.+?^${}()|[\]\\]/g;
 
 function escapeRegexChar(value: string): string {
-  return value.replace(REGEX_SPECIAL_CHARS, '\\$&');
+	return value.replace(REGEX_SPECIAL_CHARS, "\\$&");
 }
 
 /**
@@ -16,40 +16,40 @@ function escapeRegexChar(value: string): string {
  * @returns The current branch name
  */
 export function detectBranch(override?: string): string {
-  // 1. Explicit override (from --branch flag)
-  if (override) {
-    return override;
-  }
+	// 1. Explicit override (from --branch flag)
+	if (override) {
+		return override;
+	}
 
-  // 2. CI environment variables
-  const envBranch =
-    process.env.GITHUB_HEAD_REF ||         // GitHub Actions (PR source branch)
-    process.env.GITHUB_REF_NAME ||         // GitHub Actions (push)
-    process.env.VERCEL_GIT_COMMIT_REF ||   // Vercel
-    process.env.BRANCH ||                  // Netlify
-    process.env.CF_PAGES_BRANCH ||         // Cloudflare Pages
-    process.env.CI_COMMIT_REF_NAME ||      // GitLab CI
-    process.env.BITBUCKET_BRANCH ||        // Bitbucket Pipelines
-    process.env.CIRCLE_BRANCH ||           // CircleCI
-    process.env.RENDER_GIT_BRANCH;         // Render
+	// 2. CI environment variables
+	const envBranch =
+		process.env.GITHUB_HEAD_REF || // GitHub Actions (PR source branch)
+		process.env.GITHUB_REF_NAME || // GitHub Actions (push)
+		process.env.VERCEL_GIT_COMMIT_REF || // Vercel
+		process.env.BRANCH || // Netlify
+		process.env.CF_PAGES_BRANCH || // Cloudflare Pages
+		process.env.CI_COMMIT_REF_NAME || // GitLab CI
+		process.env.BITBUCKET_BRANCH || // Bitbucket Pipelines
+		process.env.CIRCLE_BRANCH || // CircleCI
+		process.env.RENDER_GIT_BRANCH; // Render
 
-  if (envBranch) {
-    return envBranch;
-  }
+	if (envBranch) {
+		return envBranch;
+	}
 
-  // 3. Git command (local development)
-  try {
-    const branch = execSync('git rev-parse --abbrev-ref HEAD', {
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'ignore'],
-    }).trim();
+	// 3. Git command (local development)
+	try {
+		const branch = execSync("git rev-parse --abbrev-ref HEAD", {
+			encoding: "utf-8",
+			stdio: ["pipe", "pipe", "ignore"],
+		}).trim();
 
-    return branch;
-  } catch (error) {
-    throw new Error(
-      'Failed to detect git branch. Make sure you are in a git repository or set the --branch flag.',
-    );
-  }
+		return branch;
+	} catch (_error) {
+		throw new Error(
+			"Failed to detect git branch. Make sure you are in a git repository or set the --branch flag.",
+		);
+	}
 }
 
 /**
@@ -60,41 +60,41 @@ export function detectBranch(override?: string): string {
  * @returns True if the branch should trigger translations
  */
 export function isTargetBranch(
-  currentBranch: string,
-  targetBranches: string[],
+	currentBranch: string,
+	targetBranches: string[],
 ): boolean {
-  return targetBranches.some((pattern) =>
-    matchBranchPattern(currentBranch, pattern),
-  );
+	return targetBranches.some((pattern) =>
+		matchBranchPattern(currentBranch, pattern),
+	);
 }
 
 export function matchBranchPattern(branch: string, pattern: string): boolean {
-  const trimmedPattern = pattern.trim();
-  if (!trimmedPattern) {
-    return false;
-  }
+	const trimmedPattern = pattern.trim();
+	if (!trimmedPattern) {
+		return false;
+	}
 
-  let regexSource = '^';
-  for (let i = 0; i < trimmedPattern.length; i += 1) {
-    const char = trimmedPattern[i];
-    if (!char) {
-      continue;
-    }
+	let regexSource = "^";
+	for (let i = 0; i < trimmedPattern.length; i += 1) {
+		const char = trimmedPattern[i];
+		if (!char) {
+			continue;
+		}
 
-    if (char === '*') {
-      const next = trimmedPattern[i + 1];
-      if (next === '*') {
-        regexSource += '.*';
-        i += 1;
-      } else {
-        regexSource += '[^/]*';
-      }
-      continue;
-    }
+		if (char === "*") {
+			const next = trimmedPattern[i + 1];
+			if (next === "*") {
+				regexSource += ".*";
+				i += 1;
+			} else {
+				regexSource += "[^/]*";
+			}
+			continue;
+		}
 
-    regexSource += escapeRegexChar(char);
-  }
-  regexSource += '$';
+		regexSource += escapeRegexChar(char);
+	}
+	regexSource += "$";
 
-  return new RegExp(regexSource).test(branch);
+	return new RegExp(regexSource).test(branch);
 }

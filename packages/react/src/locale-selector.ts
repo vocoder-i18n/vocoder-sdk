@@ -9,5 +9,5 @@
  * language switcher UI.
  */
 
-export { LocaleSelector } from './LocaleSelector';
-export type { LocaleSelectorProps } from './types';
+export { LocaleSelector } from "./LocaleSelector";
+export type { LocaleSelectorProps } from "./types";

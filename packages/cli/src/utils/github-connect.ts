@@ -1,64 +1,64 @@
-import * as p from '@clack/prompts';
-import chalk from 'chalk';
-import { spawn } from 'node:child_process';
-import type { VocoderAPI } from './api.js';
-import { startCallbackServer } from './local-server.js';
+import { spawn } from "node:child_process";
+import * as p from "@clack/prompts";
+import chalk from "chalk";
+import type { VocoderAPI } from "./api.js";
+import { startCallbackServer } from "./local-server.js";
 
 async function tryOpenBrowser(url: string): Promise<boolean> {
-  if (!process.stdout.isTTY || process.env.CI === 'true') {
-    return false;
-  }
+	if (!process.stdout.isTTY || process.env.CI === "true") {
+		return false;
+	}
 
-  const platform = process.platform;
-  let command: string;
-  let args: string[];
+	const platform = process.platform;
+	let command: string;
+	let args: string[];
 
-  if (platform === 'darwin') {
-    command = 'open';
-    args = [url];
-  } else if (platform === 'win32') {
-    command = 'rundll32';
-    args = ['url.dll,FileProtocolHandler', url];
-  } else {
-    command = 'xdg-open';
-    args = [url];
-  }
+	if (platform === "darwin") {
+		command = "open";
+		args = [url];
+	} else if (platform === "win32") {
+		command = "rundll32";
+		args = ["url.dll,FileProtocolHandler", url];
+	} else {
+		command = "xdg-open";
+		args = [url];
+	}
 
-  return new Promise<boolean>((resolve) => {
-    try {
-      const child = spawn(command, args, {
-        detached: true,
-        stdio: 'ignore',
-        windowsHide: true,
-      });
+	return new Promise<boolean>((resolve) => {
+		try {
+			const child = spawn(command, args, {
+				detached: true,
+				stdio: "ignore",
+				windowsHide: true,
+			});
 
-      let settled = false;
-      child.once('spawn', () => {
-        if (settled) return;
-        settled = true;
-        child.unref();
-        resolve(true);
-      });
-      child.once('error', () => {
-        if (settled) return;
-        settled = true;
-        resolve(false);
-      });
-      setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        resolve(false);
-      }, 300);
-    } catch {
-      resolve(false);
-    }
-  });
+			let settled = false;
+			child.once("spawn", () => {
+				if (settled) return;
+				settled = true;
+				child.unref();
+				resolve(true);
+			});
+			child.once("error", () => {
+				if (settled) return;
+				settled = true;
+				resolve(false);
+			});
+			setTimeout(() => {
+				if (settled) return;
+				settled = true;
+				resolve(false);
+			}, 300);
+		} catch {
+			resolve(false);
+		}
+	});
 }
 
 export interface GitHubConnectResult {
-  organizationId: string;
-  organizationName: string;
-  connectionLabel: string;
+	organizationId: string;
+	organizationName: string;
+	connectionLabel: string;
 }
 
 /**
@@ -68,98 +68,116 @@ export interface GitHubConnectResult {
  * Returns `null` if the user cancelled or an error occurred.
  */
 export async function runGitHubInstallFlow(params: {
-  api: VocoderAPI;
-  userToken: string;
-  organizationId?: string;
-  yes?: boolean;
+	api: VocoderAPI;
+	userToken: string;
+	organizationId?: string;
+	yes?: boolean;
 }): Promise<GitHubConnectResult | null> {
-  // Try to start a local callback server for instant notification
-  let server: Awaited<ReturnType<typeof startCallbackServer>> | null = null;
-  try {
-    server = await startCallbackServer();
-  } catch {
-    // Fall through — the user can re-run if something goes wrong
-  }
+	// Try to start a local callback server for instant notification
+	let server: Awaited<ReturnType<typeof startCallbackServer>> | null = null;
+	try {
+		server = await startCallbackServer();
+	} catch {
+		// Fall through — the user can re-run if something goes wrong
+	}
 
-  const { installUrl } = await params.api.startCliGitHubInstall(params.userToken, {
-    organizationId: params.organizationId,
-    callbackPort: server?.port,
-  });
+	const { installUrl } = await params.api.startCliGitHubInstall(
+		params.userToken,
+		{
+			organizationId: params.organizationId,
+			callbackPort: server?.port,
+		},
+	);
 
-  p.log.info('Opening GitHub to install the Vocoder App...');
-  p.note(installUrl, 'Install URL');
+	p.log.info("Opening GitHub to install the Vocoder App...");
+	p.note(installUrl, "Install URL");
 
-  if (process.stdin.isTTY && process.stdout.isTTY && process.env.CI !== 'true') {
-    const shouldOpen = params.yes
-      ? true
-      : await p.confirm({ message: 'Open in your browser?' });
+	if (
+		process.stdin.isTTY &&
+		process.stdout.isTTY &&
+		process.env.CI !== "true"
+	) {
+		const shouldOpen = params.yes
+			? true
+			: await p.confirm({ message: "Open in your browser?" });
 
-    if (p.isCancel(shouldOpen)) {
-      server?.close();
-      return null;
-    }
+		if (p.isCancel(shouldOpen)) {
+			server?.close();
+			return null;
+		}
 
-    if (shouldOpen) {
-      const opened = await tryOpenBrowser(installUrl);
-      if (!opened) {
-        p.log.info('Could not open a browser automatically. Use the URL above.');
-      }
-    }
-  }
+		if (shouldOpen) {
+			const opened = await tryOpenBrowser(installUrl);
+			if (!opened) {
+				p.log.info(
+					"Could not open a browser automatically. Use the URL above.",
+				);
+			}
+		}
+	}
 
-  const connectSpinner = p.spinner();
-  connectSpinner.start('Waiting for GitHub App installation...');
+	const connectSpinner = p.spinner();
+	connectSpinner.start("Waiting for GitHub App installation...");
 
-  if (server) {
-    try {
-      const params_timeout = 15 * 60 * 1000; // 15 minutes
-      const callbackParams = await Promise.race([
-        server.waitForCallback(),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), params_timeout)),
-      ]);
+	if (server) {
+		try {
+			const params_timeout = 15 * 60 * 1000; // 15 minutes
+			const callbackParams = await Promise.race([
+				server.waitForCallback(),
+				new Promise<null>((resolve) =>
+					setTimeout(() => resolve(null), params_timeout),
+				),
+			]);
 
-      server.close();
+			server.close();
 
-      if (!callbackParams) {
-        connectSpinner.stop('GitHub App installation timed out');
-        p.log.error('The installation flow timed out. Run `vocoder init` again.');
-        return null;
-      }
+			if (!callbackParams) {
+				connectSpinner.stop("GitHub App installation timed out");
+				p.log.error(
+					"The installation flow timed out. Run `vocoder init` again.",
+				);
+				return null;
+			}
 
-      if (callbackParams.error) {
-        connectSpinner.stop('GitHub App installation failed');
-        p.log.error(callbackParams.error);
-        return null;
-      }
+			if (callbackParams.error) {
+				connectSpinner.stop("GitHub App installation failed");
+				p.log.error(callbackParams.error);
+				return null;
+			}
 
-      const { organizationId, connectionLabel, workspace_created } = callbackParams;
+			const { organizationId, connectionLabel, workspace_created } =
+				callbackParams;
 
-      if (!organizationId || !connectionLabel) {
-        connectSpinner.stop('GitHub App installation incomplete');
-        p.log.error('Missing organization or connection data from callback.');
-        return null;
-      }
+			if (!organizationId || !connectionLabel) {
+				connectSpinner.stop("GitHub App installation incomplete");
+				p.log.error("Missing organization or connection data from callback.");
+				return null;
+			}
 
-      connectSpinner.stop(`Connected to GitHub as ${chalk.bold(connectionLabel)}`);
+			connectSpinner.stop(
+				`Connected to GitHub as ${chalk.bold(connectionLabel)}`,
+			);
 
-      // Fetch the org name
-      const orgName = workspace_created ? connectionLabel : organizationId;
-      return {
-        organizationId,
-        organizationName: orgName,
-        connectionLabel,
-      };
-    } catch {
-      server.close();
-      connectSpinner.stop('GitHub App installation failed');
-      return null;
-    }
-  }
+			// Fetch the org name
+			const orgName = workspace_created ? connectionLabel : organizationId;
+			return {
+				organizationId,
+				organizationName: orgName,
+				connectionLabel,
+			};
+		} catch {
+			server.close();
+			connectSpinner.stop("GitHub App installation failed");
+			return null;
+		}
+	}
 
-  // No local server — there's no polling fallback for install; just wait
-  connectSpinner.stop('Could not detect GitHub App installation automatically');
-  p.log.warn('Complete the installation in your browser, then run `vocoder init` again.');
-  return null;
+	// No local server — there's no polling fallback for install; just wait
+	connectSpinner.stop("Could not detect GitHub App installation automatically");
+	p.log.warn(
+		"Complete the installation in your browser, then run `vocoder init` again.",
+	);
+	return null;
 }
 
 /**
@@ -167,94 +185,102 @@ export async function runGitHubInstallFlow(params: {
  * Returns the list of installations with conflict labels, or null on cancellation/error.
  */
 export async function runGitHubDiscoveryFlow(params: {
-  api: VocoderAPI;
-  userToken: string;
-  organizationId?: string;
-  yes?: boolean;
+	api: VocoderAPI;
+	userToken: string;
+	organizationId?: string;
+	yes?: boolean;
 }): Promise<Array<{
-  installationId: number;
-  accountLogin: string;
-  accountType: string;
-  isSuspended: boolean;
-  conflictLabel: string | null;
+	installationId: number;
+	accountLogin: string;
+	accountType: string;
+	isSuspended: boolean;
+	conflictLabel: string | null;
 }> | null> {
-  // Try local callback server
-  let server: Awaited<ReturnType<typeof startCallbackServer>> | null = null;
-  try {
-    server = await startCallbackServer();
-  } catch {
-    // Fall through
-  }
+	// Try local callback server
+	let server: Awaited<ReturnType<typeof startCallbackServer>> | null = null;
+	try {
+		server = await startCallbackServer();
+	} catch {
+		// Fall through
+	}
 
-  const { oauthUrl } = await params.api.startCliGitHubOAuth(params.userToken, {
-    organizationId: params.organizationId,
-    callbackPort: server?.port,
-  });
+	const { oauthUrl } = await params.api.startCliGitHubOAuth(params.userToken, {
+		organizationId: params.organizationId,
+		callbackPort: server?.port,
+	});
 
-  p.log.info('Opening GitHub to authorize your account...');
-  p.note('Complete authorization in your browser.');
+	p.log.info("Opening GitHub to authorize your account...");
+	p.note("Complete authorization in your browser.");
 
-  if (process.stdin.isTTY && process.stdout.isTTY && process.env.CI !== 'true') {
-    const shouldOpen = params.yes
-      ? true
-      : await p.confirm({ message: 'Open in your browser?' });
+	if (
+		process.stdin.isTTY &&
+		process.stdout.isTTY &&
+		process.env.CI !== "true"
+	) {
+		const shouldOpen = params.yes
+			? true
+			: await p.confirm({ message: "Open in your browser?" });
 
-    if (p.isCancel(shouldOpen)) {
-      server?.close();
-      return null;
-    }
+		if (p.isCancel(shouldOpen)) {
+			server?.close();
+			return null;
+		}
 
-    if (shouldOpen) {
-      const opened = await tryOpenBrowser(oauthUrl);
-      if (!opened) {
-        p.log.info(`Could not open browser automatically. Visit: ${oauthUrl}`);
-      }
-    }
-  }
+		if (shouldOpen) {
+			const opened = await tryOpenBrowser(oauthUrl);
+			if (!opened) {
+				p.log.info(`Could not open browser automatically. Visit: ${oauthUrl}`);
+			}
+		}
+	}
 
-  const oauthSpinner = p.spinner();
-  oauthSpinner.start('Waiting for GitHub authorization...');
+	const oauthSpinner = p.spinner();
+	oauthSpinner.start("Waiting for GitHub authorization...");
 
-  if (server) {
-    try {
-      const timeoutMs = 10 * 60 * 1000;
-      const callbackParams = await Promise.race([
-        server.waitForCallback(),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
-      ]);
+	if (server) {
+		try {
+			const timeoutMs = 10 * 60 * 1000;
+			const callbackParams = await Promise.race([
+				server.waitForCallback(),
+				new Promise<null>((resolve) =>
+					setTimeout(() => resolve(null), timeoutMs),
+				),
+			]);
 
-      server.close();
+			server.close();
 
-      if (!callbackParams) {
-        oauthSpinner.stop('GitHub authorization timed out');
-        return null;
-      }
+			if (!callbackParams) {
+				oauthSpinner.stop("GitHub authorization timed out");
+				return null;
+			}
 
-      if (callbackParams.error) {
-        oauthSpinner.stop('GitHub authorization failed');
-        p.log.error(callbackParams.error);
-        return null;
-      }
-    } catch {
-      server.close();
-      oauthSpinner.stop('GitHub authorization failed');
-      return null;
-    }
-  }
+			if (callbackParams.error) {
+				oauthSpinner.stop("GitHub authorization failed");
+				p.log.error(callbackParams.error);
+				return null;
+			}
+		} catch {
+			server.close();
+			oauthSpinner.stop("GitHub authorization failed");
+			return null;
+		}
+	}
 
-  oauthSpinner.stop('GitHub account authorized');
+	oauthSpinner.stop("GitHub account authorized");
 
-  // Fetch discovery results
-  const discoveryResult = await params.api.getCliGitHubDiscovery(params.userToken);
-  return discoveryResult.installations;
+	// Fetch discovery results
+	const discoveryResult = await params.api.getCliGitHubDiscovery(
+		params.userToken,
+	);
+	return discoveryResult.installations;
 }
 
 type DiscoveredInstallation = {
-  installationId: number;
-  accountLogin: string;
-  accountType: string;
-  isSuspended: boolean;
-  conflictLabel: string | null;
+	installationId: number;
+	accountLogin: string;
+	accountType: string;
+	isSuspended: boolean;
+	conflictLabel: string | null;
 };
 
 /**
@@ -263,38 +289,39 @@ type DiscoveredInstallation = {
  * or null on cancellation.
  */
 export async function selectGitHubInstallation(
-  installations: DiscoveredInstallation[],
-  canInstallNew: boolean,
-): Promise<number | 'install_new' | null> {
-  type SelectValue = string;
+	installations: DiscoveredInstallation[],
+	canInstallNew: boolean,
+): Promise<number | "install_new" | null> {
+	type SelectValue = string;
 
-  const options: Array<{ value: SelectValue; label: string; hint?: string }> =
-    installations.map((inst) => ({
-      value: String(inst.installationId),
-      label: inst.accountLogin,
-      hint: [
-        inst.accountType === 'Organization' ? 'organization' : 'personal',
-        inst.conflictLabel ? `connected to ${inst.conflictLabel}` : '',
-        inst.isSuspended ? 'suspended' : '',
-      ]
-        .filter(Boolean)
-        .join(' · ') || undefined,
-    }));
+	const options: Array<{ value: SelectValue; label: string; hint?: string }> =
+		installations.map((inst) => ({
+			value: String(inst.installationId),
+			label: inst.accountLogin,
+			hint:
+				[
+					inst.accountType === "Organization" ? "organization" : "personal",
+					inst.conflictLabel ? `connected to ${inst.conflictLabel}` : "",
+					inst.isSuspended ? "suspended" : "",
+				]
+					.filter(Boolean)
+					.join(" · ") || undefined,
+		}));
 
-  if (canInstallNew) {
-    options.push({
-      value: 'install_new',
-      label: `Install on a new account ${chalk.dim('(creates a new personal workspace)')}`,
-    });
-  }
+	if (canInstallNew) {
+		options.push({
+			value: "install_new",
+			label: `Install on a new account ${chalk.dim("(creates a new personal workspace)")}`,
+		});
+	}
 
-  const selected = await p.select<SelectValue>({
-    message: 'Select a GitHub installation',
-    options,
-  });
+	const selected = await p.select<SelectValue>({
+		message: "Select a GitHub installation",
+		options,
+	});
 
-  if (p.isCancel(selected)) return null;
-  if (selected === 'install_new') return 'install_new';
+	if (p.isCancel(selected)) return null;
+	if (selected === "install_new") return "install_new";
 
-  return Number(selected);
+	return Number(selected);
 }

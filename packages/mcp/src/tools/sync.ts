@@ -1,103 +1,123 @@
-import { StringExtractor } from '@vocoder/extractor';
-import { detectBranch, detectCommitSha, detectRepoIdentity } from '@vocoder/unplugin';
-import type { VocoderClient } from '../client.js';
+import { StringExtractor } from "@vocoder/extractor";
+import {
+	detectBranch,
+	detectCommitSha,
+	detectRepoIdentity,
+} from "@vocoder/unplugin";
+import type { VocoderClient } from "../client.js";
 
 const DEFAULT_PATTERNS = [
-  'src/**/*.{tsx,jsx,ts,js}',
-  'app/**/*.{tsx,jsx,ts,js}',
-  'pages/**/*.{tsx,jsx,ts,js}',
-  'components/**/*.{tsx,jsx,ts,js}',
+	"src/**/*.{tsx,jsx,ts,js}",
+	"app/**/*.{tsx,jsx,ts,js}",
+	"pages/**/*.{tsx,jsx,ts,js}",
+	"components/**/*.{tsx,jsx,ts,js}",
 ];
 
 const POLL_INTERVAL_MS = 2000;
 const MAX_WAIT_MS = 60000;
 
 export interface SyncInput {
-  branch?: string;
-  force?: boolean;
-  mode?: 'auto' | 'required' | 'best-effort';
+	branch?: string;
+	force?: boolean;
+	mode?: "auto" | "required" | "best-effort";
 }
 
-export async function runSync(input: SyncInput, client: VocoderClient): Promise<string> {
-  const config = await client.getConfig();
+export async function runSync(
+	input: SyncInput,
+	client: VocoderClient,
+): Promise<string> {
+	const config = await client.getConfig();
 
-  if (config.targetLocales.length === 0) {
-    return 'No target locales configured. Add target locales to your project before syncing.';
-  }
+	if (config.targetLocales.length === 0) {
+		return "No target locales configured. Add target locales to your project before syncing.";
+	}
 
-  const branch = input.branch ?? detectBranch();
-  const commitSha = detectCommitSha() ?? undefined;
-  const identity = detectRepoIdentity();
+	const branch = input.branch ?? detectBranch();
+	const commitSha = detectCommitSha() ?? undefined;
+	const identity = detectRepoIdentity();
 
-  const extractor = new StringExtractor();
-  const strings = await extractor.extractFromProject(DEFAULT_PATTERNS);
+	const extractor = new StringExtractor();
+	const strings = await extractor.extractFromProject(DEFAULT_PATTERNS);
 
-  if (strings.length === 0) {
-    return 'No translatable strings found. Wrap strings with <T>text</T> or t("text") and try again.';
-  }
+	if (strings.length === 0) {
+		return 'No translatable strings found. Wrap strings with <T>text</T> or t("text") and try again.';
+	}
 
-  const response = await client.sync({
-    branch,
-    commitSha,
-    stringEntries: strings.map((s) => ({
-      key: s.key,
-      text: s.text,
-      ...(s.context ? { context: s.context } : {}),
-      ...(s.formality ? { formality: s.formality } : {}),
-    })),
-    targetLocales: config.targetLocales,
-    repoCanonical: identity?.repoCanonical,
-    repoAppDir: identity?.appDir || undefined,
-    requestedMode: input.mode ?? 'auto',
-  });
+	const response = await client.sync({
+		branch,
+		commitSha,
+		stringEntries: strings.map((s) => ({
+			key: s.key,
+			text: s.text,
+			...(s.context ? { context: s.context } : {}),
+			...(s.formality ? { formality: s.formality } : {}),
+		})),
+		targetLocales: config.targetLocales,
+		repoCanonical: identity?.repoCanonical,
+		repoAppDir: identity?.appDir || undefined,
+		requestedMode: input.mode ?? "auto",
+	});
 
-  if (response.status === 'UP_TO_DATE') {
-    return `Up to date — ${response.totalStrings} string(s), no changes detected.`;
-  }
+	if (response.status === "UP_TO_DATE") {
+		return `Up to date — ${response.totalStrings} string(s), no changes detected.`;
+	}
 
-  if (response.status === 'COMPLETED') {
-    return formatCompleted(response.newStrings, response.deletedStrings, response.totalStrings);
-  }
+	if (response.status === "COMPLETED") {
+		return formatCompleted(
+			response.newStrings,
+			response.deletedStrings,
+			response.totalStrings,
+		);
+	}
 
-  // PENDING — poll if mode is not best-effort
-  if (input.mode === 'best-effort') {
-    return `Sync queued. Batch ID: ${response.batchId}. ${response.newStrings} new string(s) submitted for translation.`;
-  }
+	// PENDING — poll if mode is not best-effort
+	if (input.mode === "best-effort") {
+		return `Sync queued. Batch ID: ${response.batchId}. ${response.newStrings} new string(s) submitted for translation.`;
+	}
 
-  return await pollSync(client, response.batchId, response.newStrings, response.totalStrings);
+	return await pollSync(
+		client,
+		response.batchId,
+		response.newStrings,
+		response.totalStrings,
+	);
 }
 
 async function pollSync(
-  client: VocoderClient,
-  batchId: string,
-  newStrings: number,
-  totalStrings: number,
+	client: VocoderClient,
+	batchId: string,
+	newStrings: number,
+	totalStrings: number,
 ): Promise<string> {
-  const deadline = Date.now() + MAX_WAIT_MS;
+	const deadline = Date.now() + MAX_WAIT_MS;
 
-  while (Date.now() < deadline) {
-    await sleep(POLL_INTERVAL_MS);
-    const status = await client.getSyncStatus(batchId);
+	while (Date.now() < deadline) {
+		await sleep(POLL_INTERVAL_MS);
+		const status = await client.getSyncStatus(batchId);
 
-    if (status.status === 'COMPLETED') {
-      return formatCompleted(newStrings, undefined, totalStrings);
-    }
+		if (status.status === "COMPLETED") {
+			return formatCompleted(newStrings, undefined, totalStrings);
+		}
 
-    if (status.status === 'FAILED') {
-      return `Translation failed: ${status.errorMessage ?? 'Unknown error'}. Batch ID: ${batchId}`;
-    }
-  }
+		if (status.status === "FAILED") {
+			return `Translation failed: ${status.errorMessage ?? "Unknown error"}. Batch ID: ${batchId}`;
+		}
+	}
 
-  return `Translations are in progress (batch: ${batchId}). Check back shortly — ${newStrings} string(s) queued for ${totalStrings} total.`;
+	return `Translations are in progress (batch: ${batchId}). Check back shortly — ${newStrings} string(s) queued for ${totalStrings} total.`;
 }
 
-function formatCompleted(newStrings: number, deletedStrings: number | undefined, totalStrings: number): string {
-  const parts = [`Sync complete.`, `${newStrings} new string(s) translated.`];
-  if (deletedStrings) parts.push(`${deletedStrings} string(s) removed.`);
-  parts.push(`${totalStrings} total string(s) in project.`);
-  return parts.join(' ');
+function formatCompleted(
+	newStrings: number,
+	deletedStrings: number | undefined,
+	totalStrings: number,
+): string {
+	const parts = [`Sync complete.`, `${newStrings} new string(s) translated.`];
+	if (deletedStrings) parts.push(`${deletedStrings} string(s) removed.`);
+	parts.push(`${totalStrings} total string(s) in project.`);
+	return parts.join(" ");
 }
 
 function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+	return new Promise((resolve) => setTimeout(resolve, ms));
 }

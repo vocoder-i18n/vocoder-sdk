@@ -1,5 +1,5 @@
-import { createContext } from 'react';
-import type { VocoderProviderServerProps } from './types';
+import { createContext } from "react";
+import type { VocoderProviderServerProps } from "./types";
 
 const VocoderContext = createContext<null>(null);
 
@@ -23,43 +23,58 @@ const VocoderContext = createContext<null>(null);
  * ```
  */
 export async function VocoderProviderServer({
-  children,
-  locale = 'en',
-  translations,
+	children,
+	locale = "en",
+	translations,
 }: VocoderProviderServerProps) {
-  const t = (text: string) => (translations as Record<string, string>)[text] || text;
+	const t = (text: string) =>
+		(translations as Record<string, string>)[text] || text;
 
-  const hasTranslation = (text: string) =>
-    Object.prototype.hasOwnProperty.call(translations, text);
+	const hasTranslation = (text: string) => Object.hasOwn(translations, text);
 
-  const getDisplayName = (targetLocale: string, viewingLocale?: string) => {
-    const vl = viewingLocale ?? locale;
-    try {
-      const dn = new Intl.DisplayNames([vl], { type: 'language' });
-      return dn.of(targetLocale) ?? targetLocale;
-    } catch {
-      return targetLocale;
-    }
-  };
+	const getDisplayName = (targetLocale: string, viewingLocale?: string) => {
+		const vl = viewingLocale ?? locale;
+		try {
+			const dn = new Intl.DisplayNames([vl], { type: "language" });
+			return dn.of(targetLocale) ?? targetLocale;
+		} catch {
+			return targetLocale;
+		}
+	};
 
-  const value = {
-    availableLocales: [locale],
-    getDisplayName,
-    isReady: true,
-    locale,
-    dir: getLocaleDir(locale),
-    setLocale: async () => {},
-    t,
-    hasTranslation,
-  };
+	const value = {
+		availableLocales: [locale],
+		getDisplayName,
+		isReady: true,
+		locale,
+		dir: getLocaleDir(locale),
+		setLocale: async () => {},
+		t,
+		hasTranslation,
+	};
 
-  return <VocoderContext.Provider value={value as any}>{children}</VocoderContext.Provider>;
+	return (
+		<VocoderContext.Provider value={value as any}>
+			{children}
+		</VocoderContext.Provider>
+	);
 }
 
 // Needed here to avoid circular import with server.ts
-const RTL_LANGUAGES = new Set(['ar', 'he', 'fa', 'ur', 'ps', 'sd', 'ug', 'yi', 'dv', 'ku']);
+const RTL_LANGUAGES = new Set([
+	"ar",
+	"he",
+	"fa",
+	"ur",
+	"ps",
+	"sd",
+	"ug",
+	"yi",
+	"dv",
+	"ku",
+]);
 
-function getLocaleDir(locale: string): 'ltr' | 'rtl' {
-  const lang = locale.split('-')[0]?.toLowerCase();
-  return lang && RTL_LANGUAGES.has(lang) ? 'rtl' : 'ltr';
+function getLocaleDir(locale: string): "ltr" | "rtl" {
+	const lang = locale.split("-")[0]?.toLowerCase();
+	return lang && RTL_LANGUAGES.has(lang) ? "rtl" : "ltr";
 }

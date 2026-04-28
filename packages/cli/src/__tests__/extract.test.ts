@@ -1,206 +1,212 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { writeFileSync, mkdtempSync, rmSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
-import { StringExtractor } from '../utils/extract.js';
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { StringExtractor } from "../utils/extract.js";
 
-describe('StringExtractor', () => {
-  let tempDir: string;
-  let extractor: StringExtractor;
+describe("StringExtractor", () => {
+	let tempDir: string;
+	let extractor: StringExtractor;
 
-  function createTestFile(filename: string, content: string): string {
-    tempDir = mkdtempSync(join(tmpdir(), 'vocoder-test-'));
-    const filePath = join(tempDir, filename);
-    writeFileSync(filePath, content, 'utf-8');
-    return filePath;
-  }
+	function createTestFile(filename: string, content: string): string {
+		tempDir = mkdtempSync(join(tmpdir(), "vocoder-test-"));
+		const filePath = join(tempDir, filename);
+		writeFileSync(filePath, content, "utf-8");
+		return filePath;
+	}
 
-  function cleanup() {
-    if (tempDir) {
-      rmSync(tempDir, { recursive: true, force: true });
-    }
-  }
+	function cleanup() {
+		if (tempDir) {
+			rmSync(tempDir, { recursive: true, force: true });
+		}
+	}
 
-  beforeEach(() => {
-    extractor = new StringExtractor();
-  });
+	beforeEach(() => {
+		extractor = new StringExtractor();
+	});
 
-  afterEach(() => {
-    cleanup();
-  });
+	afterEach(() => {
+		cleanup();
+	});
 
-  describe('JSX <T> component extraction', () => {
-    it('should extract simple text from <T> component', async () => {
-      const file = createTestFile(
-        'test.tsx',
-        `
+	describe("JSX <T> component extraction", () => {
+		it("should extract simple text from <T> component", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
         import { T } from '@vocoder/react';
 
         function Component() {
           return <T>Hello world</T>;
         }
       `,
-      );
+			);
 
-      const result = await extractor.extractFromProject(file);
+			const result = await extractor.extractFromProject(file);
 
-      expect(result).toHaveLength(1);
-      expect(result[0]!.text).toBe('Hello world');
-      expect(result[0]!.file).toBe(file);
-    });
+			expect(result).toHaveLength(1);
+			expect(result[0]!.text).toBe("Hello world");
+			expect(result[0]!.file).toBe(file);
+		});
 
-    it('should extract text with variables from <T> component', async () => {
-      const file = createTestFile(
-        'test.tsx',
-        `
+		it("should extract text with variables from <T> component", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
         import { T } from '@vocoder/react';
 
         function Component({ name }: { name: string }) {
           return <T>Hello {name}!</T>;
         }
       `,
-      );
+			);
 
-      const result = await extractor.extractFromProject(file);
+			const result = await extractor.extractFromProject(file);
 
-      expect(result).toHaveLength(1);
-      expect(result[0]!.text).toBe('Hello {name}!');
-    });
+			expect(result).toHaveLength(1);
+			expect(result[0]!.text).toBe("Hello {name}!");
+		});
 
-    it('should extract context and formality from <T> component', async () => {
-      const file = createTestFile(
-        'test.tsx',
-        `
+		it("should extract context and formality from <T> component", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
         import { T } from '@vocoder/react';
 
         function Component() {
           return <T context="greeting" formality="formal">Welcome</T>;
         }
       `,
-      );
+			);
 
-      const result = await extractor.extractFromProject(file);
+			const result = await extractor.extractFromProject(file);
 
-      expect(result).toHaveLength(1);
-      expect(result[0]!.text).toBe('Welcome');
-      expect(result[0]!.context).toBe('greeting');
-      expect(result[0]!.formality).toBe('formal');
-    });
+			expect(result).toHaveLength(1);
+			expect(result[0]!.text).toBe("Welcome");
+			expect(result[0]!.context).toBe("greeting");
+			expect(result[0]!.formality).toBe("formal");
+		});
 
-    it('should handle aliased imports', async () => {
-      const file = createTestFile(
-        'test.tsx',
-        `
+		it("should handle aliased imports", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
         import { T as Translate } from '@vocoder/react';
 
         function Component() {
           return <Translate>Hello</Translate>;
         }
       `,
-      );
+			);
 
-      const result = await extractor.extractFromProject(file);
+			const result = await extractor.extractFromProject(file);
 
-      expect(result).toHaveLength(1);
-      expect(result[0]!.text).toBe('Hello');
-    });
+			expect(result).toHaveLength(1);
+			expect(result[0]!.text).toBe("Hello");
+		});
 
-    it('should extract text from msg prop', async () => {
-      const file = createTestFile(
-        'test.tsx',
-        `
+		it("should extract text from msg prop", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
         import { T } from '@vocoder/react';
 
         function Component({ count }: { count: number }) {
           return <T msg="{count, plural, one {# item} other {# items}}" count={count} />;
         }
       `,
-      );
+			);
 
-      const result = await extractor.extractFromProject(file);
+			const result = await extractor.extractFromProject(file);
 
-      expect(result).toHaveLength(1);
-      expect(result[0]!.text).toBe('{count, plural, one {# item} other {# items}}');
-    });
+			expect(result).toHaveLength(1);
+			expect(result[0]!.text).toBe(
+				"{count, plural, one {# item} other {# items}}",
+			);
+		});
 
-    it('should prefer msg prop over children', async () => {
-      const file = createTestFile(
-        'test.tsx',
-        `
+		it("should prefer msg prop over children", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
         import { T } from '@vocoder/react';
 
         function Component() {
           return <T msg="From msg prop">From children</T>;
         }
       `,
-      );
+			);
 
-      const result = await extractor.extractFromProject(file);
+			const result = await extractor.extractFromProject(file);
 
-      expect(result).toHaveLength(1);
-      expect(result[0]!.text).toBe('From msg prop');
-    });
+			expect(result).toHaveLength(1);
+			expect(result[0]!.text).toBe("From msg prop");
+		});
 
-    it('should extract ICU MessageFormat from msg prop', async () => {
-      const file = createTestFile(
-        'test.tsx',
-        `
+		it("should extract ICU MessageFormat from msg prop", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
         import { T } from '@vocoder/react';
 
         function Component({ status }: { status: string }) {
           return <T msg="{status, select, pending {Order pending} shipped {Order shipped} other {Unknown}}" status={status} />;
         }
       `,
-      );
+			);
 
-      const result = await extractor.extractFromProject(file);
+			const result = await extractor.extractFromProject(file);
 
-      expect(result).toHaveLength(1);
-      expect(result[0]!.text).toBe('{status, select, pending {Order pending} shipped {Order shipped} other {Unknown}}');
-    });
+			expect(result).toHaveLength(1);
+			expect(result[0]!.text).toBe(
+				"{status, select, pending {Order pending} shipped {Order shipped} other {Unknown}}",
+			);
+		});
 
-    it('should extract msg prop with context and formality', async () => {
-      const file = createTestFile(
-        'test.tsx',
-        `
+		it("should extract msg prop with context and formality", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
         import { T } from '@vocoder/react';
 
         function Component({ count }: { count: number }) {
           return <T msg="{count, plural, one {# item} other {# items}}" context="shopping-cart" formality="informal" count={count} />;
         }
       `,
-      );
+			);
 
-      const result = await extractor.extractFromProject(file);
+			const result = await extractor.extractFromProject(file);
 
-      expect(result).toHaveLength(1);
-      expect(result[0]!.text).toBe('{count, plural, one {# item} other {# items}}');
-      expect(result[0]!.context).toBe('shopping-cart');
-      expect(result[0]!.formality).toBe('informal');
-    });
+			expect(result).toHaveLength(1);
+			expect(result[0]!.text).toBe(
+				"{count, plural, one {# item} other {# items}}",
+			);
+			expect(result[0]!.context).toBe("shopping-cart");
+			expect(result[0]!.formality).toBe("informal");
+		});
 
-    it('should extract rich text with components from msg prop', async () => {
-      const file = createTestFile(
-        'test.tsx',
-        `
+		it("should extract rich text with components from msg prop", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
         import { T } from '@vocoder/react';
 
         function Component() {
           return <T msg="Click <link>here</link> for help" components={{ link: <a href="/help" /> }} />;
         }
       `,
-      );
+			);
 
-      const result = await extractor.extractFromProject(file);
+			const result = await extractor.extractFromProject(file);
 
-      expect(result).toHaveLength(1);
-      expect(result[0]!.text).toBe('Click <link>here</link> for help');
-    });
+			expect(result).toHaveLength(1);
+			expect(result[0]!.text).toBe("Click <link>here</link> for help");
+		});
 
-    it('should extract rich text with multiple components from msg prop', async () => {
-      const file = createTestFile(
-        'test.tsx',
-        `
+		it("should extract rich text with multiple components from msg prop", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
         import { T } from '@vocoder/react';
 
         function Component() {
@@ -215,36 +221,38 @@ describe('StringExtractor', () => {
           );
         }
       `,
-      );
+			);
 
-      const result = await extractor.extractFromProject(file);
+			const result = await extractor.extractFromProject(file);
 
-      expect(result).toHaveLength(1);
-      expect(result[0]!.text).toBe('Read our <privacy>Privacy Policy</privacy> and <terms>Terms of Service</terms>');
-    });
-  });
+			expect(result).toHaveLength(1);
+			expect(result[0]!.text).toBe(
+				"Read our <privacy>Privacy Policy</privacy> and <terms>Terms of Service</terms>",
+			);
+		});
+	});
 
-  describe('t() function extraction', () => {
-    it('should extract from direct t() import', async () => {
-      const file = createTestFile(
-        'test.ts',
-        `
+	describe("t() function extraction", () => {
+		it("should extract from direct t() import", async () => {
+			const file = createTestFile(
+				"test.ts",
+				`
         import { t } from '@vocoder/react';
 
         const message = t('Hello world');
       `,
-      );
+			);
 
-      const result = await extractor.extractFromProject(file);
+			const result = await extractor.extractFromProject(file);
 
-      expect(result).toHaveLength(1);
-      expect(result[0]!.text).toBe('Hello world');
-    });
+			expect(result).toHaveLength(1);
+			expect(result[0]!.text).toBe("Hello world");
+		});
 
-    it('should extract from useVocoder hook', async () => {
-      const file = createTestFile(
-        'test.tsx',
-        `
+		it("should extract from useVocoder hook", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
         import { useVocoder } from '@vocoder/react';
 
         function useMessages() {
@@ -256,37 +264,37 @@ describe('StringExtractor', () => {
           };
         }
       `,
-      );
+			);
 
-      const result = await extractor.extractFromProject(file);
+			const result = await extractor.extractFromProject(file);
 
-      expect(result).toHaveLength(2);
-      expect(result.map((r: any) => r.text)).toContain('Welcome back');
-      expect(result.map((r: any) => r.text)).toContain('See you soon');
-    });
+			expect(result).toHaveLength(2);
+			expect(result.map((r: any) => r.text)).toContain("Welcome back");
+			expect(result.map((r: any) => r.text)).toContain("See you soon");
+		});
 
-    it('should extract with template literals', async () => {
-      const file = createTestFile(
-        'test.ts',
-        `
+		it("should extract with template literals", async () => {
+			const file = createTestFile(
+				"test.ts",
+				`
         import { t } from '@vocoder/react';
 
         function greet(name: string) {
           return t(\`Hello \${name}!\`);
         }
       `,
-      );
+			);
 
-      const result = await extractor.extractFromProject(file);
+			const result = await extractor.extractFromProject(file);
 
-      expect(result).toHaveLength(1);
-      expect(result[0]!.text).toBe('Hello {name}!');
-    });
+			expect(result).toHaveLength(1);
+			expect(result[0]!.text).toBe("Hello {name}!");
+		});
 
-    it('should extract context and formality from options', async () => {
-      const file = createTestFile(
-        'test.ts',
-        `
+		it("should extract context and formality from options", async () => {
+			const file = createTestFile(
+				"test.ts",
+				`
         import { t } from '@vocoder/react';
 
         const message = t('Welcome', {
@@ -294,20 +302,20 @@ describe('StringExtractor', () => {
           formality: 'formal'
         });
       `,
-      );
+			);
 
-      const result = await extractor.extractFromProject(file);
+			const result = await extractor.extractFromProject(file);
 
-      expect(result).toHaveLength(1);
-      expect(result[0]!.text).toBe('Welcome');
-      expect(result[0]!.context).toBe('greeting');
-      expect(result[0]!.formality).toBe('formal');
-    });
+			expect(result).toHaveLength(1);
+			expect(result[0]!.text).toBe("Welcome");
+			expect(result[0]!.context).toBe("greeting");
+			expect(result[0]!.formality).toBe("formal");
+		});
 
-    it('should extract from custom hooks', async () => {
-      const file = createTestFile(
-        'test.ts',
-        `
+		it("should extract from custom hooks", async () => {
+			const file = createTestFile(
+				"test.ts",
+				`
         import { t } from '@vocoder/react';
 
         function useValidationMessages() {
@@ -318,20 +326,24 @@ describe('StringExtractor', () => {
           };
         }
       `,
-      );
+			);
 
-      const result = await extractor.extractFromProject(file);
+			const result = await extractor.extractFromProject(file);
 
-      expect(result).toHaveLength(3);
-      expect(result.map((r: any) => r.text)).toContain('This field is required');
-      expect(result.map((r: any) => r.text)).toContain('Invalid email address');
-      expect(result.map((r: any) => r.text)).toContain('Must be at least 8 characters');
-    });
+			expect(result).toHaveLength(3);
+			expect(result.map((r: any) => r.text)).toContain(
+				"This field is required",
+			);
+			expect(result.map((r: any) => r.text)).toContain("Invalid email address");
+			expect(result.map((r: any) => r.text)).toContain(
+				"Must be at least 8 characters",
+			);
+		});
 
-    it('should extract from utility functions', async () => {
-      const file = createTestFile(
-        'test.ts',
-        `
+		it("should extract from utility functions", async () => {
+			const file = createTestFile(
+				"test.ts",
+				`
         import { t } from '@vocoder/react';
 
         export function formatUserRole(role: string): string {
@@ -343,36 +355,36 @@ describe('StringExtractor', () => {
           return roles[role] || role;
         }
       `,
-      );
+			);
 
-      const result = await extractor.extractFromProject(file);
+			const result = await extractor.extractFromProject(file);
 
-      expect(result).toHaveLength(3);
-      expect(result.map((r: any) => r.text)).toContain('Administrator');
-      expect(result.map((r: any) => r.text)).toContain('User');
-      expect(result.map((r: any) => r.text)).toContain('Guest');
-    });
+			expect(result).toHaveLength(3);
+			expect(result.map((r: any) => r.text)).toContain("Administrator");
+			expect(result.map((r: any) => r.text)).toContain("User");
+			expect(result.map((r: any) => r.text)).toContain("Guest");
+		});
 
-    it('should handle aliased t function', async () => {
-      const file = createTestFile(
-        'test.ts',
-        `
+		it("should handle aliased t function", async () => {
+			const file = createTestFile(
+				"test.ts",
+				`
         import { t as translate } from '@vocoder/react';
 
         const message = translate('Hello');
       `,
-      );
+			);
 
-      const result = await extractor.extractFromProject(file);
+			const result = await extractor.extractFromProject(file);
 
-      expect(result).toHaveLength(1);
-      expect(result[0]!.text).toBe('Hello');
-    });
+			expect(result).toHaveLength(1);
+			expect(result[0]!.text).toBe("Hello");
+		});
 
-    it('should handle renamed destructured t', async () => {
-      const file = createTestFile(
-        'test.tsx',
-        `
+		it("should handle renamed destructured t", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
         import { useVocoder } from '@vocoder/react';
 
         function useMessages() {
@@ -381,20 +393,20 @@ describe('StringExtractor', () => {
           return translate('Hello');
         }
       `,
-      );
+			);
 
-      const result = await extractor.extractFromProject(file);
+			const result = await extractor.extractFromProject(file);
 
-      expect(result).toHaveLength(1);
-      expect(result[0]!.text).toBe('Hello');
-    });
-  });
+			expect(result).toHaveLength(1);
+			expect(result[0]!.text).toBe("Hello");
+		});
+	});
 
-  describe('Mixed usage', () => {
-    it('should extract from both <T> and t() in same file', async () => {
-      const file = createTestFile(
-        'test.tsx',
-        `
+	describe("Mixed usage", () => {
+		it("should extract from both <T> and t() in same file", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
         import { T, useVocoder } from '@vocoder/react';
 
         function Component() {
@@ -410,22 +422,22 @@ describe('StringExtractor', () => {
           );
         }
       `,
-      );
+			);
 
-      const result = await extractor.extractFromProject(file);
+			const result = await extractor.extractFromProject(file);
 
-      expect(result).toHaveLength(3);
-      expect(result.map((r: any) => r.text)).toContain('Page Title');
-      expect(result.map((r: any) => r.text)).toContain('Welcome to our site');
-      expect(result.map((r: any) => r.text)).toContain('This is a description');
-    });
-  });
+			expect(result).toHaveLength(3);
+			expect(result.map((r: any) => r.text)).toContain("Page Title");
+			expect(result.map((r: any) => r.text)).toContain("Welcome to our site");
+			expect(result.map((r: any) => r.text)).toContain("This is a description");
+		});
+	});
 
-  describe('Deduplication', () => {
-    it('should deduplicate identical strings', async () => {
-      const file = createTestFile(
-        'test.tsx',
-        `
+	describe("Deduplication", () => {
+		it("should deduplicate identical strings", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
         import { T, t } from '@vocoder/react';
 
         function Component() {
@@ -440,95 +452,95 @@ describe('StringExtractor', () => {
           );
         }
       `,
-      );
+			);
 
-      const result = await extractor.extractFromProject(file);
+			const result = await extractor.extractFromProject(file);
 
-      // Should only have one "Hello" despite 4 occurrences
-      expect(result).toHaveLength(1);
-      expect(result[0]!.text).toBe('Hello');
-    });
+			// Should only have one "Hello" despite 4 occurrences
+			expect(result).toHaveLength(1);
+			expect(result[0]!.text).toBe("Hello");
+		});
 
-    it('should keep strings with different contexts separate', async () => {
-      const file = createTestFile(
-        'test.tsx',
-        `
+		it("should keep strings with different contexts separate", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
         import { t } from '@vocoder/react';
 
         const greeting = t('Welcome', { context: 'greeting' });
         const title = t('Welcome', { context: 'title' });
       `,
-      );
+			);
 
-      const result = await extractor.extractFromProject(file);
+			const result = await extractor.extractFromProject(file);
 
-      // Should have two entries because contexts differ
-      expect(result).toHaveLength(2);
-      expect(result[0]!.context).not.toBe(result[1]!.context);
-    });
-  });
+			// Should have two entries because contexts differ
+			expect(result).toHaveLength(2);
+			expect(result[0]!.context).not.toBe(result[1]!.context);
+		});
+	});
 
-  describe('Currency and special characters', () => {
-    it('should preserve literal dollar sign before variable placeholder', async () => {
-      const file = createTestFile(
-        'test.tsx',
-        `
+	describe("Currency and special characters", () => {
+		it("should preserve literal dollar sign before variable placeholder", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
         import { T } from '@vocoder/react';
 
         function Component({ price }: { price: number }) {
           return <T price={price}>Price: \${"{price}"}</T>;
         }
       `,
-      );
+			);
 
-      const result = await extractor.extractFromProject(file);
+			const result = await extractor.extractFromProject(file);
 
-      expect(result).toHaveLength(1);
-      expect(result[0]!.text).toBe('Price: ${price}');
-    });
+			expect(result).toHaveLength(1);
+			expect(result[0]!.text).toBe("Price: ${price}");
+		});
 
-    it('should handle template literals with dollar signs in JSX', async () => {
-      const file = createTestFile(
-        'test.tsx',
-        `
+		it("should handle template literals with dollar signs in JSX", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
         import { T } from '@vocoder/react';
 
         function Component({ price }: { price: number }) {
           return <T price={price}>Price: {\`$\${price}\`}</T>;
         }
       `,
-      );
+			);
 
-      const result = await extractor.extractFromProject(file);
+			const result = await extractor.extractFromProject(file);
 
-      expect(result).toHaveLength(1);
-      expect(result[0]!.text).toBe('Price: ${price}');
-    });
+			expect(result).toHaveLength(1);
+			expect(result[0]!.text).toBe("Price: ${price}");
+		});
 
-    it('should handle template literals with variables in t() function', async () => {
-      const file = createTestFile(
-        'test.ts',
-        `
+		it("should handle template literals with variables in t() function", async () => {
+			const file = createTestFile(
+				"test.ts",
+				`
         import { t } from '@vocoder/react';
 
         function formatPrice(price: number) {
           return t(\`Price: $\${price}\`);
         }
       `,
-      );
+			);
 
-      const result = await extractor.extractFromProject(file);
+			const result = await extractor.extractFromProject(file);
 
-      expect(result).toHaveLength(1);
-      expect(result[0]!.text).toBe('Price: ${price}');
-    });
-  });
+			expect(result).toHaveLength(1);
+			expect(result[0]!.text).toBe("Price: ${price}");
+		});
+	});
 
-  describe('ICU MessageFormat', () => {
-    it('should extract ICU plural syntax correctly', async () => {
-      const file = createTestFile(
-        'test.tsx',
-        `
+	describe("ICU MessageFormat", () => {
+		it("should extract ICU plural syntax correctly", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
         import { T } from '@vocoder/react';
 
         function Counter({ count }: { count: number }) {
@@ -539,22 +551,24 @@ describe('StringExtractor', () => {
           );
         }
       `,
-      );
+			);
 
-      const result = await extractor.extractFromProject(file);
+			const result = await extractor.extractFromProject(file);
 
-      expect(result).toHaveLength(1);
-      // CRITICAL: ICU keywords must remain in English
-      expect(result[0]!.text).toBe('{count, plural, =0 {No items} one {# item} other {# items}}');
-      expect(result[0]!.text).toContain('plural');
-      expect(result[0]!.text).not.toContain('pluriel');
-      expect(result[0]!.text).not.toContain('plurale');
-    });
+			expect(result).toHaveLength(1);
+			// CRITICAL: ICU keywords must remain in English
+			expect(result[0]!.text).toBe(
+				"{count, plural, =0 {No items} one {# item} other {# items}}",
+			);
+			expect(result[0]!.text).toContain("plural");
+			expect(result[0]!.text).not.toContain("pluriel");
+			expect(result[0]!.text).not.toContain("plurale");
+		});
 
-    it('should extract ICU select syntax correctly', async () => {
-      const file = createTestFile(
-        'test.tsx',
-        `
+		it("should extract ICU select syntax correctly", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
         import { T } from '@vocoder/react';
 
         function OrderStatus({ status }: { status: string }) {
@@ -565,21 +579,21 @@ describe('StringExtractor', () => {
           );
         }
       `,
-      );
+			);
 
-      const result = await extractor.extractFromProject(file);
+			const result = await extractor.extractFromProject(file);
 
-      expect(result).toHaveLength(1);
-      // CRITICAL: ICU keywords must remain in English
-      expect(result[0]!.text).toContain('select');
-      expect(result[0]!.text).not.toContain('sélectionner');
-      expect(result[0]!.text).not.toContain('seleziona');
-    });
+			expect(result).toHaveLength(1);
+			// CRITICAL: ICU keywords must remain in English
+			expect(result[0]!.text).toContain("select");
+			expect(result[0]!.text).not.toContain("sélectionner");
+			expect(result[0]!.text).not.toContain("seleziona");
+		});
 
-    it('should extract ICU gender select correctly', async () => {
-      const file = createTestFile(
-        'test.tsx',
-        `
+		it("should extract ICU gender select correctly", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
         import { T } from '@vocoder/react';
 
         function GenderMessage({ gender }: { gender: string }) {
@@ -590,41 +604,45 @@ describe('StringExtractor', () => {
           );
         }
       `,
-      );
+			);
 
-      const result = await extractor.extractFromProject(file);
+			const result = await extractor.extractFromProject(file);
 
-      expect(result).toHaveLength(1);
-      expect(result[0]!.text).toBe('{gender, select, male {He} female {She} other {They}} replied to your message');
-      expect(result[0]!.text).toContain('select');
-    });
+			expect(result).toHaveLength(1);
+			expect(result[0]!.text).toBe(
+				"{gender, select, male {He} female {She} other {They}} replied to your message",
+			);
+			expect(result[0]!.text).toContain("select");
+		});
 
-    it('should NOT translate ICU syntax when in template literals', async () => {
-      const file = createTestFile(
-        'test.tsx',
-        `
+		it("should NOT translate ICU syntax when in template literals", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
         import { T } from '@vocoder/react';
 
         function Counter({ count }: { count: number }) {
           return <T count={count}>{\`{count, plural, =0 {No items} one {# item} other {# items}}\`}</T>;
         }
       `,
-      );
+			);
 
-      const result = await extractor.extractFromProject(file);
+			const result = await extractor.extractFromProject(file);
 
-      expect(result).toHaveLength(1);
-      // ICU syntax should remain unchanged even in template literals
-      expect(result[0]!.text).toBe('{count, plural, =0 {No items} one {# item} other {# items}}');
-      expect(result[0]!.text).toContain('plural');
-    });
-  });
+			expect(result).toHaveLength(1);
+			// ICU syntax should remain unchanged even in template literals
+			expect(result[0]!.text).toBe(
+				"{count, plural, =0 {No items} one {# item} other {# items}}",
+			);
+			expect(result[0]!.text).toContain("plural");
+		});
+	});
 
-  describe('Edge cases', () => {
-    it('should skip empty strings', async () => {
-      const file = createTestFile(
-        'test.tsx',
-        `
+	describe("Edge cases", () => {
+		it("should skip empty strings", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
         import { T, t } from '@vocoder/react';
 
         function Component() {
@@ -632,17 +650,17 @@ describe('StringExtractor', () => {
           return <T></T>;
         }
       `,
-      );
+			);
 
-      const result = await extractor.extractFromProject(file);
+			const result = await extractor.extractFromProject(file);
 
-      expect(result).toHaveLength(0);
-    });
+			expect(result).toHaveLength(0);
+		});
 
-    it('should skip whitespace-only strings', async () => {
-      const file = createTestFile(
-        'test.tsx',
-        `
+		it("should skip whitespace-only strings", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
         import { T, t } from '@vocoder/react';
 
         function Component() {
@@ -650,17 +668,17 @@ describe('StringExtractor', () => {
           return <T>   </T>;
         }
       `,
-      );
+			);
 
-      const result = await extractor.extractFromProject(file);
+			const result = await extractor.extractFromProject(file);
 
-      expect(result).toHaveLength(0);
-    });
+			expect(result).toHaveLength(0);
+		});
 
-    it('should not extract from non-vocoder t functions', async () => {
-      const file = createTestFile(
-        'test.ts',
-        `
+		it("should not extract from non-vocoder t functions", async () => {
+			const file = createTestFile(
+				"test.ts",
+				`
         // Not imported from @vocoder/react
         function t(text: string) {
           return text;
@@ -668,11 +686,11 @@ describe('StringExtractor', () => {
 
         const message = t('This should not be extracted');
       `,
-      );
+			);
 
-      const result = await extractor.extractFromProject(file);
+			const result = await extractor.extractFromProject(file);
 
-      expect(result).toHaveLength(0);
-    });
-  });
+			expect(result).toHaveLength(0);
+		});
+	});
 });

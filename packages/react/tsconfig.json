@@ -1,23 +1,23 @@
 {
-  "compilerOptions": {
-    "allowSyntheticDefaultImports": true,
-    "declaration": true,
-    "esModuleInterop": true,
-    "jsx": "react-jsx",
-    "lib": ["ES2020", "ES2021.Intl", "DOM"],
-    "module": "ESNext",
-    "moduleResolution": "node",
-    "outDir": "./dist",
-    "skipLibCheck": true,
-    "strict": true,
-    "target": "ES2020"
-  },
-  "include": ["src/**/*"],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "**/__tests__/**",
-    "**/*.test.tsx",
-    "**/*.test.ts"
-  ]
+	"compilerOptions": {
+		"allowSyntheticDefaultImports": true,
+		"declaration": true,
+		"esModuleInterop": true,
+		"jsx": "react-jsx",
+		"lib": ["ES2020", "ES2021.Intl", "DOM"],
+		"module": "ESNext",
+		"moduleResolution": "node",
+		"outDir": "./dist",
+		"skipLibCheck": true,
+		"strict": true,
+		"target": "ES2020"
+	},
+	"include": ["src/**/*"],
+	"exclude": [
+		"node_modules",
+		"dist",
+		"**/__tests__/**",
+		"**/*.test.tsx",
+		"**/*.test.ts"
+	]
 }

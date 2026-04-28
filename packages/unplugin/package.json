@@ -1,79 +1,79 @@
 {
-  "name": "@vocoder/unplugin",
-  "version": "0.2.0",
-  "description": "Build plugin for Vocoder — injects translations as virtual modules at build time",
-  "files": [
-    "dist"
-  ],
-  "publishConfig": {
-    "access": "public"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/vocoder/vocoder-sdk.git",
-    "directory": "packages/unplugin"
-  },
-  "keywords": [
-    "i18n",
-    "internationalization",
-    "translation",
-    "unplugin",
-    "vite",
-    "webpack",
-    "rollup",
-    "esbuild",
-    "nextjs"
-  ],
-  "author": "Vocoder <admin@vocoder.app>",
-  "license": "MIT",
-  "homepage": "https://github.com/vocoder/vocoder-sdk#readme",
-  "bugs": {
-    "url": "https://github.com/vocoder/vocoder-sdk/issues"
-  },
-  "exports": {
-    ".": {
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.js"
-    },
-    "./vite": {
-      "import": "./dist/vite.mjs",
-      "require": "./dist/vite.js"
-    },
-    "./webpack": {
-      "import": "./dist/webpack.mjs",
-      "require": "./dist/webpack.js"
-    },
-    "./rollup": {
-      "import": "./dist/rollup.mjs",
-      "require": "./dist/rollup.js"
-    },
-    "./esbuild": {
-      "import": "./dist/esbuild.mjs",
-      "require": "./dist/esbuild.js"
-    },
-    "./next": {
-      "import": "./dist/next.mjs",
-      "require": "./dist/next.js"
-    }
-  },
-  "main": "./dist/index.js",
-  "module": "./dist/index.mjs",
-  "types": "./dist/index.d.ts",
-  "scripts": {
-    "build": "tsup",
-    "dev": "tsup --watch",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@vocoder/extractor": "workspace:*",
-    "unplugin": "^2.0.0"
-  },
-  "devDependencies": {
-    "@types/node": "^20.19.9",
-    "tsup": "^8.0.0",
-    "typescript": "^5.4.0",
-    "vitest": "^1.0.0"
-  }
+	"name": "@vocoder/unplugin",
+	"version": "0.2.0",
+	"description": "Build plugin for Vocoder — injects translations as virtual modules at build time",
+	"files": [
+		"dist"
+	],
+	"publishConfig": {
+		"access": "public"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/vocoder/vocoder-sdk.git",
+		"directory": "packages/unplugin"
+	},
+	"keywords": [
+		"i18n",
+		"internationalization",
+		"translation",
+		"unplugin",
+		"vite",
+		"webpack",
+		"rollup",
+		"esbuild",
+		"nextjs"
+	],
+	"author": "Vocoder <admin@vocoder.app>",
+	"license": "MIT",
+	"homepage": "https://github.com/vocoder/vocoder-sdk#readme",
+	"bugs": {
+		"url": "https://github.com/vocoder/vocoder-sdk/issues"
+	},
+	"exports": {
+		".": {
+			"import": "./dist/index.mjs",
+			"require": "./dist/index.js"
+		},
+		"./vite": {
+			"import": "./dist/vite.mjs",
+			"require": "./dist/vite.js"
+		},
+		"./webpack": {
+			"import": "./dist/webpack.mjs",
+			"require": "./dist/webpack.js"
+		},
+		"./rollup": {
+			"import": "./dist/rollup.mjs",
+			"require": "./dist/rollup.js"
+		},
+		"./esbuild": {
+			"import": "./dist/esbuild.mjs",
+			"require": "./dist/esbuild.js"
+		},
+		"./next": {
+			"import": "./dist/next.mjs",
+			"require": "./dist/next.js"
+		}
+	},
+	"main": "./dist/index.js",
+	"module": "./dist/index.mjs",
+	"types": "./dist/index.d.ts",
+	"scripts": {
+		"build": "tsup",
+		"dev": "tsup --watch",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@vocoder/extractor": "workspace:*",
+		"unplugin": "^2.0.0"
+	},
+	"devDependencies": {
+		"@types/node": "^20.19.9",
+		"tsup": "^8.0.0",
+		"typescript": "^5.4.0",
+		"vitest": "^1.0.0"
+	}
 }

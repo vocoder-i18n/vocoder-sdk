@@ -1,0 +1,94 @@
+{
+	"$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+	"assist": {
+		"actions": {
+			"source": {
+				"organizeImports": {
+					"level": "on",
+					"options": {
+						"groups": [":NODE:", ":PACKAGE:"]
+					}
+				}
+			}
+		}
+	},
+	"files": {
+		"includes": [
+			"**",
+			"!**/node_modules",
+			"!**/dist",
+			"!**/build",
+			"!**/coverage",
+			"!**/*.generated.*",
+			"!package-lock.json",
+			"!bun.lock"
+		]
+	},
+	"linter": {
+		"rules": {
+			"complexity": {
+				"noExcessiveCognitiveComplexity": "off",
+				"noUselessFragments": "off"
+			},
+			"correctness": {
+				"useExhaustiveDependencies": "off",
+				"noConstantCondition": "off",
+				"noUnusedImports": "off"
+			},
+			"performance": {
+				"noNamespaceImport": "off",
+				"useTopLevelRegex": "off"
+			},
+			"style": {
+				"noEnum": "off",
+				"noNestedTernary": "off",
+				"noProcessEnv": "off",
+				"noNonNullAssertion": "off"
+			},
+			"suspicious": {
+				"noExplicitAny": "off",
+				"noAssignInExpressions": "off",
+				"noConfusingVoidType": "off",
+				"noDocumentCookie": "off",
+				"noEmptyInterface": "off"
+			},
+			"security": {
+				"noDangerouslySetInnerHtml": "off"
+			},
+			"a11y": {
+				"useButtonType": "off",
+				"useAnchorContent": "off"
+			},
+			"nursery": {
+				"noIncrementDecrement": "off",
+				"noShadow": "off"
+			}
+		}
+	},
+	"overrides": [
+		{
+			"includes": ["**/*.test.ts", "**/*.test.tsx", "**/tests/**/*", "**/__tests__/**/*"],
+			"linter": {
+				"rules": {
+					"suspicious": {
+						"noExplicitAny": "off",
+						"noTemplateCurlyInString": "off"
+					}
+				}
+			}
+		},
+		{
+			"includes": ["**/scripts/**/*.{ts,js,cjs,mjs}", "**/*.config.ts", "**/*.config.mts"],
+			"linter": {
+				"rules": {
+					"style": {
+						"noProcessEnv": "off"
+					},
+					"suspicious": {
+						"noConsole": "off"
+					}
+				}
+			}
+		}
+	]
+}

@@ -1,18 +1,20 @@
-import { formatMessage } from './utils/formatMessage';
+import { formatMessage } from "./utils/formatMessage";
 
 /**
  * Global translation state
  * This is synced by VocoderProvider and can be used anywhere
  */
 let globalTranslations: Record<string, Record<string, string>> = {};
-let globalLocale: string = 'en';
+let globalLocale: string = "en";
 
 /**
  * Set global translations (called by VocoderProvider)
  * @internal
  */
-export function _setGlobalTranslations(translations: Record<string, Record<string, string>>): void {
-  globalTranslations = translations;
+export function _setGlobalTranslations(
+	translations: Record<string, Record<string, string>>,
+): void {
+	globalTranslations = translations;
 }
 
 /**
@@ -20,7 +22,7 @@ export function _setGlobalTranslations(translations: Record<string, Record<strin
  * @internal
  */
 export function _setGlobalLocale(locale: string): void {
-  globalLocale = locale;
+	globalLocale = locale;
 }
 
 /**
@@ -59,31 +61,30 @@ export function _setGlobalLocale(locale: string): void {
  * - Rich text with components is only supported in `<T>` component, not in `t()` function
  */
 export function t(text: string, values?: Record<string, any>): string {
-  const localeTranslations = globalTranslations[globalLocale];
-  const hasTranslation =
-    !!localeTranslations &&
-    Object.prototype.hasOwnProperty.call(localeTranslations, text);
+	const localeTranslations = globalTranslations[globalLocale];
+	const hasTranslation =
+		!!localeTranslations && Object.hasOwn(localeTranslations, text);
 
-  if (!hasTranslation) {
-    return text;
-  }
+	if (!hasTranslation) {
+		return text;
+	}
 
-  const translated = localeTranslations![text];
+	const translated = localeTranslations![text];
 
-  if (values && Object.keys(values).length > 0) {
-    // Use IntlMessageFormat for all cases (simple interpolation, ICU, etc.)
-    const result = formatMessage(translated, values, globalLocale);
-    
-    // formatMessage can return React nodes for rich text, but t() is for strings only
-    // If result is an array (rich text), join it as string
-    if (Array.isArray(result)) {
-      return result.map(part => 
-        typeof part === 'string' ? part : String(part)
-      ).join('');
-    }
-    
-    return typeof result === 'string' ? result : String(result);
-  }
+	if (values && Object.keys(values).length > 0) {
+		// Use IntlMessageFormat for all cases (simple interpolation, ICU, etc.)
+		const result = formatMessage(translated, values, globalLocale);
 
-  return translated;
+		// formatMessage can return React nodes for rich text, but t() is for strings only
+		// If result is an array (rich text), join it as string
+		if (Array.isArray(result)) {
+			return result
+				.map((part) => (typeof part === "string" ? part : String(part)))
+				.join("");
+		}
+
+		return typeof result === "string" ? result : String(result);
+	}
+
+	return translated;
 }

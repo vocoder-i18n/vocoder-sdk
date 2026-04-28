@@ -1,1 +1,1 @@
-export { StringExtractor, type ExtractedString } from '@vocoder/extractor';
+export { type ExtractedString, StringExtractor } from "@vocoder/extractor";

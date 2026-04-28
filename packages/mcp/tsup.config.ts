@@ -1,12 +1,12 @@
-import { defineConfig } from 'tsup';
+import { defineConfig } from "tsup";
 
 export default defineConfig({
-  entry: { index: 'src/index.ts' },
-  format: ['esm'],
-  dts: true,
-  clean: true,
-  sourcemap: true,
-  target: 'node18',
-  outDir: 'dist',
-  external: ['@modelcontextprotocol/sdk'],
+	entry: { index: "src/index.ts" },
+	format: ["esm"],
+	dts: true,
+	clean: true,
+	sourcemap: true,
+	target: "node18",
+	outDir: "dist",
+	external: ["@modelcontextprotocol/sdk"],
 });

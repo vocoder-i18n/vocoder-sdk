@@ -1,6 +1,6 @@
-import '@testing-library/jest-dom';
-import { beforeEach } from 'vitest';
+import "@testing-library/jest-dom";
+import { beforeEach } from "vitest";
 
 beforeEach(() => {
-  document.cookie = 'vocoder_locale=; Path=/; Max-Age=0';
+	document.cookie = "vocoder_locale=; Path=/; Max-Age=0";
 });

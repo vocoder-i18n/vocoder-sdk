@@ -1,122 +1,130 @@
-import React from 'react';
+import type React from "react";
 
 export interface TranslationsMap {
-  [locale: string]: {
-    [key: string]: string;
-  };
+	[locale: string]: {
+		[key: string]: string;
+	};
 }
 
 export interface LocaleInfo {
-  nativeName: string;     // "Español", "简体中文"
-  dir?: 'rtl';            // Only for RTL locales
-  currencyCode?: string;  // ISO 4217: "USD", "EUR", "GBP", etc.
+	nativeName: string; // "Español", "简体中文"
+	dir?: "rtl"; // Only for RTL locales
+	currencyCode?: string; // ISO 4217: "USD", "EUR", "GBP", etc.
 }
 
 export interface LocalesMap {
-  [localeCode: string]: LocaleInfo;
+	[localeCode: string]: LocaleInfo;
 }
 
 export interface VocoderContextValue {
-  availableLocales: string[];
-  getDisplayName: (targetLocale: string, viewingLocale?: string) => string;
-  /** True when initial translations are ready for render */
-  isReady: boolean;
-  locale: string;
-  /** Text direction for the current locale. 'rtl' for Arabic, Hebrew, etc. 'ltr' for all others. */
-  dir: 'ltr' | 'rtl';
-  locales?: LocalesMap;
-  setLocale: (locale: string) => Promise<void>;
-  t: (text: string) => string;
-  hasTranslation: (text: string) => boolean;
+	availableLocales: string[];
+	getDisplayName: (targetLocale: string, viewingLocale?: string) => string;
+	/** True when initial translations are ready for render */
+	isReady: boolean;
+	locale: string;
+	/** Text direction for the current locale. 'rtl' for Arabic, Hebrew, etc. 'ltr' for all others. */
+	dir: "ltr" | "rtl";
+	locales?: LocalesMap;
+	setLocale: (locale: string) => Promise<void>;
+	t: (text: string) => string;
+	hasTranslation: (text: string) => boolean;
 }
 
 export interface VocoderProviderServerProps {
-  children: React.ReactNode;
-  locale?: string;
-  translations?: Record<string, string>;
+	children: React.ReactNode;
+	locale?: string;
+	translations?: Record<string, string>;
 }
 
 export interface VocoderProviderProps {
-  /** React children */
-  children: React.ReactNode;
-  /**
-   * Cookie string for server-side rendering (optional)
-   * Pass cookies from request headers to enable SSR locale detection
-   * @example Next.js App Router: cookies().toString()
-   * @example Next.js Pages: context.req.headers.cookie
-   */
-  cookies?: string;
-  /**
-   * Automatically apply `dir` and `lang` attributes to `document.documentElement`
-   * when the locale changes. Enables RTL layout for Arabic, Hebrew, etc. via CSS
-   * frameworks that respond to `[dir="rtl"]` (Tailwind `rtl:` variants, etc.).
-   *
-   * On by default — set to false only if you manage document direction yourself.
-   * @default true
-   */
-  applyDir?: boolean;
+	/** React children */
+	children: React.ReactNode;
+	/**
+	 * Cookie string for server-side rendering (optional)
+	 * Pass cookies from request headers to enable SSR locale detection
+	 * @example Next.js App Router: cookies().toString()
+	 * @example Next.js Pages: context.req.headers.cookie
+	 */
+	cookies?: string;
+	/**
+	 * Automatically apply `dir` and `lang` attributes to `document.documentElement`
+	 * when the locale changes. Enables RTL layout for Arabic, Hebrew, etc. via CSS
+	 * frameworks that respond to `[dir="rtl"]` (Tailwind `rtl:` variants, etc.).
+	 *
+	 * On by default — set to false only if you manage document direction yourself.
+	 * @default true
+	 */
+	applyDir?: boolean;
 }
 
 export interface TProps {
-  /** Optional stable translation key (used by extraction/sync identity). */
-  id?: string;
-  /** Source text to translate (also used as the translation key) */
-  children?: React.ReactNode;
-  /**
-   * Message string for translation (alternative to children)
-   * Useful for ICU MessageFormat strings to avoid JSX escaping
-   * If both msg and children are provided, msg takes precedence
-   * @example
-   * ```tsx
-   * <T msg="{count, plural, one {# item} other {# items}}" count={5} />
-   * ```
-   */
-  msg?: string;
-  /** Optional context for disambiguation */
-  context?: string;
-  /** Optional formality level */
-  formality?: 'formal' | 'informal' | 'auto';
-  /** Component placeholders used by rich-text messages. */
-  components?: Record<string, React.ReactElement>;
-  /** Additional props for variable interpolation (e.g., name="John", count={5}) */
-  [key: string]: any;
+	/** Optional stable translation key (used by extraction/sync identity). */
+	id?: string;
+	/** Source text to translate (also used as the translation key) */
+	children?: React.ReactNode;
+	/**
+	 * Message string for translation (alternative to children)
+	 * Useful for ICU MessageFormat strings to avoid JSX escaping
+	 * If both msg and children are provided, msg takes precedence
+	 * @example
+	 * ```tsx
+	 * <T msg="{count, plural, one {# item} other {# items}}" count={5} />
+	 * ```
+	 */
+	msg?: string;
+	/** Optional context for disambiguation */
+	context?: string;
+	/** Optional formality level */
+	formality?: "formal" | "informal" | "auto";
+	/** Component placeholders used by rich-text messages. */
+	components?: Record<string, React.ReactElement>;
+	/** Additional props for variable interpolation (e.g., name="John", count={5}) */
+	[key: string]: any;
 }
 
 export interface LocaleSelectorProps {
-  /** Position of the locale selector on the screen */
-  position?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'tl' | 'tr' | 'bl' | 'br';
-  /** Background color of the button and dropdown */
-  background?: string;
-  /** Text color */
-  color?: string;
-  /** Additional CSS class name */
-  className?: string;
-  /** Size of the globe icon in pixels */
-  iconSize?: number;
-  /**
-   * Locale metadata map (auto-generated by CLI)
-   * Structure: { [localeCode]: { nativeName, dir? } }
-   * - nativeName: Name in the target locale's own language (e.g., "Español", "简体中文")
-   * - dir: Optional 'rtl' for right-to-left locales
-   *
-   * Example:
-   * {
-   *   'en': { nativeName: 'English' },
-   *   'es': { nativeName: 'Español' },
-   *   'ar': { nativeName: 'العربية', dir: 'rtl' }
-   * }
-   *
-   * Translated names are generated at runtime using Intl.DisplayNames
-   * Display format: `${getDisplayName(code)} (${locales[code].nativeName})`
-   */
-  locales?: LocalesMap;
-  /**
-   * How to sort the locale dropdown items
-   * - 'source': Sort by English names (using en locale) - consistent across all locales (default)
-   * - 'native': Sort by native names - consistent across all locales
-   * - 'translated': Sort by translated names in the current viewing locale - order changes per locale
-   *
-   * @default 'source'
-   */
-  sortBy?: 'source' | 'native' | 'translated';
+	/** Position of the locale selector on the screen */
+	position?:
+		| "top-left"
+		| "top-right"
+		| "bottom-left"
+		| "bottom-right"
+		| "tl"
+		| "tr"
+		| "bl"
+		| "br";
+	/** Background color of the button and dropdown */
+	background?: string;
+	/** Text color */
+	color?: string;
+	/** Additional CSS class name */
+	className?: string;
+	/** Size of the globe icon in pixels */
+	iconSize?: number;
+	/**
+	 * Locale metadata map (auto-generated by CLI)
+	 * Structure: { [localeCode]: { nativeName, dir? } }
+	 * - nativeName: Name in the target locale's own language (e.g., "Español", "简体中文")
+	 * - dir: Optional 'rtl' for right-to-left locales
+	 *
+	 * Example:
+	 * {
+	 *   'en': { nativeName: 'English' },
+	 *   'es': { nativeName: 'Español' },
+	 *   'ar': { nativeName: 'العربية', dir: 'rtl' }
+	 * }
+	 *
+	 * Translated names are generated at runtime using Intl.DisplayNames
+	 * Display format: `${getDisplayName(code)} (${locales[code].nativeName})`
+	 */
+	locales?: LocalesMap;
+	/**
+	 * How to sort the locale dropdown items
+	 * - 'source': Sort by English names (using en locale) - consistent across all locales (default)
+	 * - 'native': Sort by native names - consistent across all locales
+	 * - 'translated': Sort by translated names in the current viewing locale - order changes per locale
+	 *
+	 * @default 'source'
+	 */
+	sortBy?: "source" | "native" | "translated";
 }
