@@ -852,16 +852,13 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 					"  Run `npx @vocoder/cli init` to create a new project and key.",
 				);
 			} else if (error.message.includes("VOCODER_API_KEY")) {
-				p.log.warn(
-					"VOCODER_API_KEY is only needed for `vocoder sync` (CLI push).",
-				);
-				p.log.info("  Create one at: https://vocoder.app/dashboard");
-				p.log.info('  Then: export VOCODER_API_KEY="vc_..." or add it to .env');
+				p.log.info("  Get an API key at: https://vocoder.app/dashboard");
+				p.log.info('  Then add to .env: VOCODER_API_KEY="vcp_..."');
 				p.log.info("");
 				p.log.info(
-					"  Note: If you use @vocoder/unplugin, `vocoder sync` is optional.",
+					"  Note: if you use @vocoder/unplugin, `vocoder sync` is optional —",
 				);
-				p.log.info("  Translations are fetched automatically at build time.");
+				p.log.info("  translations are fetched automatically at build time.");
 			} else if (error.message.includes("git branch")) {
 				p.log.warn("Run from a git repository, or use:");
 				p.log.info("  vocoder sync --branch main");
