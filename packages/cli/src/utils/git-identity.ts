@@ -15,7 +15,7 @@ const SHA_REGEX = /^[0-9a-f]{40}$/i;
 
 /**
  * Detect the current commit SHA from CI env vars or git.
- * Must produce the same result as detectCommitSha() in @vocoder/unplugin
+ * Must produce the same result as detectCommitSha() in @vocoder/plugin
  * so fingerprints computed by CLI sync and unplugin build match.
  */
 export function detectCommitSha(): string | null {

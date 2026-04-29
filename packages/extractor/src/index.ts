@@ -1,12 +1,22 @@
-import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { relative as pathRelative } from "node:path";
 import { parse } from "@babel/parser";
 import babelTraverse from "@babel/traverse";
 import { glob } from "glob";
+import { generateMessageHash } from "./hash";
+
+export { generateMessageHash } from "./hash";
+export { defineConfig, loadVocoderConfig, parseVocoderConfig } from "./config";
+export type { VocoderConfig } from "./config";
 
 // Handle default export difference between ESM and CommonJS
 const traverse = (babelTraverse as any).default || babelTraverse;
+
+// Unambiguous plural CLDR categories. "other" is excluded — it's also the
+// required fallback in select mode, so it can't determine mode on its own.
+const PLURAL_CLDR = new Set(["zero", "one", "two", "few", "many"]);
+// Full set used only by buildPluralICU/buildSelectICU where mode is already known.
+const ALL_CLDR = new Set(["zero", "one", "two", "few", "many", "other"]);
 
 export interface ExtractedString {
 	key: string;
@@ -15,6 +25,239 @@ export interface ExtractedString {
 	line: number;
 	context?: string;
 	formality?: "formal" | "informal" | "neutral" | "auto";
+}
+
+export interface TransformResult {
+	code: string;
+	changed: boolean;
+}
+
+/**
+ * Build a plural ICU string from plural prop key/value pairs.
+ * Exact matches (_0, _1) come before CLDR categories (one, other, etc.).
+ * Internal variable name is always "count" for consistent lookup keys.
+ */
+function buildPluralICU(props: Record<string, string>): string {
+	const exactParts: string[] = [];
+	const cldrParts: string[] = [];
+
+	for (const [key, text] of Object.entries(props)) {
+		const exactMatch = key.match(/^_(\d+)$/);
+		if (exactMatch) {
+			exactParts.push(`=${exactMatch[1]} {${text}}`);
+		} else if (ALL_CLDR.has(key)) {
+			cldrParts.push(`${key} {${text}}`);
+		}
+	}
+
+	return `{count, plural, ${[...exactParts, ...cldrParts].join(" ")}}`;
+}
+
+/**
+ * Build a select ICU string from select prop key/value pairs.
+ * Internal variable name is always "value" for consistent lookup keys.
+ */
+function buildSelectICU(props: Record<string, string>): string {
+	const cases: string[] = [];
+	let hasOther = false;
+
+	for (const [key, text] of Object.entries(props)) {
+		if (key === "other") {
+			hasOther = true;
+			cases.push(`other {${text}}`);
+		} else {
+			const wordCase = key.match(/^_([a-zA-Z].*)$/);
+			if (wordCase) {
+				cases.push(`${wordCase[1]} {${text}}`);
+			}
+		}
+	}
+
+	if (!hasOther) cases.push("other {other}");
+
+	return `{value, select, ${cases.join(" ")}}`;
+}
+
+/**
+ * Extract the template text from JSX children, preserving {identifier} placeholders.
+ * Handles JSXText, JSXExpressionContainer (Identifier, StringLiteral, TemplateLiteral),
+ * and intrinsic element tags (used as named component placeholders).
+ */
+function extractTextContentFromNodes(children: any[]): string {
+	let text = "";
+
+	for (const child of children) {
+		if (child.type === "JSXText") {
+			text += child.value;
+		} else if (child.type === "JSXExpressionContainer") {
+			const expr = child.expression;
+			if (expr.type === "Identifier") {
+				text += `{${expr.name}}`;
+			} else if (expr.type === "StringLiteral") {
+				text += expr.value;
+			} else if (expr.type === "TemplateLiteral") {
+				for (let i = 0; i < expr.quasis.length; i++) {
+					text += expr.quasis[i].value.raw;
+					if (i < expr.expressions.length) {
+						const e = expr.expressions[i];
+						text += e.type === "Identifier" ? `{${e.name}}` : "{value}";
+					}
+				}
+			}
+		} else if (child.type === "JSXElement") {
+			const elementType = child.openingElement.name;
+			if (elementType.type === "JSXIdentifier") {
+				const tagName = elementType.name;
+				const innerText = extractTextContentFromNodes(child.children);
+				text += `<${tagName}>${innerText}</${tagName}>`;
+			}
+		}
+	}
+
+	return text;
+}
+
+/**
+ * Transform JSX source files to inject `message` props on <T> components
+ * that have dynamic identifier children but no explicit message/msg prop.
+ *
+ * This enables the natural authoring syntax:
+ *   <T count={count}>You have {count} items</T>
+ * to work correctly at runtime by injecting:
+ *   <T count={count} message="You have {count} items">You have {count} items</T>
+ *
+ * Uses targeted string insertion (no code regeneration) so original formatting
+ * is fully preserved and source maps remain accurate.
+ *
+ * Skips:
+ * - Elements that already have message or msg prop
+ * - Elements in plural/select mode (one/other/_0/_male props)
+ * - Elements with no JSX expression identifier children (static text, ICU strings, ternaries)
+ * - Files that don't import T from @vocoder/react
+ *
+ * Future framework expansion:
+ * - Vue (.vue): add transformVueT() branch — needs @vue/compiler-sfc parser,
+ *   converts {{ count }} template syntax to {count} placeholders
+ * - Svelte (.svelte): add transformSvelteT() branch — svelte uses {count} natively,
+ *   needs svelte/compiler parser for SFC structure
+ * - Solid (.jsx/.tsx): same Babel parser, different import source (@vocoder/solid)
+ * All frameworks share the same lookup-key convention (message prop + values object)
+ * so extraction and runtime are identical regardless of framework.
+ */
+export function transformMsgProps(code: string): TransformResult {
+	if (!code.includes("@vocoder/react")) return { code, changed: false };
+
+	let ast: any;
+	try {
+		ast = parse(code, {
+			sourceType: "module",
+			plugins: ["jsx", "typescript"],
+		});
+	} catch {
+		return { code, changed: false };
+	}
+
+	const tComponentNames = new Set<string>();
+
+	traverse(ast, {
+		ImportDeclaration(path: any) {
+			if (path.node.source.value !== "@vocoder/react") return;
+			for (const spec of path.node.specifiers) {
+				if (
+					spec.type === "ImportSpecifier" &&
+					spec.imported.type === "Identifier" &&
+					spec.imported.name === "T"
+				) {
+					tComponentNames.add(spec.local.name);
+				}
+			}
+		},
+	});
+
+	if (tComponentNames.size === 0) return { code, changed: false };
+
+	interface Insertion {
+		position: number;
+		text: string;
+	}
+	const insertions: Insertion[] = [];
+
+	traverse(ast, {
+		JSXElement(path: any) {
+			const opening = path.node.openingElement;
+			const tagName =
+				opening.name.type === "JSXIdentifier" ? opening.name.name : null;
+			if (!tagName || !tComponentNames.has(tagName)) return;
+
+			// Skip if already has message or msg prop
+			const hasMessageProp = opening.attributes.some(
+				(attr: any) =>
+					attr.type === "JSXAttribute" &&
+					(attr.name.name === "message" || attr.name.name === "msg"),
+			);
+			if (hasMessageProp) return;
+
+			// Skip if in plural/select mode (has CLDR, _N, or _word props)
+			const hasPluralSelectProps = opening.attributes.some((attr: any) => {
+				if (attr.type !== "JSXAttribute") return false;
+				const n = attr.name.name;
+				return ALL_CLDR.has(n) || /^_\d+$/.test(n) || /^_[a-zA-Z]/.test(n);
+			});
+			if (hasPluralSelectProps) return;
+
+			// Warn about ternary children — can't extract a meaningful template
+			const hasTernary = path.node.children.some(
+				(child: any) =>
+					child.type === "JSXExpressionContainer" &&
+					child.expression.type === "ConditionalExpression",
+			);
+			if (hasTernary) {
+				const line = path.node.loc?.start.line ?? "?";
+				console.warn(
+					`[vocoder] Ternary in <T> children at line ${line} — move ternary outside: {cond ? <T>...</T> : <T>...</T>}`,
+				);
+				return;
+			}
+
+			// Collect unique identifier names from JSX expression children
+			const identifiers = new Set<string>();
+			for (const child of path.node.children) {
+				if (
+					child.type === "JSXExpressionContainer" &&
+					child.expression.type === "Identifier"
+				) {
+					identifiers.add(child.expression.name);
+				}
+			}
+			if (identifiers.size === 0) return;
+
+			const template = extractTextContentFromNodes(path.node.children).trim();
+			if (!template) return;
+
+			// Build insertion: id="hash" message="..." values={{ name, count }}
+			// id = content hash → matches the bundle key; message = fallback for source locale
+			// values always injected alongside message — spread props are never used as values
+			const escaped = template.replace(/"/g, "&quot;");
+			const hash = generateMessageHash(template);
+			const valuesStr = `{{ ${[...identifiers].join(", ")} }}`;
+			const insertPos = opening.end - 1;
+			insertions.push({
+				position: insertPos,
+				text: ` id="${hash}" message="${escaped}" values=${valuesStr}`,
+			});
+		},
+	});
+
+	if (insertions.length === 0) return { code, changed: false };
+
+	// Apply in reverse order so earlier positions aren't shifted
+	insertions.sort((a, b) => b.position - a.position);
+	let result = code;
+	for (const { position, text } of insertions) {
+		result = result.slice(0, position) + text + result.slice(position);
+	}
+
+	return { code: result, changed: true };
 }
 
 export class StringExtractor {
@@ -54,7 +297,6 @@ export class StringExtractor {
 		}
 
 		const allStrings: ExtractedString[] = [];
-
 		const sortedFiles = Array.from(allFiles).sort();
 
 		for (const file of sortedFiles) {
@@ -159,7 +401,12 @@ export class StringExtractor {
 
 					const secondArg = path.node.arguments[1];
 					let context: string | undefined;
-					let formality: "formal" | "informal" | "neutral" | "auto" | undefined;
+					let formality:
+						| "formal"
+						| "informal"
+						| "neutral"
+						| "auto"
+						| undefined;
 					let explicitKey: string | undefined;
 
 					if (secondArg && secondArg.type === "ObjectExpression") {
@@ -195,16 +442,10 @@ export class StringExtractor {
 					}
 
 					const line = path.node.loc?.start.line || 0;
-					const column = path.node.loc?.start.column || 0;
 					const key =
 						explicitKey && explicitKey.length > 0
 							? explicitKey
-							: this.generateStableKey({
-									filePath: relativeFilePath,
-									kind: "t-call",
-									line,
-									column,
-								});
+							: generateMessageHash(text.trim(), context);
 
 					strings.push({
 						key,
@@ -224,16 +465,28 @@ export class StringExtractor {
 					if (!tagName) return;
 
 					const isTranslationComponent = vocoderImports.has(tagName);
-
 					if (!isTranslationComponent) return;
 
-					const msgAttribute = this.getStringAttribute(
-						opening.attributes,
-						"msg",
-					);
+					// message takes precedence over msg
+					const msgAttribute =
+						this.getStringAttribute(opening.attributes, "message") ??
+						this.getStringAttribute(opening.attributes, "msg");
 
-					const text =
-						msgAttribute || this.extractTextContent(path.node.children);
+					let text: string | null = null;
+
+					if (msgAttribute) {
+						text = msgAttribute;
+					} else {
+						// Check for plural/select mode props
+						const pluralSelectICU = this.extractPluralSelectICU(
+							opening.attributes,
+						);
+						if (pluralSelectICU) {
+							text = pluralSelectICU;
+						} else {
+							text = extractTextContentFromNodes(path.node.children);
+						}
+					}
 
 					if (!text || text.trim().length === 0) return;
 
@@ -247,16 +500,10 @@ export class StringExtractor {
 						"formality",
 					) as "formal" | "informal" | "neutral" | "auto" | undefined;
 					const line = path.node.loc?.start.line || 0;
-					const column = path.node.loc?.start.column || 0;
 					const key =
 						id && id.trim().length > 0
 							? id.trim()
-							: this.generateStableKey({
-									filePath: relativeFilePath,
-									kind: "jsx",
-									line,
-									column,
-								});
+							: generateMessageHash(text.trim(), context);
 
 					strings.push({
 						key,
@@ -277,6 +524,44 @@ export class StringExtractor {
 		return strings;
 	}
 
+	private extractPluralSelectICU(attributes: any[]): string | null {
+		const pluralProps: Record<string, string> = {};
+		const selectProps: Record<string, string> = {};
+		let otherValue: string | undefined;
+		let hasPlural = false;
+		let hasSelect = false;
+
+		for (const attr of attributes) {
+			if (attr.type !== "JSXAttribute") continue;
+			const name = attr.name.name as string;
+			const value =
+				attr.value?.type === "StringLiteral" ? attr.value.value : null;
+			if (!value) continue;
+
+			if (PLURAL_CLDR.has(name) || /^_\d+$/.test(name)) {
+				pluralProps[name] = value;
+				hasPlural = true;
+			} else if (name === "other") {
+				otherValue = value;
+			} else if (/^_[a-zA-Z]/.test(name)) {
+				selectProps[name] = value;
+				hasSelect = true;
+			}
+		}
+
+		if (!hasPlural && !hasSelect) return null;
+
+		if (hasPlural) {
+			if (otherValue !== undefined) pluralProps.other = otherValue;
+			return buildPluralICU(pluralProps);
+		}
+		if (hasSelect) {
+			if (otherValue !== undefined) selectProps.other = otherValue;
+			return buildSelectICU(selectProps);
+		}
+		return null;
+	}
+
 	private extractTemplateText(node: any): string {
 		let text = "";
 
@@ -290,28 +575,6 @@ export class StringExtractor {
 					text += `{${expr.name}}`;
 				} else {
 					text += "{value}";
-				}
-			}
-		}
-
-		return text;
-	}
-
-	private extractTextContent(children: any[]): string {
-		let text = "";
-
-		for (const child of children) {
-			if (child.type === "JSXText") {
-				text += child.value;
-			} else if (child.type === "JSXExpressionContainer") {
-				const expr = child.expression;
-
-				if (expr.type === "Identifier") {
-					text += `{${expr.name}}`;
-				} else if (expr.type === "StringLiteral") {
-					text += expr.value;
-				} else if (expr.type === "TemplateLiteral") {
-					text += this.extractTemplateText(expr);
 				}
 			}
 		}
@@ -349,36 +612,17 @@ export class StringExtractor {
 	}
 
 	private deduplicateStrings(strings: ExtractedString[]): ExtractedString[] {
-		const seen = new Map<string, number>();
+		// Content-hash keys are deterministic: same text+context → same key everywhere.
+		// Dedup by key (the hash) — keeps the first occurrence.
+		const seen = new Set<string>();
 		const unique: ExtractedString[] = [];
-
 		for (const str of strings) {
-			const dedupeKey = `${str.text}|${str.context || ""}|${str.formality || ""}`;
-
-			const existingIndex = seen.get(dedupeKey);
-			if (existingIndex === undefined) {
-				seen.set(dedupeKey, unique.length);
+			if (!seen.has(str.key)) {
+				seen.add(str.key);
 				unique.push(str);
-				continue;
-			}
-
-			const existing = unique[existingIndex];
-			if (existing && str.key < existing.key) {
-				existing.key = str.key;
 			}
 		}
-
 		return unique;
 	}
 
-	private generateStableKey(params: {
-		filePath: string;
-		kind: "jsx" | "t-call";
-		line: number;
-		column: number;
-	}): string {
-		const payload = `${params.filePath}|${params.kind}|${params.line}:${params.column}`;
-		const digest = createHash("sha1").update(payload).digest("hex");
-		return `SK_${digest.slice(0, 24).toUpperCase()}`;
-	}
 }

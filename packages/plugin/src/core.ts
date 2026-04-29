@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
-import { StringExtractor } from "@vocoder/extractor";
-import type { VocoderPluginOptions, VocoderTranslationData } from "./types";
+import { StringExtractor, loadVocoderConfig } from "@vocoder/extractor";
+import type { VocoderTranslationData } from "./types";
 
 /**
  * Load .env file into process.env if not already loaded.
@@ -57,22 +57,62 @@ export function computeFingerprint(
 		.slice(0, 12);
 }
 
+const DEFAULT_INCLUDE = ["**/*.{tsx,jsx,ts,js}"];
+
 /**
- * Extract source text strings from the project for fingerprint computation.
- * Uses StringExtractor but returns only the text values — keys/metadata not needed here.
+ * Extract source text strings from the project.
+ * Patterns come from vocoder.config.{ts,js,json} committed to the repository —
+ * the single source of truth shared by the build plugin, CLI sync, and git webhook.
+ * Falls back to the default glob if no config file exists.
  */
-export async function extractSourceTexts(
-	cwd: string,
-	include?: string | string[],
-	exclude?: string | string[],
-): Promise<string[]> {
+export async function extractSourceTexts(cwd: string): Promise<string[]> {
+	const config = loadVocoderConfig(cwd);
+	const include = config?.include ?? DEFAULT_INCLUDE;
+	const exclude = config?.exclude;
+
 	const extractor = new StringExtractor();
-	const results = await extractor.extractFromProject(
-		include ?? ["**/*.{tsx,jsx,ts,js}"],
-		cwd,
-		exclude,
-	);
-	return results.map((r) => r.text);
+	const results = await extractor.extractFromProject(include, cwd, exclude);
+
+	// Dedup by text — same text with different explicit ids counts once for fingerprinting.
+	return [...new Set(results.map((r) => r.text))];
+}
+
+/**
+ * Register extracted strings with the Vocoder API and receive the canonical fingerprint.
+ * The server is the fingerprint oracle: it computes sha256(shortCode + sorted(strings))
+ * and upserts a BranchFingerprint row. This guarantees the build plugin, CLI, and git
+ * webhook all converge on the same fingerprint for the same string set.
+ *
+ * Returns null if the API is unreachable (offline build) — callers fall back to
+ * local computeFingerprint() so offline builds continue to work.
+ */
+export async function registerAndGetFingerprint(params: {
+	strings: string[];
+	branch: string;
+	commitSha?: string | null;
+	apiUrl: string;
+	apiKey: string;
+}): Promise<string | null> {
+	const { strings, branch, commitSha, apiUrl, apiKey } = params;
+
+	try {
+		const response = await fetch(`${apiUrl}/api/t/register`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Authorization: `Bearer ${apiKey}`,
+			},
+			body: JSON.stringify({ strings, branch, ...(commitSha ? { commitSha } : {}) }),
+			signal: AbortSignal.timeout(15000),
+		});
+
+		if (!response.ok) return null;
+
+		const data = (await response.json()) as { fingerprint: string };
+		return data.fingerprint ?? null;
+	} catch {
+		return null;
+	}
 }
 
 const SHA_REGEX = /^[0-9a-f]{40}$/i;

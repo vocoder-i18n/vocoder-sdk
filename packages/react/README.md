@@ -26,7 +26,7 @@ function App() {
 }
 ```
 
-The provider loads translations from virtual modules injected by [`@vocoder/unplugin`](../unplugin) at build time. If the unplugin is not installed, source text is rendered as-is.
+The provider loads translations from virtual modules injected by [`@vocoder/plugin`](../plugin) at build time. If the unplugin is not installed, source text is rendered as-is.
 
 ## Translating Strings
 
@@ -198,7 +198,7 @@ bootstrap();
 
 ## Background Refresh
 
-When `@vocoder/unplugin` is installed, the build plugin injects metadata into the bundle. After the initial render, the provider checks the Vocoder API for translations newer than the build timestamp. If found, it updates the in-memory translations and re-renders.
+When `@vocoder/plugin` is installed, the build plugin injects metadata into the bundle. After the initial render, the provider checks the Vocoder API for translations newer than the build timestamp. If found, it updates the in-memory translations and re-renders.
 
 This means:
 - Initial page load uses translations baked in at build time (fast)
@@ -206,7 +206,7 @@ This means:
 
 ## How Translations Are Loaded
 
-Translations are delivered as virtual modules by `@vocoder/unplugin`:
+Translations are delivered as virtual modules by `@vocoder/plugin`:
 
 - `virtual:vocoder/manifest` -- project config and per-locale dynamic import loaders
 - `virtual:vocoder/translations/{locale}` -- translation map for each locale

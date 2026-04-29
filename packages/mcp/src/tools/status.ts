@@ -1,4 +1,4 @@
-import { detectRepoIdentity } from "@vocoder/unplugin";
+import { detectRepoIdentity } from "@vocoder/plugin";
 import type { VocoderClient } from "../client.js";
 
 export async function runStatus(client: VocoderClient): Promise<string> {

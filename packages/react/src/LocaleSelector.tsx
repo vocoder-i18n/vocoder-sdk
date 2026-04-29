@@ -1,10 +1,8 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Globe } from "lucide-react";
 import React from "react";
 import type { LocaleSelectorProps } from "./types";
 import { useVocoder } from "./VocoderProvider";
 
-// Position mapping for shorthand
 const POSITION_MAP: Record<string, string> = {
 	tl: "top-left",
 	tr: "top-right",
@@ -12,79 +10,70 @@ const POSITION_MAP: Record<string, string> = {
 	br: "bottom-right",
 };
 
+const LOGO_FILL_LIGHT = "#151515";
+const LOGO_FILL_DARK = "#EFEAE3";
+
+const TRIGGER_ATTR = "data-vocoder-trigger";
+const FOCUS_STYLE = `[${TRIGGER_ATTR}]{outline:none;}[${TRIGGER_ATTR}]:focus-visible{outline:2px solid #4f8ef7;outline-offset:0;}`;
+
+const VocoderLogo = ({ fill, size }: { fill: string; size: number }) => (
+	<svg
+		width={size}
+		height={size}
+		viewBox="0 0 136 136"
+		fill="none"
+		xmlns="http://www.w3.org/2000/svg"
+		aria-hidden="true"
+	>
+		<path
+			fillRule="evenodd"
+			clipRule="evenodd"
+			d="M84 20C101.673 20.0004 116 34.3272 116 52L116.004 60C116.004 77.6719 101.676 91.9985 84.0039 92H69.4219L40.0039 116V89.6641C28.2816 84.9171 20.0045 73.4323 20.0039 60L20 52C20.0005 34.3273 34.3273 20.0001 52 20H84ZM48 83.8555L48.0039 83.8594V99.0938L58.6914 90.4062C54.6099 88.9674 50.9658 86.6107 48 83.582V83.8555ZM96 64C95.9999 71.6713 92.9113 78.6186 87.9141 83.6758C99.3023 81.8079 107.992 71.9304 108 60.0156H96V64ZM48 64C48.0004 73.6752 54.8716 81.7444 64 83.5977V60.0078L48 60.0039V64ZM72 83.5977C81.1286 81.7444 87.9999 73.6754 88 64V60.0117L72 60.0078V83.5977ZM28.0039 60C28.0043 68.8776 32.827 76.6334 40 80.7852V60H28.0039ZM87.918 28.3242C92.9139 33.3813 96.0001 40.3297 96 48V52.0156H108V52C108 40.0801 99.3084 30.1954 87.918 28.3242ZM72 52.0078L88 52.0117V48C88.0001 38.3241 81.1291 30.2514 72 28.3984V52.0078ZM64 28.3984C54.8712 30.2516 48.0001 38.3245 48 48V52.0039L64 52.0078V28.3984ZM48.082 28.3203C37.0868 30.1261 28.607 39.4023 28.0312 50.7656L28 52H40V48C40.0001 40.329 43.085 33.3776 48.082 28.3203Z"
+			fill={fill}
+		/>
+	</svg>
+);
+
 /**
- * LocaleSelector component provides a globe button with dropdown for switching languages.
+ * LocaleSelector component provides a Vocoder-branded button with dropdown for switching languages.
  *
  * Features:
- * - Globe icon button that opens a language selector
+ * - Vocoder logomark button that opens a language selector
+ * - Auto light/dark mode: detects `.dark`/`.light` CSS class on `<html>` first (Tailwind, shadcn, etc.),
+ *   then falls back to `prefers-color-scheme`. Override with the `mode` prop.
  * - Configurable position (top-left, top-right, bottom-left, bottom-right)
- * - Customizable colors via props
+ * - Customizable colors via props (override auto mode)
  * - Smart positioning: opens below for top positions, above for bottom positions
  * - Supports shorthand position notation (tl, tr, bl, br)
- * - Displays locale names in format "displayName (nativeName)" (e.g., "Spanish (Español)")
- * - Uses Intl.DisplayNames for runtime translation of locale names
- * - Configurable sorting: by English names (default), native names, or translated names
+ * - Displays locale names as native names only (e.g., "Español", "Deutsch", "العربية")
+ * - Configurable sorting: by native names (default), English source names, or translated names
+ *   (Intl.DisplayNames is used to resolve names for sorting, not for display)
  *
- * @example Basic usage (with auto-generated locales from VocoderProvider)
+ * @example Auto theme (follows app theme or system preference)
  * ```tsx
- * import { LocaleSelector } from '@vocoder/react/locale-selector';
- *
- * // Sorts by source language (English) by default - consistent order
  * <LocaleSelector />
  * ```
  *
- * @example Sort by native names (consistent across locales)
+ * @example Force dark mode
  * ```tsx
- * <LocaleSelector
- *   locales={locales}
- *   sortBy="native"
- * />
- * // Always shows: العربية, Deutsch, English, Español, Français, etc.
+ * <LocaleSelector mode="dark" />
  * ```
  *
- * @example Sort by translated names (changes per viewing locale)
+ * @example Manual colors (overrides auto mode)
  * ```tsx
- * <LocaleSelector
- *   locales={locales}
- *   sortBy="translated"
- * />
- * // When viewing in Spanish: Alemán, Árabe, Español, Francés, Inglés...
- * // When viewing in English: Arabic, English, French, German, Spanish...
+ * <LocaleSelector background="#1a1a1a" color="#ffffff" />
  * ```
  *
- * @example With custom position and colors
+ * @example Custom position and sort order
  * ```tsx
- * <LocaleSelector
- *   locales={locales}
- *   position="top-left"
- *   background="#1a1a1a"
- *   color="#ffffff"
- *   sortBy="source"
- * />
- * ```
- *
- * @example With shorthand position
- * ```tsx
- * <LocaleSelector locales={locales} position="br" />
- * ```
- *
- * @example Custom locales format
- * ```tsx
- * const customLocales = {
- *   'en': { nativeName: 'English' },
- *   'es': { nativeName: 'Español' },
- *   'ar': { nativeName: 'العربية', dir: 'rtl' }
- * };
- *
- * <LocaleSelector locales={customLocales} />
- * // Displays: "Spanish (Español)" when viewing in English
- * // Displays: "Español (Español)" when viewing in Spanish
+ * <LocaleSelector position="top-left" sortBy="source" />
  * ```
  */
 export const LocaleSelector: React.FC<LocaleSelectorProps> = ({
 	position = "bottom-right",
-	background = "#ffffff",
-	color = "#000000",
+	mode = "auto",
+	background,
+	color,
 	className = "",
 	iconSize = 20,
 	locales: localesProp,
@@ -98,13 +87,49 @@ export const LocaleSelector: React.FC<LocaleSelectorProps> = ({
 		locales: localesFromContext,
 	} = useVocoder();
 
-	// Use prop if provided, otherwise fall back to context
 	const locales = localesProp ?? localesFromContext;
-
-	// Normalize position (handle shorthand)
 	const normalizedPosition = POSITION_MAP[position] || position;
 
-	// Determine dropdown side and align based on position
+	const [systemDark, setSystemDark] = React.useState<boolean>(() => {
+		if (typeof document !== "undefined") {
+			const cl = document.documentElement.classList;
+			if (cl.contains("dark")) return true;
+			if (cl.contains("light")) return false;
+		}
+		if (typeof window !== "undefined") {
+			return window.matchMedia("(prefers-color-scheme: dark)").matches;
+		}
+		return false;
+	});
+
+	React.useEffect(() => {
+		if (typeof window === "undefined") return;
+
+		const update = () => {
+			const cl = document.documentElement.classList;
+			if (cl.contains("dark")) { setSystemDark(true); return; }
+			if (cl.contains("light")) { setSystemDark(false); return; }
+			setSystemDark(window.matchMedia("(prefers-color-scheme: dark)").matches);
+		};
+
+		const observer = new MutationObserver(update);
+		observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+
+		const mq = window.matchMedia("(prefers-color-scheme: dark)");
+		mq.addEventListener("change", update);
+
+		return () => {
+			observer.disconnect();
+			mq.removeEventListener("change", update);
+		};
+	}, []);
+
+	const isDark = mode === "dark" || (mode === "auto" && systemDark);
+
+	const resolvedBackground = background ?? (isDark ? "#1a1a1a" : "#ffffff");
+	const resolvedColor = color ?? (isDark ? "#ffffff" : "#000000");
+	const logoFill = isDark ? LOGO_FILL_DARK : LOGO_FILL_LIGHT;
+
 	const getDropdownProps = () => {
 		switch (normalizedPosition) {
 			case "top-left":
@@ -120,7 +145,6 @@ export const LocaleSelector: React.FC<LocaleSelectorProps> = ({
 
 	const { side, align } = getDropdownProps();
 
-	// Sort available locales based on sortBy prop
 	const sortedLocales = React.useMemo(() => {
 		if (!locales) {
 			return availableLocales;
@@ -133,20 +157,17 @@ export const LocaleSelector: React.FC<LocaleSelectorProps> = ({
 
 			switch (sortBy) {
 				case "native":
-					// Sort by native name (consistent across all viewing locales)
 					nameA = locales[a]?.nativeName || a;
 					nameB = locales[b]?.nativeName || b;
-					compareLocale = "en"; // Use neutral locale for comparison
+					compareLocale = "en";
 					break;
 
 				case "translated":
-					// Sort by translated name in current viewing locale (changes per locale)
 					nameA = getDisplayName(a);
 					nameB = getDisplayName(b);
 					compareLocale = locale;
 					break;
 				default:
-					// Sort by English names (consistent across all viewing locales)
 					nameA = getDisplayName(a, "en");
 					nameB = getDisplayName(b, "en");
 					compareLocale = "en";
@@ -157,7 +178,6 @@ export const LocaleSelector: React.FC<LocaleSelectorProps> = ({
 		});
 	}, [availableLocales, locale, locales, sortBy, getDisplayName]);
 
-	// Fixed positioning styles based on position prop
 	const getPositionStyles = (): React.CSSProperties => {
 		const baseStyles: React.CSSProperties = {
 			position: "fixed",
@@ -180,9 +200,11 @@ export const LocaleSelector: React.FC<LocaleSelectorProps> = ({
 		width: "48px",
 		height: "48px",
 		borderRadius: "50%",
-		backgroundColor: background,
-		color: color,
-		border: "1px solid rgba(0, 0, 0, 0.1)",
+		backgroundColor: resolvedBackground,
+		color: resolvedColor,
+		border: isDark
+			? "1px solid rgba(255, 255, 255, 0.1)"
+			: "1px solid rgba(0, 0, 0, 0.1)",
 		cursor: "pointer",
 		display: "flex",
 		alignItems: "center",
@@ -192,14 +214,16 @@ export const LocaleSelector: React.FC<LocaleSelectorProps> = ({
 	};
 
 	const contentStyles: React.CSSProperties = {
-		backgroundColor: background,
+		backgroundColor: resolvedBackground,
 		borderRadius: "8px",
 		padding: "8px",
 		minWidth: "200px",
 		maxHeight: "400px",
 		overflowY: "auto",
 		boxShadow: "0 4px 16px rgba(0, 0, 0, 0.15)",
-		border: "1px solid rgba(0, 0, 0, 0.1)",
+		border: isDark
+			? "1px solid rgba(255, 255, 255, 0.1)"
+			: "1px solid rgba(0, 0, 0, 0.1)",
 		zIndex: 10000,
 	};
 
@@ -208,17 +232,22 @@ export const LocaleSelector: React.FC<LocaleSelectorProps> = ({
 		cursor: "pointer",
 		borderRadius: "4px",
 		fontSize: "14px",
-		color: color,
+		color: resolvedColor,
 		outline: "none",
 		userSelect: "none",
 		transition: "background-color 0.15s ease",
 	};
 
+	const activeItemBg = isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.05)";
+	const hoverItemBg = isDark ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.03)";
+
 	return (
 		<div style={getPositionStyles()} className={className}>
+			<style>{FOCUS_STYLE}</style>
 			<DropdownMenu.Root>
 				<DropdownMenu.Trigger asChild>
 					<button
+						{...{ [TRIGGER_ATTR]: "" }}
 						style={buttonStyles}
 						onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
 							e.currentTarget.style.transform = "scale(1.05)";
@@ -231,7 +260,7 @@ export const LocaleSelector: React.FC<LocaleSelectorProps> = ({
 						}}
 						aria-label="Select language"
 					>
-						<Globe size={iconSize} />
+						<VocoderLogo fill={logoFill} size={iconSize} />
 					</button>
 				</DropdownMenu.Trigger>
 
@@ -250,14 +279,11 @@ export const LocaleSelector: React.FC<LocaleSelectorProps> = ({
 									style={{
 										...itemStyles,
 										fontWeight: isActive ? "600" : "400",
-										backgroundColor: isActive
-											? "rgba(0, 0, 0, 0.05)"
-											: "transparent",
+										backgroundColor: isActive ? activeItemBg : "transparent",
 									}}
 									onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
 										if (!isActive) {
-											e.currentTarget.style.backgroundColor =
-												"rgba(0, 0, 0, 0.03)";
+											e.currentTarget.style.backgroundColor = hoverItemBg;
 										}
 									}}
 									onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {

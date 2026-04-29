@@ -22,5 +22,10 @@ export {
 	getPackagesToInstall,
 } from "./utils/detect-local.js";
 export { StringExtractor } from "./utils/extract.js";
+export {
+	defineConfig,
+	loadVocoderConfig,
+} from "@vocoder/extractor";
+export type { VocoderConfig } from "@vocoder/extractor";
 export type { SetupSnippets } from "./utils/setup-snippets.js";
 export { getSetupSnippets } from "./utils/setup-snippets.js";

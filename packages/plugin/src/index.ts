@@ -1,10 +1,14 @@
 import { createUnplugin } from "unplugin";
 import {
 	computeFingerprint,
+	detectBranch,
+	detectCommitSha,
 	extractSourceTexts,
 	fetchTranslations,
 	loadEnvFile,
+	registerAndGetFingerprint,
 } from "./core";
+import { transformMsgProps } from "@vocoder/extractor";
 import type { VocoderPluginOptions, VocoderTranslationData } from "./types";
 
 export type { VocoderPluginOptions, VocoderTranslationData };
@@ -20,7 +24,7 @@ const STRIPPED_PREFIX = "vocoder/";
 const RESOLVED_PREFIX = "\0virtual:vocoder/";
 
 // Shared across all compiler instances in the same process (Next.js runs server + client + edge).
-// Keyed by cwd + apiUrl + include/exclude so different plugin configs stay isolated.
+// Keyed by cwd + apiUrl so different API endpoints stay isolated.
 type InitResult = { fingerprint: string; data: VocoderTranslationData };
 const _initCache = new Map<string, Promise<InitResult>>();
 
@@ -30,12 +34,7 @@ export const unplugin = createUnplugin(
 		loadEnvFile();
 
 		const apiUrl = process.env.VOCODER_API_URL ?? "https://vocoder.app";
-		const cacheKey = [
-			process.cwd(),
-			apiUrl,
-			JSON.stringify(options.include ?? null),
-			JSON.stringify(options.exclude ?? null),
-		].join("|");
+		const cacheKey = [process.cwd(), apiUrl].join("|");
 
 		let fingerprint: string;
 		let data: VocoderTranslationData | null = null;
@@ -58,11 +57,7 @@ export const unplugin = createUnplugin(
 				console.log(
 					`[vocoder] Using fingerprint from VOCODER_FINGERPRINT env var → ${fp}`,
 				);
-				const fetchStart = Date.now();
 				const d = await fetchTranslations(fp, apiUrl);
-				if (verbose) {
-					console.log(`[vocoder] Fetch took ${Date.now() - fetchStart}ms`);
-				}
 				return { fingerprint: fp, data: d };
 			}
 
@@ -86,35 +81,37 @@ export const unplugin = createUnplugin(
 			}
 
 			if (verbose) {
-				const includePatterns = options.include ?? ["**/*.{tsx,jsx,ts,js}"];
-				const patterns = Array.isArray(includePatterns)
-					? includePatterns.join(", ")
-					: includePatterns;
-				console.log(`[vocoder] Scanning: ${patterns}`);
-				if (options.exclude) {
-					const excl = Array.isArray(options.exclude)
-						? options.exclude.join(", ")
-						: options.exclude;
-					console.log(`[vocoder] Excluding: ${excl}`);
-				}
+				console.log(`[vocoder] Reading vocoder.config.{ts,js,json} for extraction patterns…`);
 			}
 
 			const extractStart = Date.now();
-			const sourceTexts = await extractSourceTexts(
-				process.cwd(),
-				options.include,
-				options.exclude,
-			);
+			const sourceTexts = await extractSourceTexts(process.cwd());
 			if (verbose) {
 				console.log(
 					`[vocoder] Extraction: ${sourceTexts.length} string(s) in ${Date.now() - extractStart}ms`,
 				);
 			}
 
-			const fp = computeFingerprint(shortCode, sourceTexts);
-			console.log(
-				`[vocoder] ${sourceTexts.length} string(s) → fingerprint ${fp}`,
-			);
+			// Ask the server for the canonical fingerprint — it is the oracle.
+			// Falls back to local computation if the API is unreachable (offline builds).
+			const branch = detectBranch();
+			const commitSha = detectCommitSha();
+			let fp = await registerAndGetFingerprint({
+				strings: sourceTexts,
+				branch,
+				commitSha,
+				apiUrl,
+				apiKey,
+			});
+
+			if (fp) {
+				console.log(`[vocoder] ${sourceTexts.length} string(s) → fingerprint ${fp}`);
+			} else {
+				fp = computeFingerprint(shortCode, sourceTexts);
+				console.log(
+					`[vocoder] ${sourceTexts.length} string(s) → fingerprint ${fp} (offline fallback)`,
+				);
+			}
 
 			if (verbose) {
 				console.log(`[vocoder] Fetching: ${apiUrl}/api/t/${fp}`);
@@ -159,6 +156,32 @@ export const unplugin = createUnplugin(
 
 			async buildStart() {
 				await init();
+			},
+
+			// Transform <T> JSX elements with dynamic identifier children to inject
+			// the message prop at build time, enabling the natural authoring syntax:
+			//   <T count={count}>You have {count} items</T>
+			//
+			// Framework expansion notes — add branches here as SDKs are built:
+			//   Vue (.vue):    transformVueT(code) — needs @vue/compiler-sfc,
+			//                  converts {{ count }} → {count} in extracted template
+			//   Svelte (.svelte): transformSvelteT(code) — needs svelte/compiler,
+			//                  same {count} syntax as JSX so simpler extraction
+			//   Solid (.jsx/.tsx): same Babel parser, different import (@vocoder/solid)
+			// All frameworks use the same message+values convention so extraction
+			// and runtime lookup are identical regardless of framework.
+			transformInclude(id: string) {
+				return /\.[jt]sx?$/.test(id) && !id.includes("node_modules");
+			},
+
+			transform(code: string) {
+				if (!code.includes("@vocoder/react")) return null;
+				try {
+					const result = transformMsgProps(code);
+					return result.changed ? { code: result.code } : null;
+				} catch {
+					return null;
+				}
 			},
 
 			resolveId(id: string) {

@@ -7,6 +7,7 @@ import {
 	useMemo,
 	useState,
 } from "react";
+import { generateMessageHash } from "./hash";
 import { checkForUpdates, isRefreshAvailable } from "./api-runtime";
 import {
 	getConfig,
@@ -270,17 +271,23 @@ export const VocoderProvider: React.FC<VocoderProviderProps> = ({
 	);
 
 	// ── Context methods ──────────────────────────────────────────────
+	// t(key) — key is always a hash (passed by T component after hash computation).
+	// Falls back to the key itself so callers can detect "no translation".
 	const t = useCallback(
-		(text: string): string => translations[locale]?.[text] || text,
+		(key: string): string => translations[locale]?.[key] ?? key,
 		[locale, translations],
 	);
 
+	// hasTranslation(key) — key is always a hash.
+	// For user-facing callers passing source text, compute hash first.
 	const hasTranslation = useCallback(
-		(text: string): boolean => {
-			const localeTranslations = translations[locale];
-			return Boolean(
-				localeTranslations && Object.hasOwn(localeTranslations, text),
-			);
+		(key: string): boolean => {
+			const map = translations[locale];
+			if (!map) return false;
+			// Direct lookup (hash from T component) — fast path
+			if (Object.hasOwn(map, key)) return true;
+			// Source text from user code — compute hash and retry
+			return Object.hasOwn(map, generateMessageHash(key));
 		},
 		[translations, locale],
 	);

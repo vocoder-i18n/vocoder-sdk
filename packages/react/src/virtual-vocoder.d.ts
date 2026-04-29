@@ -1,5 +1,5 @@
 /**
- * Type declarations for virtual modules injected by @vocoder/unplugin.
+ * Type declarations for virtual modules injected by @vocoder/plugin.
  *
  * These modules are created at build time by the unplugin and contain
  * translation data fetched from the Vocoder API.  They do not exist as

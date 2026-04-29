@@ -15,7 +15,7 @@ Your app ships with translations baked in. No runtime API calls needed for initi
 | Package | Description |
 |---|---|
 | [`@vocoder/react`](./packages/react) | React components and hooks for rendering translations |
-| [`@vocoder/unplugin`](./packages/unplugin) | Build plugin that injects translations at build time (Vite, Next.js, Webpack, Rollup, esbuild) |
+| [`@vocoder/plugin`](./packages/plugin) | Build plugin that injects translations at build time (Vite, Next.js, Webpack, Rollup, esbuild) |
 | [`@vocoder/cli`](./packages/cli) | CLI for project setup and automatic string wrapping |
 
 ## Quick Start
@@ -34,7 +34,7 @@ This connects your repository to Vocoder. No config files or API keys are needed
 
 ```ts
 // vite.config.ts
-import vocoder from '@vocoder/unplugin/vite';
+import vocoder from '@vocoder/plugin/vite';
 
 export default defineConfig({
   plugins: [vocoder()],
@@ -45,7 +45,7 @@ export default defineConfig({
 
 ```js
 // next.config.js
-const { withVocoder } = require('@vocoder/unplugin/next');
+const { withVocoder } = require('@vocoder/plugin/next');
 
 module.exports = withVocoder({
   // your Next.js config

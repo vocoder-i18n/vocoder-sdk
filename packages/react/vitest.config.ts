@@ -2,7 +2,7 @@ import path from "node:path";
 import type { Plugin } from "vite";
 import { defineConfig } from "vitest/config";
 
-/** Mock virtual modules injected by @vocoder/unplugin during tests. */
+/** Mock virtual modules injected by @vocoder/plugin during tests. */
 function mockVocoderVirtualModules(): Plugin {
 	const fixturePath = path.resolve(
 		__dirname,

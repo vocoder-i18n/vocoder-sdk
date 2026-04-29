@@ -16,6 +16,7 @@ import {
 	detectLocalEcosystem,
 	getPackagesToInstall,
 } from "../utils/detect-local.js";
+import { writeVocoderConfig } from "../utils/write-config.js";
 import { resolveGitContext } from "../utils/git-identity.js";
 import {
 	runGitHubDiscoveryFlow,
@@ -184,6 +185,16 @@ function runScaffold(params: ScaffoldParams): void {
 		if (i < steps.length - 1) p.log.message("");
 	}
 
+	// Write vocoder.config.ts if not already present
+	const written = writeVocoderConfig({ targetBranches });
+	if (written) {
+		p.log.success(`Created ${chalk.cyan("vocoder.config.ts")}`);
+	} else if (!existsSync(join(process.cwd(), "vocoder.config.ts"))) {
+		p.log.warn(
+			"Could not write vocoder.config.ts — create it manually with your extraction patterns.",
+		);
+	}
+
 	p.log.message("");
 	const branchList =
 		targetBranches.length > 0
@@ -194,6 +205,7 @@ function runScaffold(params: ScaffoldParams): void {
 	);
 	p.log.message(chalk.gray("  Docs: https://vocoder.app/docs/getting-started"));
 }
+
 
 function writeApiKeyToEnv(apiKey: string): boolean {
 	const envPath = join(process.cwd(), ".env");
@@ -609,6 +621,8 @@ export async function init(options: InitOptions = {}): Promise<number> {
 					}
 				}
 
+				const written = writeVocoderConfig({ targetBranches: exactMatch.targetBranches ?? ["main"] });
+				if (written) p.log.success(`Created ${chalk.cyan("vocoder.config.ts")}`);
 				p.outro("Vocoder is already set up for this repository.");
 				return 0;
 			}
@@ -618,6 +632,8 @@ export async function init(options: InitOptions = {}): Promise<number> {
 				const wholeRepo = lookup.existingApps.find((a) => a.appDir === "");
 				if (wholeRepo) {
 					p.log.success(`Project: ${chalk.bold(wholeRepo.projectName)}`);
+					const written = writeVocoderConfig({ targetBranches: ["main"] });
+					if (written) p.log.success(`Created ${chalk.cyan("vocoder.config.ts")}`);
 					p.outro("Vocoder is already set up for this repository.");
 					return 0;
 				}

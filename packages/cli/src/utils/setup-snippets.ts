@@ -34,7 +34,7 @@ function getPluginSnippet(
 		case "nextjs":
 			return {
 				file: "next.config.ts",
-				code: `import { withVocoder } from '@vocoder/unplugin/next';
+				code: `import { withVocoder } from '@vocoder/plugin/next';
 
 export default withVocoder({
   // your existing Next.js config
@@ -45,7 +45,7 @@ export default withVocoder({
 		case "remix":
 			return {
 				file: "vite.config.ts",
-				code: `import vocoder from '@vocoder/unplugin/vite';
+				code: `import vocoder from '@vocoder/plugin/vite';
 
 export default defineConfig({
   plugins: [
@@ -58,7 +58,7 @@ export default defineConfig({
 		case "nuxt":
 			return {
 				file: "nuxt.config.ts",
-				code: `import vocoder from '@vocoder/unplugin/vite';
+				code: `import vocoder from '@vocoder/plugin/vite';
 
 export default defineNuxtConfig({
   vite: {
@@ -70,7 +70,7 @@ export default defineNuxtConfig({
 		case "sveltekit":
 			return {
 				file: "vite.config.ts",
-				code: `import vocoder from '@vocoder/unplugin/vite';
+				code: `import vocoder from '@vocoder/plugin/vite';
 import { sveltekit } from '@sveltejs/kit/vite';
 
 export default defineConfig({
@@ -84,7 +84,7 @@ export default defineConfig({
 		case "gatsby":
 			return {
 				file: "gatsby-node.js",
-				code: `const vocoder = require('@vocoder/unplugin/webpack');
+				code: `const vocoder = require('@vocoder/plugin/webpack');
 
 exports.onCreateWebpackConfig = ({ actions }) => {
   actions.setWebpackConfig({
@@ -103,9 +103,9 @@ exports.onCreateWebpackConfig = ({ actions }) => {
 				return {
 					file: "your bundler config",
 					code: `// Vite
-import vocoder from '@vocoder/unplugin/vite';
+import vocoder from '@vocoder/plugin/vite';
 // Webpack
-const vocoder = require('@vocoder/unplugin/webpack');
+const vocoder = require('@vocoder/plugin/webpack');
 
 // Add vocoder() to your plugins array`,
 				};

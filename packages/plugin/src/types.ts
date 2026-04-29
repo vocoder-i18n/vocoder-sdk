@@ -1,17 +1,11 @@
 export interface VocoderPluginOptions {
 	/**
-	 * Glob pattern(s) for files to include in string extraction.
-	 * @default ["**\/*.{tsx,jsx,ts,js}"]
-	 */
-	include?: string | string[];
-	/**
-	 * Glob pattern(s) for files to exclude from string extraction.
-	 * Merged with built-in excludes (node_modules, dist, build, .next, etc.).
-	 */
-	exclude?: string | string[];
-	/**
 	 * Enable verbose build-time logging: extraction patterns, timing, fetch URL.
 	 * @default false
+	 *
+	 * Extraction patterns (include/exclude) are configured in vocoder.config.ts
+	 * committed to your repository — not here. This ensures the build plugin,
+	 * CLI sync, and git webhook all use identical patterns.
 	 */
 	verbose?: boolean;
 }

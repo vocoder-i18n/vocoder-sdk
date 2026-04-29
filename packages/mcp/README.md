@@ -133,7 +133,7 @@ User: Add Spanish and French support to this project.
 
 Claude: [calls vocoder_setup with targetLocales: ["es", "fr"]]
         → Detects Next.js, returns install command and config snippets
-        → Installs @vocoder/react and @vocoder/unplugin
+        → Installs @vocoder/react and @vocoder/plugin
         → Adds VocoderProvider to the root layout
         → Adds vocoderPlugin() to next.config.ts
         [calls vocoder_sync]

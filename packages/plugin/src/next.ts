@@ -11,7 +11,7 @@ export type { VocoderPluginOptions };
  *
  * Usage:
  * ```js
- * const { withVocoder } = require('@vocoder/unplugin/next');
+ * const { withVocoder } = require('@vocoder/plugin/next');
  * module.exports = withVocoder(nextConfig);
  * ```
  */

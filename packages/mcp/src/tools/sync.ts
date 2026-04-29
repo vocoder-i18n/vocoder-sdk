@@ -3,7 +3,7 @@ import {
 	detectBranch,
 	detectCommitSha,
 	detectRepoIdentity,
-} from "@vocoder/unplugin";
+} from "@vocoder/plugin";
 import type { VocoderClient } from "../client.js";
 
 const DEFAULT_PATTERNS = [

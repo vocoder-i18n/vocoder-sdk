@@ -1,11 +1,11 @@
-# @vocoder/unplugin
+# @vocoder/plugin
 
 Build plugin for Vocoder that fetches translations at build time and injects them as virtual modules. Works with Vite, Next.js, Webpack, Rollup, and esbuild.
 
 ## Installation
 
 ```bash
-npm install @vocoder/unplugin
+npm install @vocoder/plugin
 ```
 
 ## Setup
@@ -14,7 +14,7 @@ npm install @vocoder/unplugin
 
 ```ts
 // vite.config.ts
-import vocoder from '@vocoder/unplugin/vite';
+import vocoder from '@vocoder/plugin/vite';
 
 export default defineConfig({
   plugins: [vocoder()],
@@ -25,7 +25,7 @@ export default defineConfig({
 
 ```js
 // next.config.js
-const { withVocoder } = require('@vocoder/unplugin/next');
+const { withVocoder } = require('@vocoder/plugin/next');
 
 module.exports = withVocoder({
   // your Next.js config
@@ -36,7 +36,7 @@ module.exports = withVocoder({
 
 ```js
 // webpack.config.js
-const vocoder = require('@vocoder/unplugin/webpack');
+const vocoder = require('@vocoder/plugin/webpack');
 
 module.exports = {
   plugins: [vocoder()],
@@ -47,7 +47,7 @@ module.exports = {
 
 ```js
 // rollup.config.js
-import vocoder from '@vocoder/unplugin/rollup';
+import vocoder from '@vocoder/plugin/rollup';
 
 export default {
   plugins: [vocoder()],
@@ -57,7 +57,7 @@ export default {
 ### esbuild
 
 ```js
-import vocoder from '@vocoder/unplugin/esbuild';
+import vocoder from '@vocoder/plugin/esbuild';
 
 await esbuild.build({
   plugins: [vocoder()],
@@ -72,7 +72,7 @@ All options are optional. Pass them to the plugin factory:
 
 ```ts
 // vite.config.ts
-import vocoder from '@vocoder/unplugin/vite';
+import vocoder from '@vocoder/plugin/vite';
 
 export default defineConfig({
   plugins: [

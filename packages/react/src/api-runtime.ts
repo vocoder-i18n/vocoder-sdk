@@ -1,7 +1,7 @@
 /**
  * Background refresh for translations at runtime.
  *
- * Reads build-time constants injected by @vocoder/unplugin:
+ * Reads build-time constants injected by @vocoder/plugin:
  * - __VOCODER_FINGERPRINT__
  * - __VOCODER_API_URL__
  * - __VOCODER_BUILD_TS__
@@ -14,7 +14,7 @@ declare const __VOCODER_FINGERPRINT__: string | undefined;
 declare const __VOCODER_API_URL__: string | undefined;
 declare const __VOCODER_BUILD_TS__: number | undefined;
 
-// Define constants injected by @vocoder/unplugin (Vite, webpack).
+// Define constants injected by @vocoder/plugin (Vite, webpack).
 // Fall back to process.env.* for Next.js Turbopack which doesn't apply DefinePlugin.
 // Use || null so empty string (DefinePlugin default before buildStart runs)
 // falls through to the process.env.* injected via next.config.js env field.

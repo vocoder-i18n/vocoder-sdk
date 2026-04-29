@@ -1,6 +1,7 @@
 import * as p from "@clack/prompts";
 import chalk from "chalk";
 import { config as loadEnv } from "dotenv";
+import { loadVocoderConfig } from "@vocoder/extractor";
 import type {
 	LocalConfig,
 	RequestedSyncMode,
@@ -103,7 +104,17 @@ export async function getMergedConfig(
 		apiUrl: "https://vocoder.app",
 	};
 
-	// 2. Environment variables
+	// 2. vocoder.config.ts — the canonical source for extraction patterns.
+	// CLI flags still override it for one-off runs.
+	const fileConfig = loadVocoderConfig(process.cwd());
+
+	if (!fileConfig) {
+		p.log.warn(
+			`No ${chalk.cyan("vocoder.config.ts")} found — run ${chalk.cyan("npx @vocoder/cli init")} to generate one.`,
+		);
+	}
+
+	// 3. Environment variables (legacy, lower priority than config file)
 	const envExtractionPattern = process.env.VOCODER_INCLUDE_PATTERN;
 	const envExcludePattern = process.env.VOCODER_EXCLUDE_PATTERN;
 	const envApiUrl = process.env.VOCODER_API_URL;
@@ -111,13 +122,16 @@ export async function getMergedConfig(
 	const envSyncMaxWaitMs = process.env.VOCODER_SYNC_MAX_WAIT_MS;
 	const envSyncNoFallback = process.env.VOCODER_SYNC_NO_FALLBACK;
 
-	// 3. Merge with priority: CLI > env > defaults
+	// 4. Merge with priority: CLI flag > vocoder.config.ts > env > defaults
 
 	// Extract patterns (include)
 	let includePattern: string[];
 	if (cliOptions.include && cliOptions.include.length > 0) {
 		includePattern = cliOptions.include;
 		configSources.includePattern = "CLI flag";
+	} else if (fileConfig?.include && fileConfig.include.length > 0) {
+		includePattern = fileConfig.include;
+		configSources.includePattern = "vocoder.config";
 	} else if (envExtractionPattern) {
 		includePattern = [envExtractionPattern];
 		configSources.includePattern = "environment";
@@ -130,6 +144,9 @@ export async function getMergedConfig(
 	if (cliOptions.exclude && cliOptions.exclude.length > 0) {
 		excludePattern = cliOptions.exclude;
 		configSources.excludePattern = "CLI flag";
+	} else if (fileConfig?.exclude && fileConfig.exclude.length > 0) {
+		excludePattern = fileConfig.exclude;
+		configSources.excludePattern = "vocoder.config";
 	} else if (envExcludePattern) {
 		excludePattern = envExcludePattern
 			.split(",")

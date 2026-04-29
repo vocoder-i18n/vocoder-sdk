@@ -52,7 +52,7 @@ export function detectLocalEcosystem(
 		...((pkg.devDependencies as Record<string, string>) ?? {}),
 	};
 
-	const hasUnplugin = "@vocoder/unplugin" in allDeps;
+	const hasUnplugin = "@vocoder/plugin" in allDeps;
 
 	// Detect ecosystem + framework
 	const { ecosystem, framework, uiPackage } = detectFromDeps(allDeps, cwd);
@@ -161,7 +161,10 @@ export function getPackagesToInstall(
 	detection: LocalDetectionResult,
 ): string[] {
 	const packages: string[] = [];
-	if (!detection.hasUnplugin) packages.push("@vocoder/unplugin");
+	if (!detection.hasUnplugin) {
+		packages.push("@vocoder/plugin");
+		packages.push("@vocoder/extractor");
+	}
 	if (detection.uiPackage && !detection.hasUiPackage)
 		packages.push(detection.uiPackage);
 	return packages;

@@ -1,7 +1,7 @@
 /**
  * Runtime loading for translation manifest and locale modules.
  *
- * Translations are injected as virtual modules by @vocoder/unplugin at build
+ * Translations are injected as virtual modules by @vocoder/plugin at build
  * time.  The plugin creates `virtual:vocoder/manifest` (config + per-locale
  * dynamic-import loaders) and `virtual:vocoder/translations/<locale>` modules
  * which the bundler code-splits automatically.

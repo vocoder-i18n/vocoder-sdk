@@ -1,3 +1,4 @@
+import { generateMessageHash } from "./hash";
 import { formatMessage } from "./utils/formatMessage";
 
 /**
@@ -70,9 +71,10 @@ export function _setSourceLocale(locale: string): void {
  * - Rich text with components is only supported in `<T>` component, not in `t()` function
  */
 export function t(text: string, values?: Record<string, any>): string {
+	const hash = generateMessageHash(text);
 	const localeTranslations = globalTranslations[globalLocale];
 	const hasTranslation =
-		!!localeTranslations && Object.hasOwn(localeTranslations, text);
+		!!localeTranslations && Object.hasOwn(localeTranslations, hash);
 
 	if (!hasTranslation) {
 		if (
@@ -87,7 +89,7 @@ export function t(text: string, values?: Record<string, any>): string {
 		return text;
 	}
 
-	const translated = localeTranslations![text];
+	const translated = localeTranslations![hash];
 
 	if (values && Object.keys(values).length > 0) {
 		// Use IntlMessageFormat for all cases (simple interpolation, ICU, etc.)
