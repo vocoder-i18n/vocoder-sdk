@@ -1200,7 +1200,6 @@ export async function init(options: InitOptions = {}): Promise<number> {
 				return 1;
 			}
 			p.log.error(`Error: ${error.message}`);
-			p.log.info(error.stack ?? "");
 		} else {
 			p.log.error("Unknown setup error");
 		}
