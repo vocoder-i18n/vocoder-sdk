@@ -458,6 +458,20 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 
 	p.intro("Vocoder Sync");
 
+	// Check for API key before doing any work — missing key is an onboarding
+	// issue, not an error. Show friendly guidance and exit cleanly.
+	const mergedConfig = await getMergedConfig(options, options.verbose);
+	if (!mergedConfig.apiKey) {
+		p.log.warn("No API key found. Run init to get started:");
+		p.log.info("  npx @vocoder/cli init");
+		p.log.info("");
+		p.log.info(
+			"  Or add your key to .env: VOCODER_API_KEY=vcp_...",
+		);
+		p.outro("Run `npx @vocoder/cli init` to set up your project.");
+		return 1;
+	}
+
 	const spinner = p.spinner();
 
 	try {
@@ -467,9 +481,8 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 
 		spinner.start("Loading project configuration");
 
-		const mergedConfig = await getMergedConfig(options, options.verbose);
 		const localConfig = {
-			apiKey: mergedConfig.apiKey || "",
+			apiKey: mergedConfig.apiKey,
 			apiUrl: mergedConfig.apiUrl || "https://vocoder.app",
 		};
 		validateLocalConfig(localConfig);
@@ -851,14 +864,6 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 				p.log.info(
 					"  Run `npx @vocoder/cli init` to create a new project and key.",
 				);
-			} else if (error.message.includes("VOCODER_API_KEY")) {
-				p.log.info("  Get an API key at: https://vocoder.app/dashboard");
-				p.log.info('  Then add to .env: VOCODER_API_KEY="vcp_..."');
-				p.log.info("");
-				p.log.info(
-					"  Note: if you use @vocoder/unplugin, `vocoder sync` is optional —",
-				);
-				p.log.info("  translations are fetched automatically at build time.");
 			} else if (error.message.includes("git branch")) {
 				p.log.warn("Run from a git repository, or use:");
 				p.log.info("  vocoder sync --branch main");
