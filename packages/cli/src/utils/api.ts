@@ -1046,21 +1046,26 @@ export class VocoderAPI {
 				return { exactMatch: null, existingApps: [], hasWholeRepoApp: false };
 			}
 
-			return (await response.json()) as {
-				exactMatch: {
+			const data = (await response.json()) as {
+				exactMatch?: {
 					projectId: string;
 					projectName: string;
 					organizationName: string;
 					sourceLocale?: string;
 					targetBranches?: string[];
 				} | null;
-				existingApps: Array<{
+				existingApps?: Array<{
 					appDir: string;
 					projectId: string;
 					projectName: string;
 					organizationName: string;
 				}>;
-				hasWholeRepoApp: boolean;
+				hasWholeRepoApp?: boolean;
+			};
+			return {
+				exactMatch: data.exactMatch ?? null,
+				existingApps: data.existingApps ?? [],
+				hasWholeRepoApp: data.hasWholeRepoApp ?? false,
 			};
 		} catch {
 			return { exactMatch: null, existingApps: [], hasWholeRepoApp: false };
