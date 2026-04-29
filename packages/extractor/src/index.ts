@@ -6,7 +6,7 @@ import { glob } from "glob";
 import { generateMessageHash } from "./hash";
 
 export { generateMessageHash } from "./hash";
-export { defineConfig, loadVocoderConfig, parseVocoderConfig } from "./config";
+export { loadVocoderConfig, parseVocoderConfig } from "./config";
 export type { VocoderConfig } from "./config";
 
 // Handle default export difference between ESM and CommonJS

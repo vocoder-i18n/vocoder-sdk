@@ -164,6 +164,7 @@ export function getPackagesToInstall(
 	if (!detection.hasUnplugin) {
 		packages.push("@vocoder/plugin");
 		packages.push("@vocoder/extractor");
+		packages.push("@vocoder/config");
 	}
 	if (detection.uiPackage && !detection.hasUiPackage)
 		packages.push(detection.uiPackage);

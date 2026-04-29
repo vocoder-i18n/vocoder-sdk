@@ -2,32 +2,11 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parse } from "@babel/parser";
 import babelTraverse from "@babel/traverse";
+import type { VocoderConfig } from "@vocoder/config";
+
+export type { VocoderConfig };
 
 const traverse = (babelTraverse as any).default || babelTraverse;
-
-export interface VocoderConfig {
-	/** Glob patterns for files to extract strings from. Defaults to all JS/TS/JSX/TSX files. */
-	include?: string[];
-	/** Glob patterns to exclude. Defaults to node_modules, dist, build, .next. */
-	exclude?: string[];
-	/**
-	 * Git branches that trigger string extraction and translation.
-	 * Read-only in the Vocoder dashboard — change here to update.
-	 * Defaults to ['main', 'master'] if not specified.
-	 */
-	targetBranches?: string[];
-	/**
-	 * Directory to write translated locale files after sync (optional).
-	 * If set, `vocoder sync` writes {locale}.json files to this path.
-	 * Useful for static sites, React Native, or committing translations to git.
-	 */
-	localesPath?: string;
-}
-
-/** Type helper for vocoder.config.ts — provides autocomplete and type checking. */
-export function defineConfig(config: VocoderConfig): VocoderConfig {
-	return config;
-}
 
 /**
  * Load vocoder.config.{ts,js,mjs,json} from the given directory.

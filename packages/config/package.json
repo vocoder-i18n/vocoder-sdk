@@ -1,7 +1,7 @@
 {
-  "name": "@vocoder/extractor",
-  "version": "0.2.1",
-  "description": "Shared string extractor for Vocoder — Babel AST extraction of <T> components and t() calls",
+  "name": "@vocoder/config",
+  "version": "0.1.1",
+  "description": "Type helper for vocoder.config.ts",
   "files": [
     "dist"
   ],
@@ -11,19 +11,22 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/vocoder/vocoder-sdk.git",
-    "directory": "packages/extractor"
+    "directory": "packages/config"
   },
   "keywords": [
     "i18n",
-    "extraction",
-    "ast",
-    "babel"
+    "internationalization",
+    "translation",
+    "vocoder"
   ],
   "author": "Vocoder <admin@vocoder.app>",
   "license": "MIT",
+  "homepage": "https://github.com/vocoder/vocoder-sdk#readme",
+  "bugs": {
+    "url": "https://github.com/vocoder/vocoder-sdk/issues"
+  },
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.js"
     }
@@ -36,17 +39,7 @@
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "@vocoder/config": "workspace:*",
-    "@babel/core": "^7.26.0",
-    "@babel/parser": "^7.26.0",
-    "@babel/traverse": "^7.26.0",
-    "@babel/types": "^7.26.0",
-    "glob": "^10.3.10"
-  },
   "devDependencies": {
-    "@types/babel__core": "^7.20.5",
-    "@types/babel__traverse": "^7.20.6",
     "@types/node": "^20.19.9",
     "tsup": "^8.0.0",
     "typescript": "^5.4.0"

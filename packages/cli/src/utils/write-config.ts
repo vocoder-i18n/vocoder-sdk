@@ -14,7 +14,7 @@ export function writeVocoderConfig(options: {
 	if (existsSync(configPath)) return false;
 
 	const branchesStr = targetBranches.map((b) => `'${b}'`).join(", ");
-	const content = `import { defineConfig } from '@vocoder/extractor'
+	const content = `import { defineConfig } from '@vocoder/config'
 
 export default defineConfig({
   targetBranches: [${branchesStr}],

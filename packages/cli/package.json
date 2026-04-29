@@ -1,6 +1,6 @@
 {
   "name": "@vocoder/cli",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "CLI tool for Vocoder translation workflow",
   "files": [
     "dist"
@@ -49,6 +49,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@vocoder/config": "workspace:*",
     "@vocoder/extractor": "workspace:*",
     "@clack/core": "0.4.1",
     "@clack/prompts": "^0.9.1",
