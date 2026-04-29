@@ -893,9 +893,10 @@ export class VocoderAPI {
 
 	// ── Locales ───────────────────────────────────────────────────────────────────
 
-	async listLocales(
-		userToken: string,
-	): Promise<Array<{ code: string; name: string; nativeName?: string }>> {
+	async listLocales(userToken: string): Promise<{
+		sourceLocales: Array<{ code: string; name: string; nativeName?: string }>;
+		targetLocales: Array<{ code: string; name: string; nativeName?: string }>;
+	}> {
 		const response = await fetch(`${this.apiUrl}/api/cli/locales`, {
 			headers: { Authorization: `Bearer ${userToken}` },
 		});
@@ -907,6 +908,35 @@ export class VocoderAPI {
 				message: extractErrorMessage(
 					payload,
 					`Failed to list locales (${response.status})`,
+				),
+				status: response.status,
+				payload,
+			});
+		}
+
+		const result = payload as {
+			sourceLocales: Array<{ code: string; name: string; nativeName?: string }>;
+			targetLocales: Array<{ code: string; name: string; nativeName?: string }>;
+		};
+		return result;
+	}
+
+	async listCompatibleLocales(
+		userToken: string,
+		sourceLocale: string,
+	): Promise<Array<{ code: string; name: string; nativeName?: string }>> {
+		const url = `${this.apiUrl}/api/cli/locales/compatible?source=${encodeURIComponent(sourceLocale)}`;
+		const response = await fetch(url, {
+			headers: { Authorization: `Bearer ${userToken}` },
+		});
+
+		const payload = await readPayload(response);
+
+		if (!response.ok) {
+			throw new VocoderAPIError({
+				message: extractErrorMessage(
+					payload,
+					`Failed to list compatible locales (${response.status})`,
 				),
 				status: response.status,
 				payload,

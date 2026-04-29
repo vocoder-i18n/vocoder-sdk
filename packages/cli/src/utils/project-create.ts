@@ -119,10 +119,10 @@ export async function runProjectCreate(
 	const projectName = (params.defaultName ?? "my-project").trim();
 	p.log.success(`Project: ${chalk.bold(projectName)}`);
 
-	// ── Fetch available locales ─────────────────────────────────────────────────
-	let rawLocales: Array<{ code: string; name: string; nativeName?: string }>;
+	// ── Fetch source locales ────────────────────────────────────────────────────
+	let sourceLocales: Array<{ code: string; name: string; nativeName?: string }>;
 	try {
-		rawLocales = await api.listLocales(userToken);
+		({ sourceLocales } = await api.listLocales(userToken));
 	} catch {
 		p.log.error(
 			"Failed to fetch supported locales. Check your connection and try again.",
@@ -130,10 +130,7 @@ export async function runProjectCreate(
 		return null;
 	}
 
-	// Source: deduplicated by language family (e.g. just "English — en", not all variants)
-	const languageOptions = buildLanguageOptions(rawLocales);
-	// Target: all locales (regional variants matter for translation targets)
-	const localeOptions = buildLocaleOptions(rawLocales);
+	const languageOptions = buildLanguageOptions(sourceLocales);
 
 	// ── Scope path (monorepo) ───────────────────────────────────────────────────
 	let appDir: string;
@@ -167,8 +164,20 @@ export async function runProjectCreate(
 
 	if (sourceLocale === null) return null;
 
+	// ── Compatible target locales (fetched after source is known) ───────────────
+	let compatibleTargets: Array<{ code: string; name: string; nativeName?: string }>;
+	try {
+		compatibleTargets = await api.listCompatibleLocales(userToken, sourceLocale);
+	} catch {
+		p.log.error(
+			"Failed to fetch compatible target locales. Check your connection and try again.",
+		);
+		return null;
+	}
+
+	const localeOptions = buildLocaleOptions(compatibleTargets);
+
 	// ── Target locales ──────────────────────────────────────────────────────────
-	// Exclude the exact source locale; regional variants (e.g. en-GB when source=en) remain available
 	const targetOptions = localeOptions.filter(
 		(opt) => opt.bcp47 !== sourceLocale,
 	);
@@ -252,10 +261,10 @@ export async function runProjectAppCreate(
 	const { api, userToken, projectId, projectName, repoCanonical } = params;
 	const existingScopes = new Set(params.existingApps.map((a) => a.appDir));
 
-	// ── Fetch available locales ─────────────────────────────────────────────────
-	let rawLocales: Array<{ code: string; name: string; nativeName?: string }>;
+	// ── Fetch source locales ────────────────────────────────────────────────────
+	let sourceLocales: Array<{ code: string; name: string; nativeName?: string }>;
 	try {
-		rawLocales = await api.listLocales(userToken);
+		({ sourceLocales } = await api.listLocales(userToken));
 	} catch {
 		p.log.error(
 			"Failed to fetch supported locales. Check your connection and try again.",
@@ -263,8 +272,7 @@ export async function runProjectAppCreate(
 		return null;
 	}
 
-	const languageOptions = buildLanguageOptions(rawLocales);
-	const localeOptions = buildLocaleOptions(rawLocales);
+	const languageOptions = buildLanguageOptions(sourceLocales);
 
 	// ── App directory ───────────────────────────────────────────────────────────
 	let appDir: string;
@@ -312,8 +320,19 @@ export async function runProjectAppCreate(
 	);
 	if (sourceLocale === null) return null;
 
+	// ── Compatible target locales (fetched after source is known) ───────────────
+	let compatibleTargets: Array<{ code: string; name: string; nativeName?: string }>;
+	try {
+		compatibleTargets = await api.listCompatibleLocales(userToken, sourceLocale);
+	} catch {
+		p.log.error(
+			"Failed to fetch compatible target locales. Check your connection and try again.",
+		);
+		return null;
+	}
+
 	// ── Target locales ──────────────────────────────────────────────────────────
-	const targetOptions = localeOptions.filter(
+	const targetOptions = buildLocaleOptions(compatibleTargets).filter(
 		(opt) => opt.bcp47 !== sourceLocale,
 	);
 	const targetLocales = await searchMultiSelectLocales(

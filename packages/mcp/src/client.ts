@@ -107,7 +107,11 @@ export class VocoderClient {
 	async listLocales(): Promise<{
 		locales: Array<{ code: string; name: string; nativeName?: string }>;
 	}> {
-		return this.request("GET", "/api/cli/locales");
+		const result = await this.request<{
+			sourceLocales: Array<{ code: string; name: string; nativeName?: string }>;
+			targetLocales: Array<{ code: string; name: string; nativeName?: string }>;
+		}>("GET", "/api/cli/locales");
+		return { locales: result.targetLocales };
 	}
 }
 
