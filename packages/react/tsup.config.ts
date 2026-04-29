@@ -12,6 +12,7 @@ export default defineConfig({
 	sourcemap: true,
 	target: "es2017",
 	platform: "neutral",
+	treeshake: true,
 	external: [
 		"react",
 		"react/jsx-runtime",
