@@ -840,7 +840,18 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 		if (error instanceof Error) {
 			p.log.error(error.message);
 
-			if (error.message.includes("VOCODER_API_KEY")) {
+			const isInvalidKey =
+				error.message.toLowerCase().includes("invalid api key") ||
+				(error instanceof VocoderAPIError && error.status === 401);
+
+			if (isInvalidKey) {
+				p.log.warn(
+					"API key rejected — the project may have been deleted or the key revoked.",
+				);
+				p.log.info(
+					"  Run `npx @vocoder/cli init` to create a new project and key.",
+				);
+			} else if (error.message.includes("VOCODER_API_KEY")) {
 				p.log.warn(
 					"VOCODER_API_KEY is only needed for `vocoder sync` (CLI push).",
 				);
