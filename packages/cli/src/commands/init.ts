@@ -120,22 +120,40 @@ function runScaffold(params: ScaffoldParams): void {
 		p.log.info(`Detected:  ${chalk.bold(frameworkLabel)} (${pmLabel})`);
 	}
 
-	const packagesToInstall = getPackagesToInstall(detection);
-	if (packagesToInstall.length > 0) {
-		const installCmd = buildInstallCommand(
-			detection.packageManager,
-			packagesToInstall,
-		);
+	const { devPackages, runtimePackages } = getPackagesToInstall(detection);
+	const allPackages = [...devPackages, ...runtimePackages];
+	if (allPackages.length > 0) {
 		p.log.info("");
 		const installSpinner = p.spinner();
-		installSpinner.start(`Installing ${packagesToInstall.join(", ")}...`);
+		installSpinner.start(`Installing ${allPackages.join(", ")}...`);
 
 		try {
-			execSync(installCmd, { stdio: "pipe", cwd: process.cwd() });
-			installSpinner.stop(`Installed ${packagesToInstall.join(", ")}`);
+			if (devPackages.length > 0) {
+				execSync(
+					buildInstallCommand(detection.packageManager, devPackages, true),
+					{ stdio: "pipe", cwd: process.cwd() },
+				);
+			}
+			if (runtimePackages.length > 0) {
+				execSync(
+					buildInstallCommand(detection.packageManager, runtimePackages, false),
+					{ stdio: "pipe", cwd: process.cwd() },
+				);
+			}
+			installSpinner.stop(`Installed ${allPackages.join(", ")}`);
 		} catch {
 			installSpinner.stop("Package installation failed");
-			p.log.warn(`Run manually: ${chalk.cyan(installCmd)}`);
+			const cmds = [
+				devPackages.length > 0
+					? buildInstallCommand(detection.packageManager, devPackages, true)
+					: null,
+				runtimePackages.length > 0
+					? buildInstallCommand(detection.packageManager, runtimePackages, false)
+					: null,
+			]
+				.filter(Boolean)
+				.join(" && ");
+			p.log.warn(`Run manually: ${chalk.cyan(cmds)}`);
 		}
 	} else if (detection.ecosystem) {
 		p.log.info(`Packages:  ${chalk.green("already installed")}`);

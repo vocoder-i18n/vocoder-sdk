@@ -21,6 +21,8 @@ export interface LocalDetectionResult {
 	packageManager: PackageManager;
 	uiPackage: string | null;
 	hasUnplugin: boolean;
+	hasExtractor: boolean;
+	hasConfig: boolean;
 	hasUiPackage: boolean;
 	sourceLocale: string | null;
 }
@@ -42,6 +44,8 @@ export function detectLocalEcosystem(
 			packageManager,
 			uiPackage: null,
 			hasUnplugin: false,
+			hasExtractor: false,
+			hasConfig: false,
 			hasUiPackage: false,
 			sourceLocale: null,
 		};
@@ -53,6 +57,8 @@ export function detectLocalEcosystem(
 	};
 
 	const hasUnplugin = "@vocoder/plugin" in allDeps;
+	const hasExtractor = "@vocoder/extractor" in allDeps;
+	const hasConfig = "@vocoder/config" in allDeps;
 
 	// Detect ecosystem + framework
 	const { ecosystem, framework, uiPackage } = detectFromDeps(allDeps, cwd);
@@ -64,6 +70,8 @@ export function detectLocalEcosystem(
 		packageManager,
 		uiPackage,
 		hasUnplugin,
+		hasExtractor,
+		hasConfig,
 		hasUiPackage,
 		sourceLocale: null,
 	};
@@ -135,38 +143,46 @@ function detectFromDeps(
 
 /**
  * Build the install command for packages that aren't already installed.
+ * Pass dev=true for devDependencies (-D flag).
  */
 export function buildInstallCommand(
 	packageManager: PackageManager,
 	packages: string[],
+	dev = false,
 ): string {
 	if (packages.length === 0) return "";
 	const pkgList = packages.join(" ");
+	const devFlag = dev ? " -D" : "";
 	switch (packageManager) {
 		case "pnpm":
-			return `pnpm add ${pkgList}`;
+			return `pnpm add${devFlag} ${pkgList}`;
 		case "yarn":
-			return `yarn add ${pkgList}`;
+			return `yarn add${devFlag} ${pkgList}`;
 		case "bun":
-			return `bun add ${pkgList}`;
+			return `bun add${devFlag} ${pkgList}`;
 		default:
-			return `npm install ${pkgList}`;
+			return `npm install${devFlag} ${pkgList}`;
 	}
 }
 
 /**
- * Get the list of packages that need to be installed.
+ * Get the lists of packages that need to be installed, split by dep type.
+ * devPackages → devDependencies (build tools)
+ * runtimePackages → dependencies (used at runtime in the app)
  */
-export function getPackagesToInstall(
-	detection: LocalDetectionResult,
-): string[] {
-	const packages: string[] = [];
-	if (!detection.hasUnplugin) {
-		packages.push("@vocoder/plugin");
-		packages.push("@vocoder/extractor");
-		packages.push("@vocoder/config");
-	}
+export function getPackagesToInstall(detection: LocalDetectionResult): {
+	devPackages: string[];
+	runtimePackages: string[];
+} {
+	const devPackages: string[] = [];
+	const runtimePackages: string[] = [];
+
+	if (!detection.hasUnplugin) devPackages.push("@vocoder/plugin");
+	if (!detection.hasExtractor) devPackages.push("@vocoder/extractor");
+	if (!detection.hasConfig) devPackages.push("@vocoder/config");
+
 	if (detection.uiPackage && !detection.hasUiPackage)
-		packages.push(detection.uiPackage);
-	return packages;
+		runtimePackages.push(detection.uiPackage);
+
+	return { devPackages, runtimePackages };
 }
