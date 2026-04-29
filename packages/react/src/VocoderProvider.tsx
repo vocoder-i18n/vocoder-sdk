@@ -285,9 +285,9 @@ export const VocoderProvider: React.FC<VocoderProviderProps> = ({
 			const map = translations[locale];
 			if (!map) return false;
 			// Direct lookup (hash from T component) — fast path
-			if (Object.hasOwn(map, key)) return true;
+			if (Object.prototype.hasOwnProperty.call(map, key)) return true;
 			// Source text from user code — compute hash and retry
-			return Object.hasOwn(map, generateMessageHash(key));
+			return Object.prototype.hasOwnProperty.call(map, generateMessageHash(key));
 		},
 		[translations, locale],
 	);

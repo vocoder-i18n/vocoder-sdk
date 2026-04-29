@@ -1,30 +1,41 @@
 {
   "name": "@vocoder/react",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "React components for internationalization (i18n) with SSR support, ICU MessageFormat, and build-time translation generation",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
+      "import": "./dist/index.mjs",
       "require": "./dist/index.js"
     },
     "./locale-selector": {
       "types": "./dist/locale-selector.d.ts",
-      "import": "./dist/locale-selector.js",
+      "import": "./dist/locale-selector.mjs",
       "require": "./dist/locale-selector.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.mjs",
+      "require": "./dist/server.js"
     }
   },
   "files": [
     "dist"
   ],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
-    "build": "tsc && tsc --declaration --emitDeclarationOnly",
-    "dev": "tsc --watch",
-    "watch": "tsc --watch",
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "watch": "tsup --watch",
     "test": "vitest run",
-    "test:watch": "vitest --watch"
+    "test:watch": "vitest --watch",
+    "typecheck": "tsc --noEmit"
   },
   "repository": {
     "type": "git",
@@ -70,6 +81,7 @@
     "@testing-library/user-event": "^14.6.1",
     "@types/react": "^18.3.0",
     "jsdom": "^23.0.0",
+    "tsup": "^8.0.0",
     "typescript": "^5.0.0",
     "vitest": "^1.0.0"
   },

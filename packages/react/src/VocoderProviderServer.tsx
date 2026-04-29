@@ -31,7 +31,7 @@ export async function VocoderProviderServer({
 		(translations as Record<string, string>)[text] || text;
 
 	const hasTranslation = (text: string) =>
-		translations != null && Object.hasOwn(translations, text);
+		translations != null && Object.prototype.hasOwnProperty.call(translations, text);
 
 	const getDisplayName = (targetLocale: string, viewingLocale?: string) => {
 		const vl = viewingLocale ?? locale;

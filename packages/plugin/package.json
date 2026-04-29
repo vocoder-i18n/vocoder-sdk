@@ -1,6 +1,6 @@
 {
   "name": "@vocoder/plugin",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Build plugin for Vocoder — injects translations as virtual modules at build time",
   "files": [
     "dist"
@@ -32,26 +32,32 @@
   },
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.js"
     },
     "./vite": {
+      "types": "./dist/vite.d.ts",
       "import": "./dist/vite.mjs",
       "require": "./dist/vite.js"
     },
     "./webpack": {
+      "types": "./dist/webpack.d.ts",
       "import": "./dist/webpack.mjs",
       "require": "./dist/webpack.js"
     },
     "./rollup": {
+      "types": "./dist/rollup.d.ts",
       "import": "./dist/rollup.mjs",
       "require": "./dist/rollup.js"
     },
     "./esbuild": {
+      "types": "./dist/esbuild.d.ts",
       "import": "./dist/esbuild.mjs",
       "require": "./dist/esbuild.js"
     },
     "./next": {
+      "types": "./dist/next.d.ts",
       "import": "./dist/next.mjs",
       "require": "./dist/next.js"
     }
@@ -75,5 +81,9 @@
     "tsup": "^8.0.0",
     "typescript": "^5.4.0",
     "vitest": "^1.0.0"
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
   }
 }

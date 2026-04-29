@@ -74,7 +74,7 @@ export function t(text: string, values?: Record<string, any>): string {
 	const hash = generateMessageHash(text);
 	const localeTranslations = globalTranslations[globalLocale];
 	const hasTranslation =
-		!!localeTranslations && Object.hasOwn(localeTranslations, hash);
+		!!localeTranslations && Object.prototype.hasOwnProperty.call(localeTranslations, hash);
 
 	if (!hasTranslation) {
 		if (
