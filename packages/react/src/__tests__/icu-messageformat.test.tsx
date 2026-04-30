@@ -54,3 +54,57 @@ describe("ICU MessageFormat", () => {
 		});
 	});
 });
+
+// ─── ICU number / date skeletons inside message strings ──────────────────────
+
+describe("ICU number and date formatting in messages", () => {
+	it("{amount, number} formats with locale number rules", async () => {
+		const expected = new Intl.NumberFormat("en").format(1234);
+		render(
+			<VocoderProvider>
+				<T message="Total: {amount, number}" values={{ amount: 1234 }} />
+			</VocoderProvider>,
+		);
+		await waitFor(() =>
+			expect(screen.getByText(`Total: ${expected}`)).toBeInTheDocument(),
+		);
+	});
+
+	it("{amount, number, ::percent} formats as percent", async () => {
+		const expected = new Intl.NumberFormat("en", { style: "percent" }).format(0.75);
+		render(
+			<VocoderProvider>
+				<T message="Progress: {amount, number, ::percent}" values={{ amount: 0.75 }} />
+			</VocoderProvider>,
+		);
+		await waitFor(() =>
+			expect(screen.getByText(`Progress: ${expected}`)).toBeInTheDocument(),
+		);
+	});
+
+	it("{date, date, short} formats date with short style", async () => {
+		const d = new Date("2024-06-15T12:00:00.000Z");
+		const expected = new Intl.DateTimeFormat("en", { dateStyle: "short" }).format(d);
+		render(
+			<VocoderProvider>
+				<T message="Expires: {date, date, short}" values={{ date: d }} />
+			</VocoderProvider>,
+		);
+		await waitFor(() =>
+			expect(screen.getByText(`Expires: ${expected}`)).toBeInTheDocument(),
+		);
+	});
+
+	it("{date, date, long} formats date with long style", async () => {
+		const d = new Date("2024-06-15T12:00:00.000Z");
+		const expected = new Intl.DateTimeFormat("en", { dateStyle: "long" }).format(d);
+		render(
+			<VocoderProvider>
+				<T message="On {date, date, long}" values={{ date: d }} />
+			</VocoderProvider>,
+		);
+		await waitFor(() =>
+			expect(screen.getByText(`On ${expected}`)).toBeInTheDocument(),
+		);
+	});
+});

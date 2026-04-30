@@ -1,5 +1,5 @@
 import { generateMessageHash } from "./hash";
-import type { TOptions } from "./types";
+import type { LocalesMap, OrdinalSuffixes, TOptions } from "./types";
 import { formatICU } from "./utils/formatMessage";
 
 /**
@@ -9,6 +9,7 @@ import { formatICU } from "./utils/formatMessage";
 let globalTranslations: Record<string, Record<string, string>> = {};
 let globalLocale: string = "en";
 let globalSourceLocale: string = "";
+let globalLocales: LocalesMap = {};
 
 /**
  * Set global translations (called by VocoderProvider)
@@ -34,6 +35,34 @@ export function _setGlobalLocale(locale: string): void {
  */
 export function _setSourceLocale(locale: string): void {
 	globalSourceLocale = locale;
+}
+
+/**
+ * Set global locales map (called by VocoderProvider)
+ * @internal
+ */
+export function _setGlobalLocales(locales: LocalesMap): void {
+	globalLocales = locales;
+}
+
+/**
+ * Format a number as a locale-aware ordinal outside React components.
+ * Uses ordinalSuffixes from the manifest config. Falls back to String(value) when data is unavailable.
+ *
+ * @example
+ * ```tsx
+ * import { ordinal } from '@vocoder/react';
+ * const label = ordinal(1); // "1st" in en, "1.º" in es, "第1" in ja
+ * ```
+ */
+export function ordinal(value: number): string {
+	const suffixes = globalLocales[globalLocale]?.ordinalSuffixes;
+	if (!suffixes) return String(value);
+	const pr = new Intl.PluralRules(globalLocale, { type: "ordinal" });
+	const category = pr.select(value) as keyof OrdinalSuffixes;
+	const pattern = suffixes[category] ?? suffixes.other;
+	if (!pattern) return String(value);
+	return pattern.replace("#", String(value));
 }
 
 /**

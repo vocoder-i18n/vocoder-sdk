@@ -10,6 +10,11 @@ import {
 import { generateMessageHash } from "./hash";
 import { checkForUpdates, isRefreshAvailable } from "./api-runtime";
 import {
+	PREVIEW_MODE,
+	isVocoderEnabled,
+	syncPreviewQueryParam,
+} from "./preview";
+import {
 	getConfig,
 	getLocales,
 	getTranslations,
@@ -19,9 +24,11 @@ import {
 } from "./runtime";
 import {
 	_setGlobalLocale,
+	_setGlobalLocales,
 	_setGlobalTranslations,
 	_setSourceLocale,
 } from "./translate";
+import { formatICU } from "./utils/formatMessage";
 import type {
 	LocalesMap,
 	TranslationsMap,
@@ -106,8 +113,11 @@ export const VocoderProvider: React.FC<VocoderProviderProps> = ({
 	cookies: cookieString,
 	applyDir = true,
 }) => {
+	const enabled = isVocoderEnabled(cookieString);
+
 	// ── Hydration (computed once, never changes) ─────────────────────
 	const [hydration] = useState(() => {
+		if (!enabled) return null;
 		if (typeof window !== "undefined") {
 			return readHydrationFromDom();
 		}
@@ -172,9 +182,14 @@ export const VocoderProvider: React.FC<VocoderProviderProps> = ({
 
 	const [isInitialized, setIsInitialized] = useState(false);
 
+	// ── Sync ?vocoder=true|false query param to cookie then redirect ──
+	useEffect(() => {
+		if (PREVIEW_MODE) syncPreviewQueryParam();
+	}, []);
+
 	// ── Async initialization (client-side) ───────────────────────────
 	useEffect(() => {
-		if (isInitialized) return;
+		if (!enabled || isInitialized) return;
 
 		let cancelled = false;
 
@@ -227,25 +242,26 @@ export const VocoderProvider: React.FC<VocoderProviderProps> = ({
 		return () => {
 			cancelled = true;
 		};
-	}, [cookieString, hydrationData, isInitialized]);
+	}, [enabled, cookieString, hydrationData, isInitialized]);
 
-	// ── Sync global state for t() function ───────────────────────────
+	// ── Sync global state for t() and ordinal() functions ───────────
 	useEffect(() => {
 		_setGlobalLocale(locale);
 		_setGlobalTranslations(translations);
-	}, [locale, translations]);
+		_setGlobalLocales(locales);
+	}, [locale, translations, locales]);
 
 	// ── Apply dir/lang to document.documentElement (opt-in) ──────────
 	useEffect(() => {
-		if (!applyDir || typeof document === "undefined") return;
+		if (!enabled || !applyDir || typeof document === "undefined") return;
 		const dir = locales?.[locale]?.dir ?? "ltr";
 		document.documentElement.dir = dir;
 		document.documentElement.lang = locale;
-	}, [applyDir, locale, locales]);
+	}, [enabled, applyDir, locale, locales]);
 
 	// ── Background refresh ───────────────────────────────────────────
 	useEffect(() => {
-		if (!isRefreshAvailable || !isInitialized || !locale) return;
+		if (!enabled || !isRefreshAvailable || !isInitialized || !locale) return;
 
 		let cancelled = false;
 		checkForUpdates(locale).then((updated) => {
@@ -256,7 +272,7 @@ export const VocoderProvider: React.FC<VocoderProviderProps> = ({
 		return () => {
 			cancelled = true;
 		};
-	}, [locale, isInitialized]);
+	}, [enabled, locale, isInitialized]);
 
 	// ── Derived values ───────────────────────────────────────────────
 	const isReady =
@@ -271,11 +287,31 @@ export const VocoderProvider: React.FC<VocoderProviderProps> = ({
 	);
 
 	// ── Context methods ──────────────────────────────────────────────
-	// t(key) — key is always a hash (passed by T component after hash computation).
-	// Falls back to the key itself so callers can detect "no translation".
+	// t — reactive translate. Takes source text + optional values/options.
+	// options.id skips hash computation (used by <T> which has a pre-computed hash).
 	const t = useCallback(
-		(key: string): string => translations[locale]?.[key] ?? key,
+		(text: string, values?: Record<string, unknown>, options?: { context?: string; id?: string }): string => {
+			const hash = options?.id ?? generateMessageHash(text, options?.context);
+			const translated = translations[locale]?.[hash] ?? text;
+			if (values && Object.keys(values).length > 0) {
+				return formatICU(translated, values as Record<string, unknown>, locale);
+			}
+			return translated;
+		},
 		[locale, translations],
+	);
+
+	const ordinal = useCallback(
+		(value: number): string => {
+			const suffixes = locales?.[locale]?.ordinalSuffixes;
+			if (!suffixes) return String(value);
+			const pr = new Intl.PluralRules(locale, { type: "ordinal" });
+			const category = pr.select(value) as keyof typeof suffixes;
+			const pattern = suffixes[category] ?? suffixes.other;
+			if (!pattern) return String(value);
+			return pattern.replace("#", String(value));
+		},
+		[locale, locales],
 	);
 
 	// hasTranslation(key) — key is always a hash.
@@ -316,10 +352,17 @@ export const VocoderProvider: React.FC<VocoderProviderProps> = ({
 			if (!translations[best]) {
 				try {
 					const loaded = await loadLocale(best);
-					setTranslations((prev) => ({ ...prev, [best]: loaded }));
+					const merged = { ...translations, [best]: loaded };
+					// Sync global state immediately so t() sees the new locale's
+					// translations on the same render cycle — not deferred to useEffect.
+					_setGlobalTranslations(merged);
+					setTranslations(merged);
 				} catch (error) {
 					console.error(`Failed to load locale ${best}:`, error);
 				}
+			} else {
+				// Locale already loaded — sync global immediately before state update.
+				_setGlobalTranslations(translations);
 			}
 
 			setLocaleState(best);
@@ -341,6 +384,7 @@ export const VocoderProvider: React.FC<VocoderProviderProps> = ({
 		locale,
 		dir: (locales?.[locale]?.dir ?? "ltr") as "ltr" | "rtl",
 		locales,
+		ordinal,
 		setLocale,
 		t,
 		hasTranslation,

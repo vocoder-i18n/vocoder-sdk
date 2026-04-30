@@ -29,13 +29,14 @@ function classifyProp(key: string): "plural" | "select" | "other" | "ignore" {
 	return "ignore";
 }
 
+const DEFAULT_ORDINAL_ICU = "{count, selectordinal, one {#st} two {#nd} few {#rd} other {#th}}";
+
 /**
  * Build an ICU plural string from plural props.
  * Exact matches (_0 → =0) come before CLDR categories.
  * Internal variable is always "count" for consistent lookup keys.
  */
-function buildPluralICU(props: Record<string, string>, ordinal = false): string {
-	const type = ordinal ? "selectordinal" : "plural";
+function buildPluralICU(props: Record<string, string>): string {
 	const exact: string[] = [];
 	const cldr: string[] = [];
 
@@ -48,7 +49,7 @@ function buildPluralICU(props: Record<string, string>, ordinal = false): string 
 		}
 	}
 
-	return `{count, ${type}, ${[...exact, ...cldr].join(" ")}}`;
+	return `{count, plural, ${[...exact, ...cldr].join(" ")}}`;
 }
 
 /**
@@ -108,7 +109,7 @@ export const T: React.FC<TProps> = ({
 	timeStyle,
 	...rest
 }) => {
-	const { t, locale, hasTranslation } = useVocoder();
+	const { t, locale, locales, hasTranslation } = useVocoder();
 
 	try {
 		// Format mode: pure Intl formatting, no translation lookup
@@ -143,12 +144,31 @@ export const T: React.FC<TProps> = ({
 			else if (hasSelectMode) selectProps.other = otherValue;
 		}
 
+		// Ordinal path — no suffix props needed.
+		// Tier 1: ordinalSuffixes from locale manifest (CLDR-based, guaranteed correct).
+		// Tier 2: translated ICU from bundle (for locales without ordinalSuffixes — probe expansion path).
+		// Tier 3: bare number.
+		if (ordinal && value !== undefined) {
+			const suffixes = locales?.[locale]?.ordinalSuffixes;
+			if (suffixes) {
+				const pr = new Intl.PluralRules(locale, { type: "ordinal" });
+				const category = pr.select(Number(value)) as keyof typeof suffixes;
+				const pattern = suffixes[category] ?? suffixes.other;
+				return <>{pattern ? pattern.replace("#", String(value)) : String(value)}</>;
+			}
+			const ordinalValues = { count: value, ...(valuesObj ?? {}) };
+			const lookupKey = id ?? generateMessageHash(DEFAULT_ORDINAL_ICU, _context);
+			if (hasTranslation(lookupKey)) {
+				return <>{formatICU(t(DEFAULT_ORDINAL_ICU, undefined, { id: lookupKey }), ordinalValues, locale)}</>;
+			}
+			return <>{String(value)}</>;
+		}
+
 		let sourceText: string;
 		let formatValues: Record<string, any>;
 
 		if (hasPluralMode && value !== undefined) {
-			// Plural mode: build ICU from props, count = value
-			sourceText = buildPluralICU(pluralProps, ordinal);
+			sourceText = buildPluralICU(pluralProps);
 			formatValues = { count: value, ...(valuesObj ?? {}) };
 		} else if (hasSelectMode && value !== undefined) {
 			// Select mode: build ICU from _word props, value = value
@@ -167,7 +187,7 @@ export const T: React.FC<TProps> = ({
 		const lookupKey = id ?? generateMessageHash(sourceText, _context);
 
 		// Get translated text or fall back to source
-		const textToFormat = hasTranslation(lookupKey) ? t(lookupKey) : sourceText;
+		const textToFormat = hasTranslation(lookupKey) ? t(sourceText, undefined, { id: lookupKey }) : sourceText;
 
 		// Nothing to format (id-only with no translation and no message)
 		if (!textToFormat) {

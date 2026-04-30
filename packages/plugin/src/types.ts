@@ -8,13 +8,26 @@ export interface VocoderPluginOptions {
 	 * CLI sync, and git webhook all use identical patterns.
 	 */
 	verbose?: boolean;
+	/**
+	 * Enable preview mode — SDK is dormant by default in production.
+	 * Visitors see source text and no locale selector.
+	 * Opt in via `?vocoder_preview=true` (sets a cookie, then redirects).
+	 * Opt out via `?vocoder_preview=false`.
+	 * @default false
+	 */
+	preview?: boolean;
 }
 
 export interface VocoderTranslationData {
 	config: {
 		sourceLocale: string;
 		targetLocales: string[];
-		locales: Record<string, { nativeName: string; dir?: "rtl" }>;
+		locales: Record<string, {
+			nativeName: string;
+			dir?: "rtl";
+			currencyCode?: string;
+			ordinalSuffixes?: { zero?: string; one?: string; two?: string; few?: string; many?: string; other: string };
+		}>;
 	};
 	translations: Record<string, Record<string, string>>;
 	updatedAt: string | null;

@@ -125,9 +125,8 @@ export const unplugin = createUnplugin(
 
 			if (d.config.sourceLocale) {
 				const localeCount = d.config.targetLocales.length;
-				const stringCount = Object.values(d.translations).reduce(
-					(sum: number, t: Record<string, string>) =>
-						sum + Object.keys(t).length,
+				const stringCount = (Object.values(d.translations) as Record<string, string>[]).reduce(
+					(sum, t) => sum + Object.keys(t).length,
 					0,
 				);
 				console.log(
@@ -147,6 +146,7 @@ export const unplugin = createUnplugin(
 				__VOCODER_FINGERPRINT__: JSON.stringify(fingerprint ?? ""),
 				__VOCODER_API_URL__: JSON.stringify(apiUrl),
 				__VOCODER_BUILD_TS__: JSON.stringify(Date.now()),
+				__VOCODER_PREVIEW__: JSON.stringify(options?.preview ?? false),
 			};
 		}
 

@@ -40,15 +40,21 @@ const translations = {
 		"1mx4siq": "Cliquez <c0>ici</c0> pour obtenir de l aide",
 		"0ydwi6n": "Lisez notre <c0>Politique de confidentialite</c0> et nos <c1>Conditions d utilisation</c1>",
 	},
+	// Polish: tests CLDR few (2-4) and many (5+) plural categories
+	pl: {
+		"1twzd04": "Czesc, swiecie!",
+		"0bt5k53": "{count, plural, one {# przedmiot} few {# przedmioty} many {# przedmiotow} other {# przedmiotu}}",
+	},
 } as const;
 
 export const config = {
 	sourceLocale: "en",
-	targetLocales: ["es", "fr"],
+	targetLocales: ["es", "fr", "pl"],
 	locales: {
-		en: { nativeName: "English" },
-		es: { nativeName: "Espanol" },
-		fr: { nativeName: "Francais" },
+		en: { nativeName: "English",  currencyCode: "USD" },
+		es: { nativeName: "Espanol",  currencyCode: "EUR" },
+		fr: { nativeName: "Francais", currencyCode: "EUR" },
+		pl: { nativeName: "Polski",   currencyCode: "PLN" },
 	},
 };
 
@@ -56,6 +62,7 @@ export const loaders = {
 	en: () => Promise.resolve({ default: translations.en }),
 	es: () => Promise.resolve({ default: translations.es }),
 	fr: () => Promise.resolve({ default: translations.fr }),
+	pl: () => Promise.resolve({ default: translations.pl }),
 };
 
 export default { config, loaders };

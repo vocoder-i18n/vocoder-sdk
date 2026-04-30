@@ -472,10 +472,6 @@ export async function fetchTranslations(
 			}
 		}
 
-		console.warn(
-			`[vocoder] Could not fetch translations: ${error instanceof Error ? error.message : "Unknown error"}. Build will proceed with empty translations.`,
-		);
-
 		return {
 			config: { sourceLocale: "", targetLocales: [], locales: {} },
 			translations: {},

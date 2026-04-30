@@ -47,4 +47,48 @@ describe("t() function", () => {
 			expect(t("Missing translation")).toBe("Missing translation");
 		});
 	});
+
+	it("formats ICU plural in source locale", async () => {
+		mountProvider();
+
+		await waitFor(() => {
+			expect(
+				t("{count, plural, one {# item} other {# items}}", { count: 1 }),
+			).toBe("1 item");
+			expect(
+				t("{count, plural, one {# item} other {# items}}", { count: 5 }),
+			).toBe("5 items");
+		});
+	});
+
+	it("translates then formats ICU plural", async () => {
+		document.cookie = "vocoder_locale=es; Path=/";
+		mountProvider();
+
+		await waitFor(() => {
+			expect(
+				t("{count, plural, one {# item} other {# items}}", { count: 3 }),
+			).toBe("3 articulos");
+		});
+	});
+
+	it("id option bypasses text hash — looks up by explicit key", async () => {
+		document.cookie = "vocoder_locale=es; Path=/";
+		mountProvider();
+
+		// "1w2u0qz" is the hash for "Hello" — passes any text but resolves via id
+		await waitFor(() => {
+			expect(t("ignored source text", {}, { id: "1w2u0qz" })).toBe("Hola");
+		});
+	});
+
+	it("context changes lookup key — falls back to source when no match", async () => {
+		document.cookie = "vocoder_locale=es; Path=/";
+		mountProvider();
+
+		// "Hello, world!" has a translation in es, but with context="ctx" the hash differs
+		await waitFor(() => {
+			expect(t("Hello, world!", {}, { context: "ctx" })).toBe("Hello, world!");
+		});
+	});
 });

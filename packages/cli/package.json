@@ -49,8 +49,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@vocoder/config": "workspace:*",
-    "@vocoder/extractor": "workspace:*",
     "@clack/core": "0.4.1",
     "@clack/prompts": "^0.9.1",
     "chalk": "^5.3.0",
@@ -59,6 +57,8 @@
     "tsx": "^4.7.0"
   },
   "devDependencies": {
+    "@vocoder/config": "workspace:*",
+    "@vocoder/extractor": "workspace:*",
     "@types/node": "^20.19.9",
     "tsup": "^8.0.0",
     "typescript": "^5.4.0",

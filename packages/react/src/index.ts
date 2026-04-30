@@ -3,8 +3,9 @@
 // Lazy loading utilities
 export { generateMessageHash } from "./hash";
 export { initializeVocoder } from "./runtime";
+export { PREVIEW_MODE, isPreviewEnabled, isVocoderEnabled } from "./preview";
 export { T } from "./T";
-export { t } from "./translate";
+export { ordinal, t } from "./translate";
 // Type exports
 export type {
 	FormatMode,

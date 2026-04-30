@@ -6,10 +6,22 @@ export interface TranslationsMap {
 	};
 }
 
+export interface OrdinalSuffixes {
+	zero?: string;
+	one?: string;
+	two?: string;
+	few?: string;
+	many?: string;
+	other: string;
+}
+
 export interface LocaleInfo {
 	nativeName: string; // "Español", "简体中文"
 	dir?: "rtl"; // Only for RTL locales
 	currencyCode?: string; // ISO 4217: "USD", "EUR", "GBP", etc.
+	/** Locale-specific ordinal suffix patterns. When present, <T ordinal> uses these
+	 *  instead of the translated English suffix strings (st/nd/rd/th). */
+	ordinalSuffixes?: OrdinalSuffixes;
 }
 
 export interface LocalesMap {
@@ -26,9 +38,15 @@ export interface VocoderContextValue {
 	dir: "ltr" | "rtl";
 	locales?: LocalesMap;
 	setLocale: (locale: string) => Promise<void>;
-	/** Raw key (hash) → translated string. Use the `t()` export for source-text lookup with ICU formatting. */
-	t: (key: string) => string;
+	/**
+	 * Reactive translate function. Same signature as the global `t()` export but
+	 * reads from React context — safe to call in render, re-runs on locale change.
+	 * Use this inside components. Use the global `t()` export in callbacks/utilities.
+	 */
+	t: (text: string, values?: Record<string, unknown>, options?: TOptions) => string;
 	hasTranslation: (text: string) => boolean;
+	/** Format a number as a locale-aware ordinal (e.g. "1st" in en, "1.º" in es, "第1" in ja). */
+	ordinal: (value: number) => string;
 }
 
 export interface VocoderProviderServerProps {

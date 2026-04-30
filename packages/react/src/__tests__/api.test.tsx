@@ -187,6 +187,30 @@ describe("Q3 — pluralization", () => {
 			expect(screen.getByText("1to")).toBeInTheDocument(),
 		);
 	});
+
+	it("CLDR few: Polish value=2 uses few category", async () => {
+		document.cookie = "vocoder_locale=pl; Path=/";
+		render(
+			<VocoderProvider>
+				<T value={2} one="# item" other="# items" />
+			</VocoderProvider>,
+		);
+		await waitFor(() =>
+			expect(screen.getByText("2 przedmioty")).toBeInTheDocument(),
+		);
+	});
+
+	it("CLDR many: Polish value=5 uses many category", async () => {
+		document.cookie = "vocoder_locale=pl; Path=/";
+		render(
+			<VocoderProvider>
+				<T value={5} one="# item" other="# items" />
+			</VocoderProvider>,
+		);
+		await waitFor(() =>
+			expect(screen.getByText("5 przedmiotow")).toBeInTheDocument(),
+		);
+	});
 });
 
 // ─── Q4: Select (enum branching) ────────────────────────────────────────────
@@ -339,6 +363,123 @@ describe("Q5 — rich text", () => {
 		await waitFor(() => {
 			expect(screen.getByTestId("icon")).toBeInTheDocument();
 		});
+	});
+
+	it("renders nested component placeholders", async () => {
+		render(
+			<VocoderProvider>
+				<T
+					message="Read <c0>our <c1>docs</c1> now</c0>"
+					components={[<a href="/docs" />, <strong />]}
+				/>
+			</VocoderProvider>,
+		);
+		await waitFor(() => {
+			const link = screen.getByRole("link");
+			expect(link).toHaveAttribute("href", "/docs");
+			expect(link.querySelector("strong")).toBeInTheDocument();
+			expect(screen.getByText("docs")).toBeInTheDocument();
+		});
+	});
+});
+
+// ─── Q6: Format prop ─────────────────────────────────────────────────────────
+// Pure Intl formatting — no translation lookup. Value rendered per locale.
+// Expected values computed at test time via Intl APIs to avoid brittleness
+// across Node.js / ICU versions.
+
+describe("Q6 — format prop", () => {
+	const FIXED_DATE = new Date("2024-06-15T14:30:00.000Z");
+
+	it("format=number formats integer with locale separators", async () => {
+		const expected = new Intl.NumberFormat("en").format(1_234_567);
+		render(
+			<VocoderProvider>
+				<T format="number" value={1_234_567} />
+			</VocoderProvider>,
+		);
+		await waitFor(() => expect(screen.getByText(expected)).toBeInTheDocument());
+	});
+
+	it("format=integer rounds to whole number", async () => {
+		const expected = new Intl.NumberFormat("en", { maximumFractionDigits: 0 }).format(1234.7);
+		render(
+			<VocoderProvider>
+				<T format="integer" value={1234.7} />
+			</VocoderProvider>,
+		);
+		await waitFor(() => expect(screen.getByText(expected)).toBeInTheDocument());
+	});
+
+	it("format=percent formats 0–1 as percentage", async () => {
+		const expected = new Intl.NumberFormat("en", { style: "percent" }).format(0.75);
+		render(
+			<VocoderProvider>
+				<T format="percent" value={0.75} />
+			</VocoderProvider>,
+		);
+		await waitFor(() => expect(screen.getByText(expected)).toBeInTheDocument());
+	});
+
+	it("format=compact abbreviates large numbers", async () => {
+		const expected = new Intl.NumberFormat("en", { notation: "compact" }).format(1_500_000);
+		render(
+			<VocoderProvider>
+				<T format="compact" value={1_500_000} />
+			</VocoderProvider>,
+		);
+		await waitFor(() => expect(screen.getByText(expected)).toBeInTheDocument());
+	});
+
+	it("format=date renders medium date by default", async () => {
+		const expected = new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(FIXED_DATE);
+		render(
+			<VocoderProvider>
+				<T format="date" value={FIXED_DATE} />
+			</VocoderProvider>,
+		);
+		await waitFor(() => expect(screen.getByText(expected)).toBeInTheDocument());
+	});
+
+	it("format=date respects dateStyle prop", async () => {
+		const expected = new Intl.DateTimeFormat("en", { dateStyle: "long" }).format(FIXED_DATE);
+		render(
+			<VocoderProvider>
+				<T format="date" value={FIXED_DATE} dateStyle="long" />
+			</VocoderProvider>,
+		);
+		await waitFor(() => expect(screen.getByText(expected)).toBeInTheDocument());
+	});
+
+	it("format=time renders short time by default", async () => {
+		const expected = new Intl.DateTimeFormat("en", { timeStyle: "short" }).format(FIXED_DATE);
+		render(
+			<VocoderProvider>
+				<T format="time" value={FIXED_DATE} />
+			</VocoderProvider>,
+		);
+		await waitFor(() => expect(screen.getByText(expected)).toBeInTheDocument());
+	});
+
+	it("format=datetime renders date and time", async () => {
+		const expected = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(FIXED_DATE);
+		render(
+			<VocoderProvider>
+				<T format="datetime" value={FIXED_DATE} />
+			</VocoderProvider>,
+		);
+		await waitFor(() => expect(screen.getByText(expected)).toBeInTheDocument());
+	});
+
+	it("format=number uses active locale", async () => {
+		document.cookie = "vocoder_locale=es; Path=/";
+		const expected = new Intl.NumberFormat("es").format(1_234_567);
+		render(
+			<VocoderProvider>
+				<T format="number" value={1_234_567} />
+			</VocoderProvider>,
+		);
+		await waitFor(() => expect(screen.getByText(expected)).toBeInTheDocument());
 	});
 });
 

@@ -1,5 +1,6 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import React from "react";
+import { isVocoderEnabled } from "./preview";
 import type { LocaleSelectorProps } from "./types";
 import { useVocoder } from "./VocoderProvider";
 
@@ -177,6 +178,8 @@ export const LocaleSelector: React.FC<LocaleSelectorProps> = ({
 			return nameA.localeCompare(nameB, compareLocale, { sensitivity: "base" });
 		});
 	}, [availableLocales, locale, locales, sortBy, getDisplayName]);
+
+	if (!isVocoderEnabled()) return null;
 
 	const getPositionStyles = (): React.CSSProperties => {
 		const baseStyles: React.CSSProperties = {

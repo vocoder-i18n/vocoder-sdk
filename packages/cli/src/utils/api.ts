@@ -175,6 +175,7 @@ export class VocoderAPI {
 		const data = await this.request<{
 			projectName: string;
 			organizationName: string;
+			shortCode: string;
 			sourceLocale: string;
 			targetLocales: string[];
 			targetBranches: string[];
@@ -190,6 +191,7 @@ export class VocoderAPI {
 		return {
 			projectName: data.projectName,
 			organizationName: data.organizationName,
+			shortCode: data.shortCode,
 			sourceLocale: data.sourceLocale,
 			targetLocales: data.targetLocales,
 			targetBranches: data.targetBranches ?? ["main"],
@@ -251,6 +253,7 @@ export class VocoderAPI {
 			requestedMode?: RequestedSyncMode;
 			requestedMaxWaitMs?: number;
 			clientRunId?: string;
+			force?: boolean;
 		},
 		repoIdentity?: RepoIdentityPayload,
 	): Promise<TranslationBatchResponse> {
@@ -276,7 +279,7 @@ export class VocoderAPI {
 					branch,
 					stringEntries,
 					targetLocales,
-					stringsHash,
+					...(options?.force ? {} : { stringsHash }),
 					...(options?.requestedMode
 						? { requestedMode: options.requestedMode }
 						: {}),

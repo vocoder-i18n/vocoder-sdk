@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as p from "@clack/prompts";
 import chalk from "chalk";
+import type { VocoderTranslationData } from "@vocoder/config";
 import type {
 	EffectiveSyncMode,
 	ExtractedString,
@@ -33,45 +34,16 @@ type TranslationArtifacts = {
 	localeMetadata?: LocaleMetadataMap;
 	snapshotBatchId?: string;
 	completedAt?: string | null;
-	cacheBranch?: string;
 };
 
-type LocalSnapshotCache = {
-	version: 1;
-	branch: string;
-	sourceLocale: string;
-	targetLocales: string[];
-	savedAt: string;
-	stringsHash?: string;
-	snapshotBatchId?: string;
-	completedAt?: string | null;
-	localeMetadata?: LocaleMetadataMap;
-	translations: TranslationMap;
-};
-
-function computeStringsHash(texts: string[]): string {
+function computeFingerprint(shortCode: string, texts: string[]): string {
 	const sorted = [...texts].sort();
 	return createHash("sha256")
-		.update(sorted.join("\0"))
+		.update(`${shortCode}:${sorted.join("\0")}`)
 		.digest("hex")
-		.slice(0, 16);
+		.slice(0, 12);
 }
 
-function readCachedStringsHash(
-	projectRoot: string,
-	branch: string,
-): string | null {
-	const filePath = getCacheFilePath(projectRoot, branch);
-	if (!existsSync(filePath)) return null;
-	try {
-		const raw = JSON.parse(readFileSync(filePath, "utf-8")) as unknown;
-		if (isRecord(raw) && typeof raw.stringsHash === "string")
-			return raw.stringsHash;
-	} catch {
-		/* ignore */
-	}
-	return null;
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -129,102 +101,75 @@ function parseTranslations(value: unknown): TranslationMap | null {
 	return Object.keys(translations).length > 0 ? translations : null;
 }
 
-function getCacheFilePath(projectRoot: string, branch: string): string {
-	const branchHash = createHash("sha1")
-		.update(branch)
-		.digest("hex")
-		.slice(0, 12);
-	return join(
-		projectRoot,
-		"node_modules",
-		".vocoder",
-		"cache",
-		"sync",
-		`${branchHash}.json`,
-	);
+function getCacheFilePath(projectRoot: string, fingerprint: string): string {
+	return join(projectRoot, "node_modules", ".vocoder", "cache", `${fingerprint}.json`);
 }
 
-function readLocalSnapshotCache(params: {
-	projectRoot: string;
-	branch: string;
-}): TranslationArtifacts | null {
-	const candidateBranches =
-		params.branch === "main" ? ["main"] : [params.branch, "main"];
-
-	for (const candidateBranch of candidateBranches) {
-		const cacheFilePath = getCacheFilePath(params.projectRoot, candidateBranch);
-
-		if (!existsSync(cacheFilePath)) {
-			continue;
-		}
-
-		try {
-			const raw = readFileSync(cacheFilePath, "utf-8");
-			const parsed = JSON.parse(raw) as unknown;
-			if (!isRecord(parsed)) {
-				continue;
-			}
-
-			const translations = parseTranslations(parsed.translations);
-			if (!translations) {
-				continue;
-			}
-
-			const localeMetadata = parseLocaleMetadata(parsed.localeMetadata);
-
-			return {
-				source: "local-cache",
-				translations,
-				localeMetadata,
-				snapshotBatchId:
-					typeof parsed.snapshotBatchId === "string"
-						? parsed.snapshotBatchId
-						: undefined,
-				completedAt:
-					typeof parsed.completedAt === "string" ? parsed.completedAt : null,
-				cacheBranch: candidateBranch,
-			};
-		} catch {}
-	}
-
-	return null;
-}
-
-function writeLocalSnapshotCache(params: {
-	projectRoot: string;
-	branch: string;
+function buildTranslationData(params: {
 	sourceLocale: string;
 	targetLocales: string[];
+	stringEntries: TranslationStringEntry[];
 	translations: TranslationMap;
 	localeMetadata?: LocaleMetadataMap;
-	snapshotBatchId?: string;
-	completedAt?: string | null;
-	stringsHash?: string;
-}): string {
-	const cacheFilePath = getCacheFilePath(params.projectRoot, params.branch);
-	mkdirSync(
-		join(params.projectRoot, "node_modules", ".vocoder", "cache", "sync"),
-		{
-			recursive: true,
-		},
-	);
+	updatedAt: string;
+}): VocoderTranslationData {
+	// Remap text-keyed translations → hash-keyed using the string entries the CLI already has
+	const textToHash = new Map(params.stringEntries.map((e) => [e.text, e.key]));
+	const hashKeyed: TranslationMap = {};
+	for (const [locale, localeMap] of Object.entries(params.translations)) {
+		hashKeyed[locale] = {};
+		for (const [text, translation] of Object.entries(localeMap)) {
+			const hash = textToHash.get(text);
+			if (hash) hashKeyed[locale][hash] = translation;
+		}
+	}
 
-	const payload: LocalSnapshotCache = {
-		version: 1,
-		branch: params.branch,
-		sourceLocale: params.sourceLocale,
-		targetLocales: params.targetLocales,
-		savedAt: new Date().toISOString(),
-		...(params.stringsHash ? { stringsHash: params.stringsHash } : {}),
-		...(params.snapshotBatchId
-			? { snapshotBatchId: params.snapshotBatchId }
-			: {}),
-		...(params.completedAt ? { completedAt: params.completedAt } : {}),
-		...(params.localeMetadata ? { localeMetadata: params.localeMetadata } : {}),
-		translations: params.translations,
+	const locales: Record<string, { nativeName: string; dir?: "rtl" }> = {};
+	for (const code of [params.sourceLocale, ...params.targetLocales]) {
+		const meta = params.localeMetadata?.[code];
+		if (meta) locales[code] = { nativeName: meta.nativeName, ...(meta.dir ? { dir: meta.dir } : {}) };
+	}
+
+	return {
+		config: { sourceLocale: params.sourceLocale, targetLocales: params.targetLocales, locales },
+		translations: hashKeyed,
+		updatedAt: params.updatedAt,
 	};
+}
 
-	writeFileSync(cacheFilePath, JSON.stringify(payload, null, 2), "utf-8");
+function readLocalCache(params: {
+	projectRoot: string;
+	fingerprint: string;
+}): TranslationArtifacts | null {
+	const cacheFilePath = getCacheFilePath(params.projectRoot, params.fingerprint);
+	if (!existsSync(cacheFilePath)) return null;
+	try {
+		const raw = readFileSync(cacheFilePath, "utf-8");
+		const parsed = JSON.parse(raw) as unknown;
+		if (!isRecord(parsed)) return null;
+		// VocoderTranslationData shape: { config, translations, updatedAt }
+		const inner = isRecord(parsed.config) ? parsed : null;
+		if (!inner) return null;
+		const translations = parseTranslations(inner.translations);
+		if (!translations) return null;
+		const localeMetadata = isRecord(inner.config)
+			? parseLocaleMetadata(inner.config.locales)
+			: undefined;
+		return { source: "local-cache", translations, localeMetadata };
+	} catch {
+		return null;
+	}
+}
+
+function writeCache(params: {
+	projectRoot: string;
+	fingerprint: string;
+	data: VocoderTranslationData;
+}): string {
+	const cacheDir = join(params.projectRoot, "node_modules", ".vocoder", "cache");
+	mkdirSync(cacheDir, { recursive: true });
+	const cacheFilePath = getCacheFilePath(params.projectRoot, params.fingerprint);
+	writeFileSync(cacheFilePath, JSON.stringify(params.data), "utf-8");
 	return cacheFilePath;
 }
 
@@ -585,29 +530,21 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 			);
 		}
 
-		// Local hash check — skip API submission if strings haven't changed since last sync.
-		const currentHash = computeStringsHash(sourceStrings);
+		const fingerprint = computeFingerprint(config.shortCode, sourceStrings);
+
+		// Local cache check — skip API submission if translations already exist for this fingerprint.
 		if (!options.force) {
-			const cachedHash = readCachedStringsHash(projectRoot, branch);
-			if (options.verbose) {
-				const cacheFile = getCacheFilePath(projectRoot, branch);
-				if (cachedHash) {
-					p.log.info(
-						`Local cache: ${chalk.dim(cacheFile)}\n  cached hash ${chalk.cyan(cachedHash.slice(0, 8))}… vs current ${chalk.cyan(currentHash.slice(0, 8))}… — ${cachedHash === currentHash ? chalk.green("match") : chalk.yellow("changed")}`,
-					);
-				} else {
-					p.log.info(`No local cache found at ${chalk.dim(cacheFile)} — will submit to API`);
-				}
-			}
-			if (cachedHash && cachedHash === currentHash) {
+			const cacheFile = getCacheFilePath(projectRoot, fingerprint);
+			if (existsSync(cacheFile)) {
 				if (options.verbose) {
-					p.log.info(
-						"Skipping API submission — delete node_modules/.vocoder to force a fresh sync",
-					);
+					p.log.info(`Cache hit: ${chalk.dim(cacheFile)} (fingerprint ${chalk.cyan(fingerprint)})`);
 				}
 				const duration = ((Date.now() - startTime) / 1000).toFixed(1);
 				p.outro(`Up to date (${duration}s)`);
 				return 0;
+			}
+			if (options.verbose) {
+				p.log.info(`No cache for fingerprint ${chalk.cyan(fingerprint)} — will submit to API`);
 			}
 		}
 
@@ -621,6 +558,7 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 				requestedMode,
 				requestedMaxWaitMs: waitTimeoutMs,
 				clientRunId: randomUUID(),
+				force: options.force,
 			},
 			repoIdentity ? { ...repoIdentity, commitSha } : { commitSha },
 		);
@@ -728,18 +666,14 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 
 			spinner.start("Loading fallback translations");
 
-			const localFallback = readLocalSnapshotCache({
+			const localFallback = readLocalCache({
 				projectRoot,
-				branch,
+				fingerprint,
 			});
 
 			if (localFallback) {
 				artifacts = localFallback;
-				const cacheBranchLabel =
-					localFallback.cacheBranch && localFallback.cacheBranch !== branch
-						? `${localFallback.cacheBranch} fallback`
-						: localFallback.cacheBranch || branch;
-				spinner.stop(`Using local cached snapshot (${cacheBranchLabel})`);
+				spinner.stop(`Using local cached snapshot (${fingerprint})`);
 			} else {
 				try {
 					const apiSnapshot = await fetchApiSnapshot(api, {
@@ -786,32 +720,23 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 		});
 
 		try {
-			const cachePath = writeLocalSnapshotCache({
-				projectRoot,
-				branch,
+			const data = buildTranslationData({
 				sourceLocale: config.sourceLocale,
 				targetLocales: config.targetLocales,
+				stringEntries,
 				translations: finalTranslations,
 				localeMetadata: artifacts.localeMetadata,
-				stringsHash: currentHash,
-				snapshotBatchId:
-					artifacts.snapshotBatchId ??
-					(artifacts.source === "fresh"
-						? batchResponse.batchId
-						: batchResponse.latestCompletedBatchId),
-				completedAt:
-					artifacts.completedAt ??
-					(artifacts.source === "fresh" ? new Date().toISOString() : null),
+				updatedAt: new Date().toISOString(),
 			});
-
+			const cachePath = writeCache({ projectRoot, fingerprint, data });
 			if (options.verbose) {
-				p.log.info(`Cached snapshot: ${cachePath}`);
+				p.log.info(`Cache written: ${cachePath}`);
 			}
 		} catch (error) {
 			if (options.verbose) {
 				const message =
 					error instanceof Error ? error.message : "Unknown cache write error";
-				p.log.warn(`Failed to write local snapshot cache: ${message}`);
+				p.log.warn(`Failed to write cache: ${message}`);
 			}
 		}
 

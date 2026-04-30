@@ -37,7 +37,8 @@ export interface TransformResult {
  * Exact matches (_0, _1) come before CLDR categories (one, other, etc.).
  * Internal variable name is always "count" for consistent lookup keys.
  */
-function buildPluralICU(props: Record<string, string>): string {
+function buildPluralICU(props: Record<string, string>, ordinal = false): string {
+	const type = ordinal ? "selectordinal" : "plural";
 	const exactParts: string[] = [];
 	const cldrParts: string[] = [];
 
@@ -50,7 +51,7 @@ function buildPluralICU(props: Record<string, string>): string {
 		}
 	}
 
-	return `{count, plural, ${[...exactParts, ...cldrParts].join(" ")}}`;
+	return `{count, ${type}, ${[...exactParts, ...cldrParts].join(" ")}}`;
 }
 
 /**
@@ -558,10 +559,18 @@ export class StringExtractor {
 		let otherValue: string | undefined;
 		let hasPlural = false;
 		let hasSelect = false;
+		let isOrdinal = false;
 
 		for (const attr of attributes) {
 			if (attr.type !== "JSXAttribute") continue;
 			const name = attr.name.name as string;
+
+			// Boolean `ordinal` prop — no value means true
+			if (name === "ordinal") {
+				isOrdinal = true;
+				continue;
+			}
+
 			const value =
 				attr.value?.type === "StringLiteral" ? attr.value.value : null;
 			if (!value) continue;
@@ -577,11 +586,16 @@ export class StringExtractor {
 			}
 		}
 
+		// Ordinal prop: generate default English ICU — developer writes nothing, pipeline handles locale patterns.
+		if (isOrdinal) {
+			return "{count, selectordinal, one {#st} two {#nd} few {#rd} other {#th}}";
+		}
+
 		if (!hasPlural && !hasSelect) return null;
 
 		if (hasPlural) {
 			if (otherValue !== undefined) pluralProps.other = otherValue;
-			return buildPluralICU(pluralProps);
+			return buildPluralICU(pluralProps, false);
 		}
 		if (hasSelect) {
 			if (otherValue !== undefined) selectProps.other = otherValue;
