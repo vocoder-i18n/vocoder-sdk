@@ -26,7 +26,8 @@ export interface VocoderContextValue {
 	dir: "ltr" | "rtl";
 	locales?: LocalesMap;
 	setLocale: (locale: string) => Promise<void>;
-	t: (text: string) => string;
+	/** Raw key (hash) → translated string. Use the `t()` export for source-text lookup with ICU formatting. */
+	t: (key: string) => string;
 	hasTranslation: (text: string) => boolean;
 }
 
@@ -57,6 +58,25 @@ export interface VocoderProviderProps {
 	applyDir?: boolean;
 }
 
+export interface TOptions {
+	/** Context string for disambiguation (same text, different meaning). Must match the context used in <T context="..."> */
+	context?: string;
+	/** Formality level for translation */
+	formality?: "formal" | "informal" | "auto";
+	/** Stable translation key. When provided, used as lookup key instead of hashing the message text. */
+	id?: string;
+}
+
+export type FormatMode =
+	| "number"
+	| "integer"
+	| "percent"
+	| "compact"
+	| "currency"
+	| "date"
+	| "time"
+	| "datetime";
+
 export interface TProps {
 	/** Optional stable translation key. When provided, used as lookup key instead of message text. */
 	id?: string;
@@ -75,22 +95,44 @@ export interface TProps {
 	 * ```
 	 */
 	message?: string;
-	/** @deprecated Use `message` instead */
-	msg?: string;
-	/** Values for variable interpolation. Merged with any additional spread props. */
+	/** Values for variable interpolation. The only supported way to pass interpolation variables. */
 	values?: Record<string, any>;
 	/**
-	 * The value that drives plural or select selection.
+	 * The value that drives plural/select/ordinal selection or locale formatting.
 	 * - Plural mode (number): matched against Intl.PluralRules for the active locale
 	 * - Select mode (string): matched against _case props
+	 * - Format mode: the value to format (number for number/currency/percent, Date/number/string for date/time)
 	 */
-	value?: string | number;
+	value?: string | number | Date;
+	/** Switch plural shorthand to ordinal mode ({count, selectordinal, ...}). Use with one/two/few/other props. */
+	ordinal?: boolean;
+	/**
+	 * Pure locale formatting — bypasses translation lookup, formats `value` directly with Intl.
+	 * - number/integer/percent/compact/currency: formats value as Intl.NumberFormat
+	 * - date/time/datetime: formats value as Intl.DateTimeFormat
+	 */
+	format?: FormatMode;
+	/** ISO 4217 currency code (e.g. "USD", "EUR"). Required when format="currency". */
+	currency?: string;
+	/** Date display style. Used with format="date" or format="datetime". @default "medium" */
+	dateStyle?: "full" | "long" | "medium" | "short";
+	/** Time display style. Used with format="time" or format="datetime". @default "short" */
+	timeStyle?: "full" | "long" | "medium" | "short";
 	/** Optional context string for disambiguation (same text, different meaning) */
 	context?: string;
 	/** Optional formality level */
 	formality?: "formal" | "informal" | "auto";
-	/** Component placeholders for rich-text messages, keyed by tag name */
-	components?: Record<string, React.ReactElement>;
+	/**
+	 * Component elements for rich-text messages. Each element maps to a `<cN>` placeholder
+	 * by array index. Injected automatically by @vocoder/plugin for natural JSX syntax.
+	 * @example
+	 * // Natural syntax (plugin injects components automatically):
+	 * <T>Read <a href="/docs">the docs</a> for help.</T>
+	 *
+	 * // Explicit form:
+	 * <T message="Read <c0>the docs</c0> for help." components={[<a href="/docs" />]} />
+	 */
+	components?: React.ReactElement[];
 	/**
 	 * CLDR plural categories — triggers plural mode when present alongside `value`.
 	 * Use # as placeholder for the formatted number.
@@ -101,15 +143,13 @@ export interface TProps {
 	many?: string;
 	other?: string;
 	/**
-	 * Dynamic props for plural/select mode only:
+	 * Underscore-prefixed props for plural/select mode only:
 	 * - _0, _1, _2 — exact numeric matches in plural mode (ICU =0, =1, =2)
 	 * - _male, _female, _nonbinary, etc. — select cases (requires string value prop)
 	 *
-	 * For interpolation variables use the `values` prop instead.
-	 * Spread props are NOT used as interpolation values to avoid name collisions
-	 * with reserved props (one, other, value, message, etc.).
+	 * All interpolation variables must go in the `values` prop.
 	 */
-	[key: string]: any;
+	[key: `_${string}`]: string | undefined;
 }
 
 export interface LocaleSelectorProps {

@@ -1,14 +1,17 @@
 // Core exports (no UI dependencies)
 
 // Lazy loading utilities
+export { generateMessageHash } from "./hash";
 export { initializeVocoder } from "./runtime";
 export { T } from "./T";
 export { t } from "./translate";
 // Type exports
 export type {
+	FormatMode,
 	LocaleInfo,
 	LocaleSelectorProps,
 	LocalesMap,
+	TOptions,
 	TProps,
 	TranslationsMap,
 	VocoderContextValue,

@@ -1,6 +1,6 @@
 {
   "name": "@vocoder/react",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "React components for internationalization (i18n) with SSR support, ICU MessageFormat, and build-time translation generation",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -31,7 +31,7 @@
   },
   "scripts": {
     "build": "tsup",
-    "dev": "tsup --watch",
+    "dev": "tsup --watch --no-dts --clean=false",
     "watch": "tsup --watch",
     "test": "vitest run",
     "test:watch": "vitest --watch",

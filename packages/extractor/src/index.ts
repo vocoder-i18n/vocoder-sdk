@@ -81,9 +81,12 @@ function buildSelectICU(props: Record<string, string>): string {
 /**
  * Extract the template text from JSX children, preserving {identifier} placeholders.
  * Handles JSXText, JSXExpressionContainer (Identifier, StringLiteral, TemplateLiteral),
- * and intrinsic element tags (used as named component placeholders).
+ * and JSX element children (mapped to numeric <c0>, <c1> component placeholders).
  */
-function extractTextContentFromNodes(children: any[]): string {
+function extractTextContentFromNodes(
+	children: any[],
+	elementIndex: { count: number } = { count: 0 },
+): string {
 	let text = "";
 
 	for (const child of children) {
@@ -105,11 +108,13 @@ function extractTextContentFromNodes(children: any[]): string {
 				}
 			}
 		} else if (child.type === "JSXElement") {
-			const elementType = child.openingElement.name;
-			if (elementType.type === "JSXIdentifier") {
-				const tagName = elementType.name;
-				const innerText = extractTextContentFromNodes(child.children);
-				text += `<${tagName}>${innerText}</${tagName}>`;
+			const idx = elementIndex.count++;
+			const isSelfClosing = child.openingElement.selfClosing;
+			if (isSelfClosing) {
+				text += `<c${idx}/>`;
+			} else {
+				const innerText = extractTextContentFromNodes(child.children, elementIndex);
+				text += `<c${idx}>${innerText}</c${idx}>`;
 			}
 		}
 	}
@@ -189,11 +194,10 @@ export function transformMsgProps(code: string): TransformResult {
 				opening.name.type === "JSXIdentifier" ? opening.name.name : null;
 			if (!tagName || !tComponentNames.has(tagName)) return;
 
-			// Skip if already has message or msg prop
+			// Skip if already has message prop
 			const hasMessageProp = opening.attributes.some(
 				(attr: any) =>
-					attr.type === "JSXAttribute" &&
-					(attr.name.name === "message" || attr.name.name === "msg"),
+					attr.type === "JSXAttribute" && attr.name.name === "message",
 			);
 			if (hasMessageProp) return;
 
@@ -219,32 +223,57 @@ export function transformMsgProps(code: string): TransformResult {
 				return;
 			}
 
-			// Collect unique identifier names from JSX expression children
+			// Collect identifier names from JSX expression children
 			const identifiers = new Set<string>();
+			// Collect JSX element children for component placeholder injection
+			interface ElementInfo { openingStart: number; openingEnd: number; selfClosing: boolean; }
+			const jsxElements: ElementInfo[] = [];
+
 			for (const child of path.node.children) {
 				if (
 					child.type === "JSXExpressionContainer" &&
 					child.expression.type === "Identifier"
 				) {
 					identifiers.add(child.expression.name);
+				} else if (child.type === "JSXElement") {
+					jsxElements.push({
+						openingStart: child.openingElement.start,
+						openingEnd: child.openingElement.end,
+						selfClosing: child.openingElement.selfClosing,
+					});
 				}
 			}
-			if (identifiers.size === 0) return;
 
-			const template = extractTextContentFromNodes(path.node.children).trim();
+			// Nothing dynamic to inject — skip
+			if (identifiers.size === 0 && jsxElements.length === 0) return;
+
+			const elementIndex = { count: 0 };
+			const template = extractTextContentFromNodes(path.node.children, elementIndex).trim();
 			if (!template) return;
 
-			// Build insertion: id="hash" message="..." values={{ name, count }}
-			// id = content hash → matches the bundle key; message = fallback for source locale
-			// values always injected alongside message — spread props are never used as values
 			const escaped = template.replace(/"/g, "&quot;");
 			const hash = generateMessageHash(template);
-			const valuesStr = `{{ ${[...identifiers].join(", ")} }}`;
+
+			// Build insertion text: id, message, optional values, optional components
+			let insertText = ` id="${hash}" message="${escaped}"`;
+
+			if (identifiers.size > 0) {
+				insertText += ` values={{ ${[...identifiers].join(", ")} }}`;
+			}
+
+			if (jsxElements.length > 0) {
+				// Reconstruct each JSX element as self-closing using source positions
+				const componentParts = jsxElements.map(({ openingStart, openingEnd, selfClosing }) => {
+					const openingTag = code.slice(openingStart, openingEnd);
+					if (selfClosing) return openingTag;
+					// Strip trailing > and make self-closing
+					return openingTag.slice(0, -1).trimEnd() + " />";
+				});
+				insertText += ` components={[${componentParts.join(", ")}]}`;
+			}
+
 			const insertPos = opening.end - 1;
-			insertions.push({
-				position: insertPos,
-				text: ` id="${hash}" message="${escaped}" values=${valuesStr}`,
-			});
+			insertions.push({ position: insertPos, text: insertText });
 		},
 	});
 
@@ -399,7 +428,8 @@ export class StringExtractor {
 
 					if (!text || text.trim().length === 0) return;
 
-					const secondArg = path.node.arguments[1];
+					// arguments[1] = values, arguments[2] = options { context, formality, id }
+					const optionsArg = path.node.arguments[2];
 					let context: string | undefined;
 					let formality:
 						| "formal"
@@ -409,8 +439,8 @@ export class StringExtractor {
 						| undefined;
 					let explicitKey: string | undefined;
 
-					if (secondArg && secondArg.type === "ObjectExpression") {
-						secondArg.properties.forEach((prop: any) => {
+					if (optionsArg && optionsArg.type === "ObjectExpression") {
+						optionsArg.properties.forEach((prop: any) => {
 							if (
 								prop.type === "ObjectProperty" &&
 								prop.key.type === "Identifier"
@@ -467,10 +497,8 @@ export class StringExtractor {
 					const isTranslationComponent = vocoderImports.has(tagName);
 					if (!isTranslationComponent) return;
 
-					// message takes precedence over msg
 					const msgAttribute =
-						this.getStringAttribute(opening.attributes, "message") ??
-						this.getStringAttribute(opening.attributes, "msg");
+						this.getStringAttribute(opening.attributes, "message");
 
 					let text: string | null = null;
 
@@ -484,7 +512,7 @@ export class StringExtractor {
 						if (pluralSelectICU) {
 							text = pluralSelectICU;
 						} else {
-							text = extractTextContentFromNodes(path.node.children);
+							text = extractTextContentFromNodes(path.node.children, { count: 0 });
 						}
 					}
 

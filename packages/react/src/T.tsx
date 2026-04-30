@@ -2,7 +2,9 @@ import React from "react";
 import type { TProps } from "./types";
 import { generateMessageHash } from "./hash";
 import { extractText } from "./utils/extractText";
-import { formatMessage } from "./utils/formatMessage";
+import { formatElements } from "./utils/formatElements";
+import { formatICU } from "./utils/formatMessage";
+import { formatValue } from "./utils/formatValue";
 import { useVocoder } from "./VocoderProvider";
 
 // CLDR plural categories that unambiguously indicate plural mode.
@@ -32,7 +34,8 @@ function classifyProp(key: string): "plural" | "select" | "other" | "ignore" {
  * Exact matches (_0 → =0) come before CLDR categories.
  * Internal variable is always "count" for consistent lookup keys.
  */
-function buildPluralICU(props: Record<string, string>): string {
+function buildPluralICU(props: Record<string, string>, ordinal = false): string {
+	const type = ordinal ? "selectordinal" : "plural";
 	const exact: string[] = [];
 	const cldr: string[] = [];
 
@@ -45,7 +48,7 @@ function buildPluralICU(props: Record<string, string>): string {
 		}
 	}
 
-	return `{count, plural, ${[...exact, ...cldr].join(" ")}}`;
+	return `{count, ${type}, ${[...exact, ...cldr].join(" ")}}`;
 }
 
 /**
@@ -93,17 +96,26 @@ export const T: React.FC<TProps> = ({
 	id,
 	children,
 	message,
-	msg,
 	context: _context,
 	formality: _formality,
 	components,
 	values: valuesObj,
 	value,
+	ordinal,
+	format,
+	currency,
+	dateStyle,
+	timeStyle,
 	...rest
 }) => {
 	const { t, locale, hasTranslation } = useVocoder();
 
 	try {
+		// Format mode: pure Intl formatting, no translation lookup
+		if (format !== undefined && value !== undefined) {
+			return <>{formatValue(value, format, locale, { currency, dateStyle, timeStyle })}</>;
+		}
+
 		// Collect plural/select mode props from rest.
 		// Spread props are NOT used as interpolation values — use the `values` prop instead.
 		// "other" is ambiguous: the required fallback in both plural and select modes.
@@ -136,7 +148,7 @@ export const T: React.FC<TProps> = ({
 
 		if (hasPluralMode && value !== undefined) {
 			// Plural mode: build ICU from props, count = value
-			sourceText = buildPluralICU(pluralProps);
+			sourceText = buildPluralICU(pluralProps, ordinal);
 			formatValues = { count: value, ...(valuesObj ?? {}) };
 		} else if (hasSelectMode && value !== undefined) {
 			// Select mode: build ICU from _word props, value = value
@@ -144,7 +156,7 @@ export const T: React.FC<TProps> = ({
 			formatValues = { value, ...(valuesObj ?? {}) };
 		} else {
 			// Interpolation mode: values come exclusively from the `values` prop
-			sourceText = message ?? msg ?? extractText(children);
+			sourceText = message ?? extractText(children);
 			formatValues = { ...(valuesObj ?? {}) };
 		}
 
@@ -165,16 +177,15 @@ export const T: React.FC<TProps> = ({
 			return <>{id ?? children ?? null}</>;
 		}
 
-		// Build format values including component renderers
-		if (components) {
-			for (const [key, component] of Object.entries(components)) {
-				formatValues[key] = (chunks: any[]) =>
-					React.cloneElement(component, { key }, chunks);
-			}
+		// ICU formatting: variables, plural, select, number, date
+		const icuFormatted = formatICU(textToFormat, formatValues, locale);
+
+		// Component rendering: <c0>, <c1> placeholders → React elements
+		if (components && components.length > 0) {
+			return <>{formatElements(icuFormatted, components)}</>;
 		}
 
-		const result = formatMessage(textToFormat, formatValues, locale);
-		return <>{result}</>;
+		return <>{icuFormatted}</>;
 	} catch (err) {
 		console.error("Vocoder formatting error:", err);
 		return <>{children}</>;

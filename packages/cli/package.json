@@ -1,6 +1,6 @@
 {
   "name": "@vocoder/cli",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "CLI tool for Vocoder translation workflow",
   "files": [
     "dist"
@@ -40,7 +40,7 @@
   },
   "scripts": {
     "build": "tsup",
-    "dev": "tsup --watch",
+    "dev": "tsup --watch --no-dts --clean=false",
     "watch": "tsup --watch",
     "test": "vitest run --exclude 'src/__tests__/integration/**'",
     "test:watch": "vitest",

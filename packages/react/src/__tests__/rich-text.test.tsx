@@ -5,12 +5,12 @@ import { T } from "../T";
 import { VocoderProvider } from "../VocoderProvider";
 
 describe("Rich text formatting", () => {
-	it("renders component placeholders", async () => {
+	it("renders component placeholder", async () => {
 		render(
 			<VocoderProvider>
 				<T
-					msg="Click <link>here</link> for help"
-					components={{ link: <a href="/help" className="help-link" /> }}
+					message="Click <c0>here</c0> for help"
+					components={[<a href="/help" className="help-link" />]}
 				/>
 			</VocoderProvider>,
 		);
@@ -23,14 +23,14 @@ describe("Rich text formatting", () => {
 		});
 	});
 
-	it("renders translated component placeholders", async () => {
+	it("translates component placeholder", async () => {
 		document.cookie = "vocoder_locale=es; Path=/";
 
 		render(
 			<VocoderProvider>
 				<T
-					msg="Click <link>here</link> for help"
-					components={{ link: <a href="/ayuda" /> }}
+					message="Click <c0>here</c0> for help"
+					components={[<a href="/ayuda" />]}
 				/>
 			</VocoderProvider>,
 		);
@@ -42,28 +42,19 @@ describe("Rich text formatting", () => {
 		});
 	});
 
-	it("supports multiple component placeholders with msg prop", async () => {
+	it("supports multiple component placeholders", async () => {
 		render(
 			<VocoderProvider>
 				<T
-					msg="Read our <privacy>Privacy Policy</privacy> and <terms>Terms of Service</terms>"
-					components={{
-						privacy: <a href="/privacy" />,
-						terms: <a href="/terms" />,
-					}}
+					message="Read our <c0>Privacy Policy</c0> and <c1>Terms of Service</c1>"
+					components={[<a href="/privacy" />, <a href="/terms" />]}
 				/>
 			</VocoderProvider>,
 		);
 
 		await waitFor(() => {
-			expect(screen.getByText("Privacy Policy")).toHaveAttribute(
-				"href",
-				"/privacy",
-			);
-			expect(screen.getByText("Terms of Service")).toHaveAttribute(
-				"href",
-				"/terms",
-			);
+			expect(screen.getByText("Privacy Policy")).toHaveAttribute("href", "/privacy");
+			expect(screen.getByText("Terms of Service")).toHaveAttribute("href", "/terms");
 		});
 	});
 });

@@ -1,6 +1,6 @@
 {
   "name": "@vocoder/extractor",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "Shared string extractor for Vocoder — Babel AST extraction of <T> components and t() calls",
   "files": [
     "dist"
@@ -33,7 +33,7 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsup",
-    "dev": "tsup --watch",
+    "dev": "tsup --watch --no-dts --clean=false",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

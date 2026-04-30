@@ -1,5 +1,6 @@
 import { generateMessageHash } from "./hash";
-import { formatMessage } from "./utils/formatMessage";
+import type { TOptions } from "./types";
+import { formatICU } from "./utils/formatMessage";
 
 /**
  * Global translation state
@@ -70,8 +71,9 @@ export function _setSourceLocale(locale: string): void {
  * - For reactive translations in components, use the `<T>` component or `useVocoder()` hook
  * - Rich text with components is only supported in `<T>` component, not in `t()` function
  */
-export function t(text: string, values?: Record<string, any>): string {
-	const hash = generateMessageHash(text);
+export function t(text: string, values?: Record<string, any>, options?: TOptions): string {
+	const { context, id } = options ?? {};
+	const hash = id ?? generateMessageHash(text, context);
 	const localeTranslations = globalTranslations[globalLocale];
 	const hasTranslation =
 		!!localeTranslations && Object.prototype.hasOwnProperty.call(localeTranslations, hash);
@@ -93,17 +95,7 @@ export function t(text: string, values?: Record<string, any>): string {
 
 	if (values && Object.keys(values).length > 0) {
 		// Use IntlMessageFormat for all cases (simple interpolation, ICU, etc.)
-		const result = formatMessage(translated, values, globalLocale);
-
-		// formatMessage can return React nodes for rich text, but t() is for strings only
-		// If result is an array (rich text), join it as string
-		if (Array.isArray(result)) {
-			return result
-				.map((part) => (typeof part === "string" ? part : String(part)))
-				.join("");
-		}
-
-		return typeof result === "string" ? result : String(result);
+		return formatICU(translated, values, globalLocale);
 	}
 
 	return translated;

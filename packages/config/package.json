@@ -1,6 +1,6 @@
 {
   "name": "@vocoder/config",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Type helper for vocoder.config.ts",
   "files": [
     "dist"
@@ -37,7 +37,7 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsup",
-    "dev": "tsup --watch",
+    "dev": "tsup --watch --no-dts --clean=false",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

@@ -1,32 +1,29 @@
 import IntlMessageFormat from "intl-messageformat";
-import React from "react";
 
-/**
- * Universal message formatter using IntlMessageFormat
- */
-export function formatMessage(
+const imfCache = new Map<string, IntlMessageFormat>();
+
+function getIMF(text: string, locale: string): IntlMessageFormat {
+	const key = `${locale}:${text}`;
+	let msg = imfCache.get(key);
+	if (!msg) {
+		// ignoreTag: true — component placeholders (<c0>, <c1>) are handled
+		// by formatElements, not by IMF. IMF handles only ICU primitives.
+		msg = new IntlMessageFormat(text, locale, undefined, { ignoreTag: true });
+		imfCache.set(key, msg);
+	}
+	return msg;
+}
+
+export function formatICU(
 	text: string,
-	values: Record<string, any>,
+	values: Record<string, unknown>,
 	locale: string = "en",
-): string | React.ReactNode[] {
+): string {
 	try {
-		const normalizedLocale = locale.toLowerCase();
-		const msg = new IntlMessageFormat(text, normalizedLocale);
-		const result = msg.format(values);
-
-		if (Array.isArray(result)) {
-			const hasComponents = Object.values(values).some(
-				(v) => typeof v === "function" || React.isValidElement(v),
-			);
-
-			if (!hasComponents) {
-				return result.join("");
-			}
-		}
-
-		return result as any;
+		const result = getIMF(text, locale.toLowerCase()).format(values);
+		return typeof result === "string" ? result : (result as unknown[]).join("");
 	} catch (error) {
-		console.error("FormatJS formatting error:", error);
+		console.error("Vocoder ICU formatting error:", error);
 		return text;
 	}
 }

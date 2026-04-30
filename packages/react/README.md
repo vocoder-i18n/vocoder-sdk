@@ -40,11 +40,11 @@ import { T } from '@vocoder/react';
 // Simple text
 <T>Hello, world!</T>
 
-// Variable interpolation
-<T name={user.name}>Hello, {name}!</T>
+// Variable interpolation — always use the values prop
+<T message="Hello, {name}!" values={{ name: user.name }} />
 
 // ICU MessageFormat (pluralization)
-<T msg="{count, plural, one {# item} other {# items}}" count={items.length} />
+<T message="{count, plural, one {# item} other {# items}}" values={{ count: items.length }} />
 
 // Rich text with component placeholders
 <T components={{ link: <a href="/help" /> }}>
@@ -57,7 +57,7 @@ import { T } from '@vocoder/react';
 | Prop | Type | Description |
 |---|---|---|
 | `children` | `ReactNode` | Source text (also used as the translation key) |
-| `msg` | `string` | Alternative to children for ICU strings. Takes precedence over children. |
+| `message` | `string` | Alternative to children for ICU strings. Takes precedence over children. |
 | `id` | `string` | Optional stable key for extraction/sync identity |
 | `context` | `string` | Disambiguation context for identical source text |
 | `formality` | `'formal' \| 'informal' \| 'auto'` | Formality level hint for translators |
@@ -68,13 +68,31 @@ import { T } from '@vocoder/react';
 
 Use `t()` for translations outside of JSX (utilities, services, constants):
 
-```tsx
+```ts
 import { t } from '@vocoder/react';
 
+// Simple
 const greeting = t('Hello, world!');
+
+// Variable interpolation
 const message = t('Hello, {name}!', { name: 'John' });
+
+// ICU pluralization
 const items = t('{count, plural, one {# item} other {# items}}', { count: 5 });
+
+// With options
+const label = t('Save', {}, { context: 'button' });
+const formal = t('Hello, {name}!', { name }, { formality: 'formal' });
+const byKey = t('', {}, { id: 'welcome_banner' }); // skip hashing, look up by stable key
 ```
+
+#### Options
+
+| Option | Type | Description |
+|---|---|---|
+| `context` | `string` | Disambiguation context — must match the `context` prop used on the corresponding `<T>` |
+| `formality` | `'formal' \| 'informal' \| 'auto'` | Formality hint for translation |
+| `id` | `string` | Stable lookup key — skips hashing the source text entirely |
 
 `t()` uses global state synced by `VocoderProvider`. Make sure the provider is mounted before calling it. Rich text with components is only supported in `<T>`, not in `t()`.
 
@@ -92,7 +110,7 @@ function MyComponent() {
     availableLocales,  // Array of available locale codes
     locales,           // Locale metadata (nativeName, dir)
     isReady,           // True when translations are loaded
-    t,                 // Context-bound translate function
+    t,                 // Raw key → translated string (internal use; prefer the t() export)
     hasTranslation,    // Check if a translation exists
     getDisplayName,    // Get translated locale name
   } = useVocoder();

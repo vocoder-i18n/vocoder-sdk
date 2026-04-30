@@ -22,9 +22,7 @@ describe("T component", () => {
 	it("interpolates variables", async () => {
 		render(
 			<VocoderProvider>
-				<T name="John">
-					Hello, {"{"}name{"}"}!
-				</T>
+				<T message="Hello, {name}!" values={{ name: "John" }} />
 			</VocoderProvider>,
 		);
 
@@ -33,10 +31,10 @@ describe("T component", () => {
 		});
 	});
 
-	it("uses msg prop over children", async () => {
+	it("uses message prop over children", async () => {
 		render(
 			<VocoderProvider>
-				<T msg="Hello, world!">Goodbye</T>
+				<T message="Hello, world!">Goodbye</T>
 			</VocoderProvider>,
 		);
 

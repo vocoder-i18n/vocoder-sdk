@@ -1,43 +1,37 @@
 import React from "react";
 
-/**
- * Extracts plain text from React children, preserving variable placeholders and component tags.
- *
- * @example
- * extractText("Hello world") // "Hello world"
- * extractText(<>Hello {name}</>) // "Hello {name}" (preserves placeholder)
- * extractText(<>Click <link>here</link></>) // "Click <link>here</link>" (preserves component tags)
- */
 export function extractText(children: React.ReactNode): string {
-	if (typeof children === "string") {
-		return children;
-	}
+	return _extractText(children, { count: 0 });
+}
 
-	if (typeof children === "number") {
-		return String(children);
-	}
+function _extractText(
+	children: React.ReactNode,
+	elementIndex: { count: number },
+): string {
+	if (typeof children === "string") return children;
+	if (typeof children === "number") return String(children);
 
 	if (Array.isArray(children)) {
 		return children
-			.map((child: React.ReactNode) => extractText(child))
+			.map((child: React.ReactNode) => _extractText(child, elementIndex))
 			.join("");
 	}
 
 	if (React.isValidElement(children)) {
-		// Check if this is a component placeholder (lowercase intrinsic element used as placeholder)
 		const elementType = children.type;
 		if (typeof elementType === "string") {
-			// This is an intrinsic element like <link>, <bold>, etc.
-			// Reconstruct the tag: <tagName>content</tagName>
-			const tagName = elementType;
-			const content = extractText(children.props.children);
-			return `<${tagName}>${content}</${tagName}>`;
+			// Intrinsic element — map to numeric component placeholder
+			const idx = elementIndex.count++;
+			const props = children.props as { children?: React.ReactNode };
+			const inner = _extractText(props.children, elementIndex);
+			return inner ? `<c${idx}>${inner}</c${idx}>` : `<c${idx}/>`;
 		}
-
-		// For other React elements, extract text from children
-		return extractText(children.props.children);
+		// React component — extract inner text only (not a translatable placeholder)
+		return _extractText(
+			(children.props as { children?: React.ReactNode }).children,
+			elementIndex,
+		);
 	}
 
-	// For null, undefined, boolean, etc.
 	return "";
 }

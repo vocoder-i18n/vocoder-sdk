@@ -2,16 +2,17 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import React from "react";
 import { describe, expect, it } from "vitest";
+import { T } from "../T";
 import { useVocoder, VocoderProvider } from "../VocoderProvider";
 
 function TestComponent() {
-	const { locale, setLocale, t, availableLocales, isReady } = useVocoder();
+	const { locale, setLocale, availableLocales, isReady } = useVocoder();
 
 	return (
 		<div>
 			<div data-testid="ready">{String(isReady)}</div>
 			<div data-testid="locale">{locale}</div>
-			<div data-testid="translation">{t("Hello")}</div>
+			<div data-testid="translation"><T>Hello</T></div>
 			<div data-testid="available">{availableLocales.join(",")}</div>
 			<button onClick={() => setLocale("es")}>Switch to Spanish</button>
 			<button onClick={() => setLocale("fr")}>Switch to French</button>

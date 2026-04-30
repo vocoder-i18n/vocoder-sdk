@@ -9,9 +9,10 @@ describe("ICU MessageFormat", () => {
 	it("formats plural messages with <T>", async () => {
 		render(
 			<VocoderProvider>
-				<T count={5}>
-					{"{count, plural, =0 {No items} one {# item} other {# items}}"}
-				</T>
+				<T
+					message="{count, plural, =0 {No items} one {# item} other {# items}}"
+					values={{ count: 5 }}
+				/>
 			</VocoderProvider>,
 		);
 
@@ -25,9 +26,10 @@ describe("ICU MessageFormat", () => {
 
 		render(
 			<VocoderProvider>
-				<T count={3}>
-					{"{count, plural, =0 {No items} one {# item} other {# items}}"}
-				</T>
+				<T
+					message="{count, plural, =0 {No items} one {# item} other {# items}}"
+					values={{ count: 3 }}
+				/>
 			</VocoderProvider>,
 		);
 
