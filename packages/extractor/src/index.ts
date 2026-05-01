@@ -33,11 +33,19 @@ export interface TransformResult {
 }
 
 /**
- * Build a plural ICU string from plural prop key/value pairs.
+ * Default ordinal ICU — English suffix fallback, used when no locale-specific ICU is stored.
+ * Must stay byte-for-byte identical to DEFAULT_ORDINAL_ICU in @vocoder/react/src/T.tsx.
+ */
+export const DEFAULT_ORDINAL_ICU =
+	"{count, selectordinal, one {#st} two {#nd} few {#rd} other {#th}}";
+
+/**
+ * Build a plural or ordinal ICU string from plural prop key/value pairs.
  * Exact matches (_0, _1) come before CLDR categories (one, other, etc.).
  * Internal variable name is always "count" for consistent lookup keys.
+ * Must stay byte-for-byte identical to buildPluralICU in @vocoder/react/src/T.tsx.
  */
-function buildPluralICU(props: Record<string, string>, ordinal = false): string {
+export function buildPluralICU(props: Record<string, string>, ordinal = false): string {
 	const type = ordinal ? "selectordinal" : "plural";
 	const exactParts: string[] = [];
 	const cldrParts: string[] = [];
@@ -57,8 +65,9 @@ function buildPluralICU(props: Record<string, string>, ordinal = false): string 
 /**
  * Build a select ICU string from select prop key/value pairs.
  * Internal variable name is always "value" for consistent lookup keys.
+ * Must stay byte-for-byte identical to buildSelectICU in @vocoder/react/src/T.tsx.
  */
-function buildSelectICU(props: Record<string, string>): string {
+export function buildSelectICU(props: Record<string, string>): string {
 	const cases: string[] = [];
 	let hasOther = false;
 
@@ -560,6 +569,7 @@ export class StringExtractor {
 		let hasPlural = false;
 		let hasSelect = false;
 		let isOrdinal = false;
+		let hasGender = false;
 
 		for (const attr of attributes) {
 			if (attr.type !== "JSXAttribute") continue;
@@ -568,6 +578,12 @@ export class StringExtractor {
 			// Boolean `ordinal` prop — no value means true
 			if (name === "ordinal") {
 				isOrdinal = true;
+				continue;
+			}
+
+			// `gender` prop — marks ordinal as gender-aware (dynamic value, not a string literal)
+			if (name === "gender") {
+				hasGender = true;
 				continue;
 			}
 
@@ -587,8 +603,15 @@ export class StringExtractor {
 		}
 
 		// Ordinal prop: generate default English ICU — developer writes nothing, pipeline handles locale patterns.
+		// When gender prop present, wrap in gender select so the hash reflects gender-aware usage.
 		if (isOrdinal) {
-			return "{count, selectordinal, one {#st} two {#nd} few {#rd} other {#th}}";
+			const ordinalICU = "{count, selectordinal, one {#st} two {#nd} few {#rd} other {#th}}";
+			if (hasGender) {
+				// Wrap in gender select: runtime selects word form based on dynamic gender value.
+				// Masculine/feminine/other all carry same English ordinal ICU (used only as Tier 2 fallback).
+				return `{gender, select, masculine {${ordinalICU}} feminine {${ordinalICU}} other {${ordinalICU}}}`;
+			}
+			return ordinalICU;
 		}
 
 		if (!hasPlural && !hasSelect) return null;

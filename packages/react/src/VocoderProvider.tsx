@@ -1,4 +1,21 @@
-import type React from "react";
+import type {
+	LocalesMap,
+	TranslationsMap,
+	VocoderContextValue,
+	VocoderProviderProps,
+} from "./types";
+import {
+	PREVIEW_MODE,
+	isVocoderEnabled,
+	syncPreviewQueryParam,
+} from "./preview";
+import {
+	_setGlobalLocale,
+	_setGlobalLocales,
+	_setGlobalTranslations,
+	_setSourceLocale,
+} from "./translate";
+import { checkForUpdates, isRefreshAvailable } from "./api-runtime";
 import {
 	createContext,
 	useCallback,
@@ -7,13 +24,7 @@ import {
 	useMemo,
 	useState,
 } from "react";
-import { generateMessageHash } from "./hash";
-import { checkForUpdates, isRefreshAvailable } from "./api-runtime";
-import {
-	PREVIEW_MODE,
-	isVocoderEnabled,
-	syncPreviewQueryParam,
-} from "./preview";
+import { getBestMatchingLocale, getCookie, setCookie } from "./utils/cookies";
 import {
 	getConfig,
 	getLocales,
@@ -22,22 +33,12 @@ import {
 	loadLocale,
 	loadLocaleSync,
 } from "./runtime";
-import {
-	_setGlobalLocale,
-	_setGlobalLocales,
-	_setGlobalTranslations,
-	_setSourceLocale,
-} from "./translate";
-import { formatICU } from "./utils/formatMessage";
-import type {
-	LocalesMap,
-	TranslationsMap,
-	VocoderContextValue,
-	VocoderProviderProps,
-} from "./types";
-import { getBestMatchingLocale, getCookie, setCookie } from "./utils/cookies";
 
-const VocoderContext = createContext<VocoderContextValue | null>(null);
+import type React from "react";
+import { formatICU } from "./utils/formatMessage";
+import { generateMessageHash } from "./hash";
+
+export const VocoderContext = createContext<VocoderContextValue | null>(null);
 
 const STORAGE_KEY = "vocoder_locale";
 const HYDRATION_ID = "__vocoder_hydration__";
@@ -302,14 +303,28 @@ export const VocoderProvider: React.FC<VocoderProviderProps> = ({
 	);
 
 	const ordinal = useCallback(
-		(value: number): string => {
-			const suffixes = locales?.[locale]?.ordinalSuffixes;
-			if (!suffixes) return String(value);
-			const pr = new Intl.PluralRules(locale, { type: "ordinal" });
-			const category = pr.select(value) as keyof typeof suffixes;
-			const pattern = suffixes[category] ?? suffixes.other;
-			if (!pattern) return String(value);
-			return pattern.replace("#", String(value));
+		(value: number, gender?: string): string => {
+			const localeInfo = locales?.[locale];
+			const forms = localeInfo?.ordinalForms;
+
+			if (!forms) return String(value);
+
+			if (forms.type === "suffix") {
+				const pr = new Intl.PluralRules(locale, { type: "ordinal" });
+				const category = pr.select(value) as keyof typeof forms.suffixes;
+				const pattern = forms.suffixes[category] ?? forms.suffixes.other;
+				if (!pattern) return String(value);
+				return pattern.replace("#", String(value));
+			}
+
+			if (forms.type === "word") {
+				const genderKey = gender ?? "masculine";
+				const genderMap = forms.words[genderKey] ?? forms.words["masculine"] ?? Object.values(forms.words)[0];
+				const word = genderMap?.[value];
+				if (word) return word;
+			}
+
+			return String(value);
 		},
 		[locale, locales],
 	);

@@ -1,22 +1,23 @@
-import { createContext } from "react";
 import type { VocoderProviderServerProps } from "./types";
-
-const VocoderContext = createContext<null>(null);
 
 /**
  * Server-compatible VocoderProvider for Next.js App Router async components.
  *
- * This version is designed for server-side rendering with no hooks or state.
- * Translations should be pre-loaded and passed as props.
+ * Renders children directly. Locale and translation context for nested <T>
+ * components is supplied by the nearest client VocoderProvider in the tree
+ * (typically mounted in the root layout). React 19 RSC does not support
+ * createContext, so this component cannot manage its own context subtree.
+ *
+ * The locale and translations props are accepted for API compatibility and
+ * future enhancement (e.g. passing pre-loaded translations to the client
+ * provider via a hydration mechanism).
  *
  * @example
  * ```tsx
- * import en from './locales/en.json'
- *
  * export default async function Page() {
  *   return (
- *     <VocoderProviderServer locale="en" translations={en}>
- *       <V>Server-rendered content</V>
+ *     <VocoderProviderServer>
+ *       <T>Server-rendered content</T>
  *     </VocoderProviderServer>
  *   )
  * }
@@ -24,41 +25,8 @@ const VocoderContext = createContext<null>(null);
  */
 export async function VocoderProviderServer({
 	children,
-	locale = "en",
-	translations,
 }: VocoderProviderServerProps) {
-	const t = (text: string) =>
-		(translations as Record<string, string>)[text] || text;
-
-	const hasTranslation = (text: string) =>
-		translations != null && Object.prototype.hasOwnProperty.call(translations, text);
-
-	const getDisplayName = (targetLocale: string, viewingLocale?: string) => {
-		const vl = viewingLocale ?? locale;
-		try {
-			const dn = new Intl.DisplayNames([vl], { type: "language" });
-			return dn.of(targetLocale) ?? targetLocale;
-		} catch {
-			return targetLocale;
-		}
-	};
-
-	const value = {
-		availableLocales: [locale],
-		getDisplayName,
-		isReady: true,
-		locale,
-		dir: getLocaleDir(locale),
-		setLocale: async () => {},
-		t,
-		hasTranslation,
-	};
-
-	return (
-		<VocoderContext.Provider value={value as any}>
-			{children}
-		</VocoderContext.Provider>
-	);
+	return <>{children}</>;
 }
 
 // Needed here to avoid circular import with server.ts

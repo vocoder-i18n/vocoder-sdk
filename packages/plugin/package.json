@@ -1,6 +1,6 @@
 {
   "name": "@vocoder/plugin",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Build plugin for Vocoder — injects translations as virtual modules at build time",
   "files": [
     "dist"
@@ -72,12 +72,14 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "unplugin": "^2.0.0"
+  },
   "devDependencies": {
     "@types/node": "^20.19.9",
     "@vocoder/extractor": "workspace:*",
     "tsup": "^8.0.0",
     "typescript": "^5.4.0",
-    "unplugin": "^2.0.0",
     "vitest": "^1.0.0"
   },
   "sideEffects": false,

@@ -1,5 +1,5 @@
 import { generateMessageHash } from "./hash";
-import type { LocalesMap, OrdinalSuffixes, TOptions } from "./types";
+import type { LocalesMap, TOptions } from "./types";
 import { formatICU } from "./utils/formatMessage";
 
 /**
@@ -47,7 +47,7 @@ export function _setGlobalLocales(locales: LocalesMap): void {
 
 /**
  * Format a number as a locale-aware ordinal outside React components.
- * Uses ordinalSuffixes from the manifest config. Falls back to String(value) when data is unavailable.
+ * Uses ordinalForms from the manifest config. Falls back to String(value) when data is unavailable.
  *
  * @example
  * ```tsx
@@ -55,14 +55,28 @@ export function _setGlobalLocales(locales: LocalesMap): void {
  * const label = ordinal(1); // "1st" in en, "1.º" in es, "第1" in ja
  * ```
  */
-export function ordinal(value: number): string {
-	const suffixes = globalLocales[globalLocale]?.ordinalSuffixes;
-	if (!suffixes) return String(value);
-	const pr = new Intl.PluralRules(globalLocale, { type: "ordinal" });
-	const category = pr.select(value) as keyof OrdinalSuffixes;
-	const pattern = suffixes[category] ?? suffixes.other;
-	if (!pattern) return String(value);
-	return pattern.replace("#", String(value));
+export function ordinal(value: number, gender?: string): string {
+	const localeInfo = globalLocales[globalLocale];
+	const forms = localeInfo?.ordinalForms;
+
+	if (!forms) return String(value);
+
+	if (forms.type === "suffix") {
+		const pr = new Intl.PluralRules(globalLocale, { type: "ordinal" });
+		const category = pr.select(value) as keyof typeof forms.suffixes;
+		const pattern = forms.suffixes[category] ?? forms.suffixes.other;
+		if (!pattern) return String(value);
+		return pattern.replace("#", String(value));
+	}
+
+	if (forms.type === "word") {
+		const genderKey = gender ?? "masculine";
+		const genderMap = forms.words[genderKey] ?? forms.words["masculine"] ?? Object.values(forms.words)[0];
+		const word = genderMap?.[value];
+		if (word) return word;
+	}
+
+	return String(value);
 }
 
 /**

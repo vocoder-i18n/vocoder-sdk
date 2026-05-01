@@ -15,13 +15,23 @@ export interface OrdinalSuffixes {
 	other: string;
 }
 
+/**
+ * Discriminated union for locale ordinal data in the translation bundle.
+ *
+ * - `suffix`: Ordinals formed by number + suffix (e.g. "1st", "1er", "1.").
+ *   The `#` placeholder is replaced with the rank at runtime.
+ * - `word`: Ordinals are full words (Arabic, Hebrew). Gender-keyed maps from rank → word.
+ *   Ranks not present in the map fall back to String(value).
+ */
+export type OrdinalForms =
+	| { type: "suffix"; suffixes: OrdinalSuffixes }
+	| { type: "word"; words: Record<string, Record<number, string>> };
+
 export interface LocaleInfo {
 	nativeName: string; // "Español", "简体中文"
 	dir?: "rtl"; // Only for RTL locales
 	currencyCode?: string; // ISO 4217: "USD", "EUR", "GBP", etc.
-	/** Locale-specific ordinal suffix patterns. When present, <T ordinal> uses these
-	 *  instead of the translated English suffix strings (st/nd/rd/th). */
-	ordinalSuffixes?: OrdinalSuffixes;
+	ordinalForms?: OrdinalForms;
 }
 
 export interface LocalesMap {
@@ -45,14 +55,12 @@ export interface VocoderContextValue {
 	 */
 	t: (text: string, values?: Record<string, unknown>, options?: TOptions) => string;
 	hasTranslation: (text: string) => boolean;
-	/** Format a number as a locale-aware ordinal (e.g. "1st" in en, "1.º" in es, "第1" in ja). */
-	ordinal: (value: number) => string;
+	/** Format a number as a locale-aware ordinal (e.g. "1st" in en, "1.º" in es, "الأول" in ar). */
+	ordinal: (value: number, gender?: string) => string;
 }
 
 export interface VocoderProviderServerProps {
 	children: React.ReactNode;
-	locale?: string;
-	translations?: Record<string, string>;
 }
 
 export interface VocoderProviderProps {
@@ -125,6 +133,12 @@ export interface TProps {
 	/** Switch plural shorthand to ordinal mode ({count, selectordinal, ...}). Use with one/two/few/other props. */
 	ordinal?: boolean;
 	/**
+	 * Grammatical gender for word-based ordinal locales (Arabic, Hebrew).
+	 * Used with `ordinal` to select the correct gendered form from ordinalForms.words.
+	 * Typical values: "masculine" | "feminine". Falls back to "masculine" when absent.
+	 */
+	gender?: string;
+	/**
 	 * Pure locale formatting — bypasses translation lookup, formats `value` directly with Intl.
 	 * - number/integer/percent/compact/currency: formats value as Intl.NumberFormat
 	 * - date/time/datetime: formats value as Intl.DateTimeFormat
@@ -182,16 +196,15 @@ export interface LocaleSelectorProps {
 		| "bl"
 		| "br";
 	/**
-	 * Color scheme mode for the button and logo.
-	 * - 'auto': follows system/CSS `prefers-color-scheme` (default)
-	 * - 'light': force light theme (white bg, dark logo)
-	 * - 'dark': force dark theme (dark bg, light logo)
-	 * @default 'auto'
+	 * Button and dropdown background color.
+	 * Defaults to light-dark(#1a1a1a, #EFEAE3) — Vocoder brand, adapts automatically
+	 * to the page color-scheme with no JS or flash.
 	 */
-	mode?: "light" | "dark" | "auto";
-	/** Background color of the button and dropdown. Overrides auto mode. */
 	background?: string;
-	/** Text and icon color. Overrides auto mode. */
+	/**
+	 * Button and dropdown text/icon color.
+	 * Defaults to light-dark(#EFEAE3, #1a1a1a) — Vocoder brand, adapts automatically.
+	 */
 	color?: string;
 	/** Additional CSS class name */
 	className?: string;

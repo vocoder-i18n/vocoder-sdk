@@ -29,12 +29,14 @@ function classifyProp(key: string): "plural" | "select" | "other" | "ignore" {
 	return "ignore";
 }
 
+// Must stay byte-for-byte identical to DEFAULT_ORDINAL_ICU in @vocoder/extractor/src/index.ts.
 const DEFAULT_ORDINAL_ICU = "{count, selectordinal, one {#st} two {#nd} few {#rd} other {#th}}";
 
 /**
  * Build an ICU plural string from plural props.
  * Exact matches (_0 → =0) come before CLDR categories.
  * Internal variable is always "count" for consistent lookup keys.
+ * Must stay byte-for-byte identical to buildPluralICU in @vocoder/extractor/src/index.ts.
  */
 function buildPluralICU(props: Record<string, string>): string {
 	const exact: string[] = [];
@@ -55,6 +57,7 @@ function buildPluralICU(props: Record<string, string>): string {
 /**
  * Build an ICU select string from select props.
  * Internal variable is always "value" for consistent lookup keys.
+ * Must stay byte-for-byte identical to buildSelectICU in @vocoder/extractor/src/index.ts.
  */
 function buildSelectICU(props: Record<string, string>): string {
 	const cases: string[] = [];
@@ -103,6 +106,7 @@ export const T: React.FC<TProps> = ({
 	values: valuesObj,
 	value,
 	ordinal,
+	gender,
 	format,
 	currency,
 	dateStyle,
@@ -145,17 +149,29 @@ export const T: React.FC<TProps> = ({
 		}
 
 		// Ordinal path — no suffix props needed.
-		// Tier 1: ordinalSuffixes from locale manifest (CLDR-based, guaranteed correct).
-		// Tier 2: translated ICU from bundle (for locales without ordinalSuffixes — probe expansion path).
-		// Tier 3: bare number.
+		// Tier 1a: suffix-based ordinal forms (CLDR-based, guaranteed correct for 93+ languages).
+		// Tier 1b: word-based ordinal forms (Arabic, Hebrew — ranks 1-100 from ordinalForms.words).
+		// Tier 2:  translated ICU from bundle (probe-expanded selectordinal for uncovered locales).
+		// Tier 3:  bare number fallback.
 		if (ordinal && value !== undefined) {
-			const suffixes = locales?.[locale]?.ordinalSuffixes;
-			if (suffixes) {
+			const rank = Number(value);
+			const forms = locales?.[locale]?.ordinalForms;
+
+			if (forms?.type === "suffix") {
 				const pr = new Intl.PluralRules(locale, { type: "ordinal" });
-				const category = pr.select(Number(value)) as keyof typeof suffixes;
-				const pattern = suffixes[category] ?? suffixes.other;
+				const category = pr.select(rank) as keyof typeof forms.suffixes;
+				const pattern = forms.suffixes[category] ?? forms.suffixes.other;
 				return <>{pattern ? pattern.replace("#", String(value)) : String(value)}</>;
 			}
+
+			if (forms?.type === "word") {
+				const genderKey = gender ?? "masculine";
+				const genderMap = forms.words[genderKey] ?? forms.words["masculine"] ?? Object.values(forms.words)[0];
+				const word = genderMap?.[rank];
+				if (word) return <>{word}</>;
+				// rank not in map (> 100 or intermediate gap) — fall through to Tier 2/3
+			}
+
 			const ordinalValues = { count: value, ...(valuesObj ?? {}) };
 			const lookupKey = id ?? generateMessageHash(DEFAULT_ORDINAL_ICU, _context);
 			if (hasTranslation(lookupKey)) {

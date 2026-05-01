@@ -36,7 +36,7 @@ export interface VocoderTranslationData {
 			nativeName: string;
 			dir?: "rtl";
 			currencyCode?: string;
-			ordinalSuffixes?: { zero?: string; one?: string; two?: string; few?: string; many?: string; other: string };
+			ordinalForms?: { type: "suffix"; suffixes: { zero?: string; one?: string; two?: string; few?: string; many?: string; other: string } } | { type: "word"; words: Record<string, Record<number, string>> };
 		}>;
 	};
 	translations: Record<string, Record<string, string>>;

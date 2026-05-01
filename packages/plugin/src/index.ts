@@ -1,4 +1,4 @@
-import { createUnplugin } from "unplugin";
+import type { VocoderPluginOptions, VocoderTranslationData } from "./types";
 import {
 	computeFingerprint,
 	detectBranch,
@@ -8,8 +8,9 @@ import {
 	loadEnvFile,
 	registerAndGetFingerprint,
 } from "./core";
+
+import { createUnplugin } from "unplugin";
 import { transformMsgProps } from "@vocoder/extractor";
-import type { VocoderPluginOptions, VocoderTranslationData } from "./types";
 
 export type { VocoderPluginOptions, VocoderTranslationData };
 export {

@@ -65,6 +65,13 @@ export function withVocoder(
 
 			config.plugins = plugins;
 
+			// tsup ESM builds emit a __require shim that webpack flags as a critical
+			// dependency (dynamic require expression). It's a false positive — the shim
+			// only falls back to require() in CJS contexts. Suppress globally so
+			// consumers don't need to add this to their own next.config.
+			const moduleConfig = config.module as Record<string, unknown> | undefined;
+			if (moduleConfig) moduleConfig.exprContextCritical = false;
+
 			const userWebpack = nextConfig.webpack as
 				| ((
 						c: Record<string, unknown>,

@@ -15,10 +15,12 @@ export default defineConfig({
 	sourcemap: true,
 	target: "node18",
 	outDir: "dist",
-	// Bundle everything — plugin is a build tool, consumers install nothing extra.
-	// unplugin, extractor, and babel are all dev deps (bundled, not installed).
+	// unplugin is intentionally external: its webpack/rspack loaders register absolute
+	// paths via __dirname at runtime. Bundling unplugin into plugin's dist shifts
+	// __dirname to plugin/dist, breaking those loader paths. Keeping unplugin as a
+	// real dependency ensures __dirname resolves inside unplugin's own dist where the
+	// loader files actually live.
 	noExternal: [
-		"unplugin",
 		"@vocoder/extractor",
 		"@vocoder/config",
 		"@babel/parser",
@@ -35,7 +37,7 @@ export default defineConfig({
 			};
 		}
 		if (format === "cjs") {
-			// Polyfill import.meta.url for bundled ESM deps (e.g. unplugin) that call createRequire(import.meta.url).
+			// Polyfill import.meta.url for any bundled ESM deps that call createRequire(import.meta.url).
 			// esbuild replaces import.meta.url with undefined in CJS output; define must reference an identifier.
 			options.banner = {
 				js: `const __importMetaUrl = require('url').pathToFileURL(__filename).href;`,

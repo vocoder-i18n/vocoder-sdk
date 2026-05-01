@@ -18,7 +18,7 @@ export type {
 	VocoderContextValue,
 	VocoderProviderProps,
 } from "./types";
-export { useVocoder, VocoderProvider } from "./VocoderProvider";
+export { useVocoder, VocoderContext, VocoderProvider } from "./VocoderProvider";
 
 // NOTE: LocaleSelector is now exported from a separate entry point to avoid
 // bundling Radix UI and Lucide dependencies unless explicitly imported.
