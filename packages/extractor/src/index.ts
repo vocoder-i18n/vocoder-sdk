@@ -307,6 +307,24 @@ export function transformMsgProps(code: string): TransformResult {
 	return { code: result, changed: true };
 }
 
+/**
+ * Extract translatable strings from a single file given its filename and content.
+ * Pure function — no filesystem access. Use this when content is already in memory
+ * (e.g. fetched from GitHub API in a webhook pipeline).
+ *
+ * Handles:
+ *   - <T message="…"> JSX components (and ICU plural/select/ordinal props)
+ *   - t(text, values, options) function calls (options at argument[2])
+ *   - useVocoder() destructured t function
+ * Keys are content-hash based (generateMessageHash) — stable across files and machines.
+ */
+export function extractFromContent(
+	filename: string,
+	content: string,
+): ExtractedString[] {
+	return _extractFromContent(filename, content);
+}
+
 export class StringExtractor {
 	async extractFromProject(
 		pattern: string | string[],
@@ -348,28 +366,31 @@ export class StringExtractor {
 
 		for (const file of sortedFiles) {
 			try {
-				const strings = await this.extractFromFile(file, projectRoot);
+				const code = readFileSync(file, "utf-8");
+				const relPath = pathRelative(projectRoot, file).split("\\").join("/");
+				const strings = _extractFromContent(relPath, code);
 				allStrings.push(...strings);
 			} catch (error) {
 				console.warn(`Warning: Failed to extract from ${file}:`, error);
 			}
 		}
 
-		return this.deduplicateStrings(allStrings);
+		return deduplicateStrings(allStrings);
 	}
+}
 
-	private async extractFromFile(
-		filePath: string,
-		projectRoot: string,
-	): Promise<ExtractedString[]> {
-		const code = readFileSync(filePath, "utf-8");
+// ---------------------------------------------------------------------------
+// Module-level implementation — shared by extractFromContent() and StringExtractor
+// ---------------------------------------------------------------------------
+
+function _extractFromContent(
+	filePath: string,
+	content: string,
+): ExtractedString[] {
 		const strings: ExtractedString[] = [];
-		const relativeFilePath = pathRelative(projectRoot, filePath)
-			.split("\\")
-			.join("/");
 
 		try {
-			const ast = parse(code, {
+			const ast = parse(content, {
 				sourceType: "module",
 				plugins: ["jsx", "typescript"],
 			});
@@ -441,7 +462,7 @@ export class StringExtractor {
 					if (firstArg.type === "StringLiteral") {
 						text = firstArg.value;
 					} else if (firstArg.type === "TemplateLiteral") {
-						text = this.extractTemplateText(firstArg);
+						text = extractTemplateText(firstArg);
 					}
 
 					if (!text || text.trim().length === 0) return;
@@ -516,7 +537,7 @@ export class StringExtractor {
 					if (!isTranslationComponent) return;
 
 					const msgAttribute =
-						this.getStringAttribute(opening.attributes, "message");
+						getStringAttribute(opening.attributes, "message");
 
 					let text: string | null = null;
 
@@ -524,9 +545,7 @@ export class StringExtractor {
 						text = msgAttribute;
 					} else {
 						// Check for plural/select mode props
-						const pluralSelectICU = this.extractPluralSelectICU(
-							opening.attributes,
-						);
+						const pluralSelectICU = extractPluralSelectICU(opening.attributes);
 						if (pluralSelectICU) {
 							text = pluralSelectICU;
 						} else {
@@ -536,12 +555,9 @@ export class StringExtractor {
 
 					if (!text || text.trim().length === 0) return;
 
-					const id = this.getStringAttribute(opening.attributes, "id");
-					const context = this.getStringAttribute(
-						opening.attributes,
-						"context",
-					);
-					const formality = this.getStringAttribute(
+					const id = getStringAttribute(opening.attributes, "id");
+					const context = getStringAttribute(opening.attributes, "context");
+					const formality = getStringAttribute(
 						opening.attributes,
 						"formality",
 					) as "formal" | "informal" | "neutral" | "auto" | undefined;
@@ -568,9 +584,9 @@ export class StringExtractor {
 		}
 
 		return strings;
-	}
+}
 
-	private extractPluralSelectICU(attributes: any[]): string | null {
+function extractPluralSelectICU(attributes: any[]): string | null {
 		const pluralProps: Record<string, string> = {};
 		const selectProps: Record<string, string> = {};
 		let otherValue: string | undefined;
@@ -635,67 +651,65 @@ export class StringExtractor {
 		return null;
 	}
 
-	private extractTemplateText(node: any): string {
-		let text = "";
+function extractTemplateText(node: any): string {
+	let text = "";
 
-		for (let i = 0; i < node.quasis.length; i++) {
-			const quasi = node.quasis[i];
-			text += quasi.value.raw;
+	for (let i = 0; i < node.quasis.length; i++) {
+		const quasi = node.quasis[i];
+		text += quasi.value.raw;
 
-			if (i < node.expressions.length) {
-				const expr = node.expressions[i];
-				if (expr.type === "Identifier") {
-					text += `{${expr.name}}`;
-				} else {
-					text += "{value}";
-				}
+		if (i < node.expressions.length) {
+			const expr = node.expressions[i];
+			if (expr.type === "Identifier") {
+				text += `{${expr.name}}`;
+			} else {
+				text += "{value}";
 			}
 		}
-
-		return text;
 	}
 
-	private getStringAttribute(
-		attributes: any[],
-		name: string,
-	): string | undefined {
-		const attr = attributes.find(
-			(a) => a.type === "JSXAttribute" && a.name.name === name,
-		);
+	return text;
+}
 
-		if (!attr || !attr.value) return undefined;
+function getStringAttribute(
+	attributes: any[],
+	name: string,
+): string | undefined {
+	const attr = attributes.find(
+		(a: any) => a.type === "JSXAttribute" && a.name.name === name,
+	);
 
-		if (attr.value.type === "StringLiteral") {
-			return attr.value.value;
-		}
+	if (!attr || !attr.value) return undefined;
 
-		if (attr.value.type === "JSXExpressionContainer") {
-			const expr = attr.value.expression;
-
-			if (expr.type === "TemplateLiteral") {
-				return this.extractTemplateText(expr);
-			}
-
-			if (expr.type === "StringLiteral") {
-				return expr.value;
-			}
-		}
-
-		return undefined;
+	if (attr.value.type === "StringLiteral") {
+		return attr.value.value;
 	}
 
-	private deduplicateStrings(strings: ExtractedString[]): ExtractedString[] {
-		// Content-hash keys are deterministic: same text+context → same key everywhere.
-		// Dedup by key (the hash) — keeps the first occurrence.
-		const seen = new Set<string>();
-		const unique: ExtractedString[] = [];
-		for (const str of strings) {
-			if (!seen.has(str.key)) {
-				seen.add(str.key);
-				unique.push(str);
-			}
+	if (attr.value.type === "JSXExpressionContainer") {
+		const expr = attr.value.expression;
+
+		if (expr.type === "TemplateLiteral") {
+			return extractTemplateText(expr);
 		}
-		return unique;
+
+		if (expr.type === "StringLiteral") {
+			return expr.value;
+		}
 	}
 
+	return undefined;
+}
+
+function deduplicateStrings(strings: ExtractedString[]): ExtractedString[] {
+	// Content-hash keys are deterministic: same text+context → same key everywhere.
+	// Dedup by key — keeps the first occurrence.
+	const seen = new Set<string>();
+	const unique: ExtractedString[] = [];
+	for (const str of strings) {
+		if (!seen.has(str.key)) {
+			seen.add(str.key);
+			unique.push(str);
+		}
+	}
+	return unique;
 }
