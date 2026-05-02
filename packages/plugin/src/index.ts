@@ -5,6 +5,7 @@ import {
 	detectCommitSha,
 	extractSourceTexts,
 	fetchTranslations,
+	fetchTranslationsFromCDN,
 	loadEnvFile,
 	registerAndGetFingerprint,
 } from "./core";
@@ -35,6 +36,7 @@ export const unplugin = createUnplugin(
 		loadEnvFile();
 
 		const apiUrl = process.env.VOCODER_API_URL ?? "https://vocoder.app";
+		const cdnUrl = process.env.VOCODER_CDN_URL ?? "https://t.vocoder.app";
 		const cacheKey = [process.cwd(), apiUrl].join("|");
 
 		let fingerprint: string;
@@ -119,7 +121,26 @@ export const unplugin = createUnplugin(
 			}
 
 			const fetchStart = Date.now();
-			const d = await fetchTranslations(fp, apiUrl);
+
+			// CDN-first: try the public bundle file directly before hitting the API.
+			// The API is still used as fallback because it contains the
+			// "wait for pending batches" logic needed on first builds.
+			let d: VocoderTranslationData | null = null;
+			if (cdnUrl) {
+				if (verbose) {
+					console.log(`[vocoder] Trying CDN: ${cdnUrl}/${fp}/bundle.json`);
+				}
+				d = await fetchTranslationsFromCDN(fp, cdnUrl);
+				if (d && verbose) {
+					console.log(`[vocoder] CDN hit: ${Date.now() - fetchStart}ms`);
+				} else if (!d && verbose) {
+					console.log(`[vocoder] CDN miss — falling back to API`);
+				}
+			}
+			if (!d) {
+				d = await fetchTranslations(fp, apiUrl);
+			}
+
 			if (verbose) {
 				console.log(`[vocoder] Fetch: ${Date.now() - fetchStart}ms`);
 			}
@@ -146,6 +167,7 @@ export const unplugin = createUnplugin(
 			return {
 				__VOCODER_FINGERPRINT__: JSON.stringify(fingerprint ?? ""),
 				__VOCODER_API_URL__: JSON.stringify(apiUrl),
+				__VOCODER_CDN_URL__: JSON.stringify(cdnUrl ?? ""),
 				__VOCODER_BUILD_TS__: JSON.stringify(Date.now()),
 				__VOCODER_PREVIEW__: JSON.stringify(options?.preview ?? false),
 			};

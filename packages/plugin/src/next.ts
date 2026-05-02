@@ -22,6 +22,7 @@ export function withVocoder(
 	loadEnvFile();
 
 	const apiUrl = process.env.VOCODER_API_URL ?? "https://vocoder.app";
+	const cdnUrl = process.env.VOCODER_CDN_URL ?? "https://t.vocoder.app";
 
 	// Fingerprint is computed asynchronously in the webpack plugin's buildStart hook.
 	// If VOCODER_FINGERPRINT is set (manual override), pass it through to env for Turbopack.
@@ -34,6 +35,7 @@ export function withVocoder(
 		env: {
 			...(nextConfig.env as Record<string, string> | undefined),
 			VOCODER_API_URL: apiUrl,
+			VOCODER_CDN_URL: cdnUrl,
 			VOCODER_BUILD_TS: String(Date.now()),
 			...(fingerprintOverride
 				? { VOCODER_FINGERPRINT: fingerprintOverride }

@@ -479,3 +479,53 @@ export async function fetchTranslations(
 		};
 	}
 }
+
+/**
+ * Attempt to fetch translations from the CDN bundle file.
+ *
+ * Returns null on any failure (404, network error, malformed JSON) so the
+ * caller can fall back to `fetchTranslations` which has the server-side
+ * "wait for pending batches" logic.
+ *
+ * On success the result is written to the disk cache so offline builds
+ * continue to work even when the CDN was the original source.
+ */
+export async function fetchTranslationsFromCDN(
+	fingerprint: string,
+	cdnUrl: string,
+): Promise<VocoderTranslationData | null> {
+	const url = `${cdnUrl}/${fingerprint}/bundle.json`;
+	const cacheDir = resolve(process.cwd(), "node_modules", ".vocoder", "cache");
+	const cacheFile = resolve(cacheDir, `${fingerprint}.json`);
+
+	try {
+		const response = await fetch(url, {
+			headers: { Accept: "application/json" },
+			signal: AbortSignal.timeout(15000),
+		});
+
+		if (response.status === 404) {
+			// Bundle not yet published to CDN — fall back to API
+			return null;
+		}
+
+		if (!response.ok) {
+			return null;
+		}
+
+		const data = (await response.json()) as VocoderTranslationData;
+
+		// Update disk cache so offline fallback stays current
+		try {
+			mkdirSync(cacheDir, { recursive: true });
+			writeFileSync(cacheFile, JSON.stringify(data), "utf-8");
+		} catch {
+			// Non-fatal
+		}
+
+		return data;
+	} catch {
+		// Network error, timeout, or parse failure — fall back to API
+		return null;
+	}
+}

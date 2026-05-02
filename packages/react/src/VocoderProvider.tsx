@@ -261,8 +261,14 @@ export const VocoderProvider: React.FC<VocoderProviderProps> = ({
 	}, [enabled, applyDir, locale, locales]);
 
 	// ── Background refresh ───────────────────────────────────────────
+	// Only fetch from CDN/API when the current locale has no translations
+	// from the build. If virtual modules loaded successfully there is
+	// nothing to refresh — CDN is a fallback for build-time misses only.
 	useEffect(() => {
 		if (!enabled || !isRefreshAvailable || !isInitialized || !locale) return;
+
+		const built = translations[locale];
+		if (built && Object.keys(built).length > 0) return;
 
 		let cancelled = false;
 		checkForUpdates(locale).then((updated) => {
