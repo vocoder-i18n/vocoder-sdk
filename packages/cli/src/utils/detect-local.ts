@@ -25,6 +25,8 @@ export interface LocalDetectionResult {
 	hasConfig: boolean;
 	hasUiPackage: boolean;
 	sourceLocale: string | null;
+	/** True when a tsconfig.json is present or TypeScript is listed as a dependency. */
+	isTypeScript: boolean;
 }
 
 /**
@@ -48,6 +50,7 @@ export function detectLocalEcosystem(
 			hasConfig: false,
 			hasUiPackage: false,
 			sourceLocale: null,
+			isTypeScript: existsSync(join(cwd, "tsconfig.json")),
 		};
 	}
 
@@ -59,6 +62,8 @@ export function detectLocalEcosystem(
 	const hasUnplugin = "@vocoder/plugin" in allDeps;
 	const hasExtractor = "@vocoder/extractor" in allDeps;
 	const hasConfig = "@vocoder/config" in allDeps;
+	const isTypeScript =
+		existsSync(join(cwd, "tsconfig.json")) || "typescript" in allDeps;
 
 	// Detect ecosystem + framework
 	const { ecosystem, framework, uiPackage } = detectFromDeps(allDeps, cwd);
@@ -74,6 +79,7 @@ export function detectLocalEcosystem(
 		hasConfig,
 		hasUiPackage,
 		sourceLocale: null,
+		isTypeScript,
 	};
 }
 
