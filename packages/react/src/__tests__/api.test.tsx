@@ -164,10 +164,13 @@ describe("Q3 — pluralization", () => {
 		);
 	});
 
-	it("ordinal: formats rank with selectordinal", async () => {
+	it("ordinal: formats rank with selectordinal via Tier 1 ordinalForms (EN)", async () => {
+		// Tier 1 path: ordinalForms.suffixes from manifest → '1st'
+		// DEFAULT_ORDINAL_ICU is now locale-neutral; explicit suffix props are ignored
+		// since the ordinal path in T.tsx runs before hasPluralMode.
 		render(
 			<VocoderProvider>
-				<T value={1} ordinal one="#st" two="#nd" few="#rd" other="#th" />
+				<T value={1} ordinal />
 			</VocoderProvider>,
 		);
 		await waitFor(() =>
@@ -175,16 +178,17 @@ describe("Q3 — pluralization", () => {
 		);
 	});
 
-	it("ordinal: translates selectordinal", async () => {
+	it("ordinal: translates via Tier 1 ordinalForms (ES)", async () => {
 		document.cookie = "vocoder_locale=es; Path=/";
+		// ES ordinalForms.suffixes: { other: '#.\u00ba' } — all ranks get '.' suffix
+		// Intl.PluralRules('es', {type:'ordinal'}).select(1) === 'other'
 		render(
 			<VocoderProvider>
-				<T value={1} ordinal one="#st" two="#nd" few="#rd" other="#th" />
+				<T value={1} ordinal />
 			</VocoderProvider>,
 		);
-		// Spanish CLDR ordinal rules classify all numbers as "other"
 		await waitFor(() =>
-			expect(screen.getByText("1to")).toBeInTheDocument(),
+			expect(screen.getByText("1.\u00ba")).toBeInTheDocument(),
 		);
 	});
 

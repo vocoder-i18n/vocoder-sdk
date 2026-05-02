@@ -33,11 +33,19 @@ export interface TransformResult {
 }
 
 /**
- * Default ordinal ICU — English suffix fallback, used when no locale-specific ICU is stored.
+ * Default ordinal ICU — locale-neutral structural placeholder used as the extraction
+ * key and bundle lookup key for <T value={rank} ordinal /> components.
+ *
+ * Uses a minimal single-branch form so the stored ICU carries no source-language
+ * ordinal suffixes. The actual ordinal form is resolved at runtime:
+ *   Tier 1 — ordinalForms.suffixes/words from the compiled bundle (covers 93+ languages)
+ *   Tier 2 — this key's bundle translation (provider returns `other {#}` unchanged;
+ *             formatICU evaluates it to String(rank), same as Tier 3)
+ *   Tier 3 — String(rank) fallback
+ *
  * Must stay byte-for-byte identical to DEFAULT_ORDINAL_ICU in @vocoder/react/src/T.tsx.
  */
-export const DEFAULT_ORDINAL_ICU =
-	"{count, selectordinal, one {#st} two {#nd} few {#rd} other {#th}}";
+export const DEFAULT_ORDINAL_ICU = "{count, selectordinal, other {#}}";
 
 /**
  * Build a plural or ordinal ICU string from plural prop key/value pairs.
@@ -605,7 +613,7 @@ export class StringExtractor {
 		// Ordinal prop: generate default English ICU — developer writes nothing, pipeline handles locale patterns.
 		// When gender prop present, wrap in gender select so the hash reflects gender-aware usage.
 		if (isOrdinal) {
-			const ordinalICU = "{count, selectordinal, one {#st} two {#nd} few {#rd} other {#th}}";
+			const ordinalICU = "{count, selectordinal, other {#}}"; // locale-neutral; ordinal form resolved at runtime via ordinalForms
 			if (hasGender) {
 				// Wrap in gender select: runtime selects word form based on dynamic gender value.
 				// Masculine/feminine/other all carry same English ordinal ICU (used only as Tier 2 fallback).

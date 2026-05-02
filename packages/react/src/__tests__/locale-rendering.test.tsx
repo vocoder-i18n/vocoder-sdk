@@ -107,7 +107,8 @@ function renderWithVocoder(
 // "0yvn7bx" = Hello, {name}!
 // "1uanpsy" = {value, select, male {his} female {her} other {their}}
 // "0x4ur6n" = {gender, select, male {He} female {She} other {They}} replied
-// "0z8709g" = {count, selectordinal, one {#st} two {#nd} few {#rd} other {#th}}
+// "1ql9h40" = {count, selectordinal, other {#}}  ← DEFAULT_ORDINAL_ICU (locale-neutral)
+// old hash "0z8709g" was the English-suffix ICU; hash changed when constant was made locale-neutral
 // ---------------------------------------------------------------------------
 
 const RU: Record<string, string> = {
@@ -754,5 +755,488 @@ describe("useVocoder() hook: t(), hasTranslation(), ordinal()", () => {
 	it("he: ordinal(3, 'masculine') → 'שלישי' via hook", () => {
 		const { ordinal } = makeContextValue("he", {}, HE_LOCALES);
 		expect(ordinal(3, "masculine")).toBe("שלישי");
+	});
+});
+
+// ===========================================================================
+// New tests — closing gaps found in browser audit
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Additional locale metadata
+// ---------------------------------------------------------------------------
+
+const DE_LOCALES: LocalesMap = {
+	de: {
+		nativeName: "Deutsch",
+		ordinalForms: { type: "suffix", suffixes: { other: "#." } },
+	},
+};
+
+const ES_LOCALES: LocalesMap = {
+	es: {
+		nativeName: "Español",
+		ordinalForms: { type: "suffix", suffixes: { other: "#.°" } },
+	},
+};
+
+// ---------------------------------------------------------------------------
+// Bug 1: Embedded selectordinal in message prop — rewritten via ordinalForms
+//
+// The pipeline's ordinal DB fast path only fires for pure standalone
+// selectordinal strings. When selectordinal appears embedded inside a larger
+// ICU sentence, the pipeline stores whatever the provider returned (garbage).
+// T.tsx must rewrite those branches using ordinalForms before calling formatICU.
+// ---------------------------------------------------------------------------
+
+const EMBEDDED_ORDINAL_SOURCE =
+	"Your {year, selectordinal, one {#st} two {#nd} few {#rd} other {#th}} result";
+
+describe("Bug 1: Embedded selectordinal — suffix-based rewrite (DE)", () => {
+	// Bundle contains a German translation with GARBAGE ordinal branches
+	// (simulating what DeepL stored before the fix).
+	const garbageDEBundle: Record<string, string> = {
+		[generateMessageHash(EMBEDDED_ORDINAL_SOURCE)]:
+			"Dein {year, selectordinal, one {GARBAGE_1er} other {GARBAGE_N.}} Ergebnis",
+	};
+
+	it("rank=1 → suffix 'other' applies (#.) → '1. Ergebnis'", () => {
+		renderWithVocoder(
+			<T message={EMBEDDED_ORDINAL_SOURCE} values={{ year: 1 }} />,
+			"de",
+			garbageDEBundle,
+			DE_LOCALES,
+		);
+		expect(screen.getByText("Dein 1. Ergebnis")).toBeInTheDocument();
+	});
+
+	it("rank=3 → '3. Ergebnis'", () => {
+		renderWithVocoder(
+			<T message={EMBEDDED_ORDINAL_SOURCE} values={{ year: 3 }} />,
+			"de",
+			garbageDEBundle,
+			DE_LOCALES,
+		);
+		expect(screen.getByText("Dein 3. Ergebnis")).toBeInTheDocument();
+	});
+
+	it("rank=11 → '11. Ergebnis'", () => {
+		renderWithVocoder(
+			<T message={EMBEDDED_ORDINAL_SOURCE} values={{ year: 11 }} />,
+			"de",
+			garbageDEBundle,
+			DE_LOCALES,
+		);
+		expect(screen.getByText("Dein 11. Ergebnis")).toBeInTheDocument();
+	});
+});
+
+describe("Bug 1: Embedded selectordinal — suffix-based rewrite (ES)", () => {
+	const garbageESBundle: Record<string, string> = {
+		[generateMessageHash(EMBEDDED_ORDINAL_SOURCE)]:
+			"Tu {year, selectordinal, one {1el} other {Nel}} resultado",
+	};
+
+	it("rank=1 → '1.° resultado' (ES suffix: other → #.°)", () => {
+		renderWithVocoder(
+			<T message={EMBEDDED_ORDINAL_SOURCE} values={{ year: 1 }} />,
+			"es",
+			garbageESBundle,
+			ES_LOCALES,
+		);
+		expect(screen.getByText("Tu 1.° resultado")).toBeInTheDocument();
+	});
+
+	it("rank=21 → '21.° resultado'", () => {
+		renderWithVocoder(
+			<T message={EMBEDDED_ORDINAL_SOURCE} values={{ year: 21 }} />,
+			"es",
+			garbageESBundle,
+			ES_LOCALES,
+		);
+		expect(screen.getByText("Tu 21.° resultado")).toBeInTheDocument();
+	});
+});
+
+describe("Bug 1: Embedded selectordinal — EN suffix (4 categories)", () => {
+	// EN has one/two/few/other — verify all four branches are written correctly
+	const garbageENBundle: Record<string, string> = {
+		[generateMessageHash(EMBEDDED_ORDINAL_SOURCE)]:
+			"Your {year, selectordinal, one {GARBAGE_st} two {GARBAGE_nd} few {GARBAGE_rd} other {GARBAGE_th}} result",
+	};
+
+	it.each([
+		[1, "Your 1st result"],
+		[2, "Your 2nd result"],
+		[3, "Your 3rd result"],
+		[4, "Your 4th result"],
+		[11, "Your 11th result"],
+		[21, "Your 21st result"],
+		[22, "Your 22nd result"],
+	])("rank=%i → '%s'", (rank, expected) => {
+		const { unmount } = renderWithVocoder(
+			<T message={EMBEDDED_ORDINAL_SOURCE} values={{ year: rank }} />,
+			"en",
+			garbageENBundle,
+			EN_LOCALES,
+		);
+		expect(screen.getByText(expected)).toBeInTheDocument();
+		unmount();
+	});
+});
+
+describe("Bug 1: Embedded selectordinal — word-based rewrite (AR)", () => {
+	// AR word-based: the entire selectordinal element is replaced with the word
+	const garbageARBundle: Record<string, string> = {
+		[generateMessageHash(EMBEDDED_ORDINAL_SOURCE)]:
+			"تهانينا {year, selectordinal, one {GARBAGE1} other {GARBAGEN}} ذكرى",
+	};
+
+	it("rank=1 masculine → 'تهانينا الأول ذكرى'", () => {
+		renderWithVocoder(
+			<T message={EMBEDDED_ORDINAL_SOURCE} values={{ year: 1 }} />,
+			"ar-SA",
+			garbageARBundle,
+			AR_SA_LOCALES,
+		);
+		expect(screen.getByText("تهانينا الأول ذكرى")).toBeInTheDocument();
+	});
+
+	it("rank=2 → 'تهانينا الثاني ذكرى'", () => {
+		renderWithVocoder(
+			<T message={EMBEDDED_ORDINAL_SOURCE} values={{ year: 2 }} />,
+			"ar-SA",
+			garbageARBundle,
+			AR_SA_LOCALES,
+		);
+		expect(screen.getByText("تهانينا الثاني ذكرى")).toBeInTheDocument();
+	});
+
+	it("rank=5 → 'تهانينا الخامس ذكرى'", () => {
+		renderWithVocoder(
+			<T message={EMBEDDED_ORDINAL_SOURCE} values={{ year: 5 }} />,
+			"ar-SA",
+			garbageARBundle,
+			AR_SA_LOCALES,
+		);
+		expect(screen.getByText("تهانينا الخامس ذكرى")).toBeInTheDocument();
+	});
+
+	it("rank=200 (out of word map) → falls back to '200' as literal", () => {
+		renderWithVocoder(
+			<T message={EMBEDDED_ORDINAL_SOURCE} values={{ year: 200 }} />,
+			"ar-SA",
+			garbageARBundle,
+			AR_SA_LOCALES,
+		);
+		expect(screen.getByText("تهانينا 200 ذكرى")).toBeInTheDocument();
+	});
+});
+
+describe("Bug 1: No rewrite when string has no selectordinal (fast path)", () => {
+	it("plain message prop with no selectordinal is unaffected", () => {
+		renderWithVocoder(
+			<T message="Hello {name}!" values={{ name: "World" }} />,
+			"de",
+			{},
+			DE_LOCALES,
+		);
+		expect(screen.getByText("Hello World!")).toBeInTheDocument();
+	});
+
+	it("plural-only message is unaffected", () => {
+		renderWithVocoder(
+			<T
+				message="{count, plural, one {# item} other {# items}}"
+				values={{ count: 5 }}
+			/>,
+			"de",
+			{},
+			DE_LOCALES,
+		);
+		expect(screen.getByText("5 items")).toBeInTheDocument();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Bug 3: Word-based ordinal rank out of word map → String(value) consistently
+//
+// <T value={n} ordinal /> and ordinal() hook must agree when the rank is
+// not present in ordinalForms.words. Previously T.tsx fell through to a
+// Tier 2 bundle lookup which stored garbage ("21الـ"); the hook returned
+// String(value) directly. Both now return String(value).
+// ---------------------------------------------------------------------------
+
+describe("Bug 3: Word-based ordinal rank beyond word map → consistent String(value)", () => {
+	// AR_SA_LOCALES word map only covers ranks 1–5
+	it("<T value={21} ordinal /> → '21' (not in word map)", () => {
+		renderWithVocoder(
+			<T value={21} ordinal gender="masculine" />,
+			"ar-SA",
+			{},
+			AR_SA_LOCALES,
+		);
+		expect(screen.getByText("21")).toBeInTheDocument();
+	});
+
+	it("ordinal(21, 'masculine') hook → '21' (same result as <T>)", () => {
+		const { ordinal } = makeContextValue("ar-SA", {}, AR_SA_LOCALES);
+		expect(ordinal(21, "masculine")).toBe("21");
+	});
+
+	it("<T value={100} ordinal /> → '100'", () => {
+		renderWithVocoder(
+			<T value={100} ordinal gender="feminine" />,
+			"ar-SA",
+			{},
+			AR_SA_LOCALES,
+		);
+		expect(screen.getByText("100")).toBeInTheDocument();
+	});
+
+	it("ordinal(100, 'feminine') hook → '100'", () => {
+		const { ordinal } = makeContextValue("ar-SA", {}, AR_SA_LOCALES);
+		expect(ordinal(100, "feminine")).toBe("100");
+	});
+
+	it("he: rank=50 not in word map → '50' from <T>", () => {
+		renderWithVocoder(
+			<T value={50} ordinal gender="masculine" />,
+			"he",
+			{},
+			HE_LOCALES,
+		);
+		expect(screen.getByText("50")).toBeInTheDocument();
+	});
+
+	it("he: ordinal(50) hook → '50'", () => {
+		const { ordinal } = makeContextValue("he", {}, HE_LOCALES);
+		expect(ordinal(50, "masculine")).toBe("50");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Bug 4: gender prop keys must be "masculine" / "feminine"
+//
+// ordinalForms.words uses "masculine"/"feminine" as keys. Passing "male" or
+// "female" will NOT match and falls through to the masculine fallback.
+// The canonical API uses "masculine"/"feminine". This test suite confirms
+// the correct keys work and documents the fallback for wrong keys.
+// ---------------------------------------------------------------------------
+
+describe("Bug 4: gender prop canonical keys are 'masculine' / 'feminine'", () => {
+	it("ar: gender='masculine' rank=1 → 'الأول'", () => {
+		renderWithVocoder(
+			<T value={1} ordinal gender="masculine" />,
+			"ar-SA",
+			{},
+			AR_SA_LOCALES,
+		);
+		expect(screen.getByText("الأول")).toBeInTheDocument();
+	});
+
+	it("ar: gender='feminine' rank=1 → 'الأولى' (distinct from masculine)", () => {
+		renderWithVocoder(
+			<T value={1} ordinal gender="feminine" />,
+			"ar-SA",
+			{},
+			AR_SA_LOCALES,
+		);
+		expect(screen.getByText("الأولى")).toBeInTheDocument();
+	});
+
+	it("ar: gender='masculine' rank=3 → 'الثالث'", () => {
+		renderWithVocoder(
+			<T value={3} ordinal gender="masculine" />,
+			"ar-SA",
+			{},
+			AR_SA_LOCALES,
+		);
+		expect(screen.getByText("الثالث")).toBeInTheDocument();
+	});
+
+	it("ar: gender='feminine' rank=3 → 'الثالثة'", () => {
+		renderWithVocoder(
+			<T value={3} ordinal gender="feminine" />,
+			"ar-SA",
+			{},
+			AR_SA_LOCALES,
+		);
+		expect(screen.getByText("الثالثة")).toBeInTheDocument();
+	});
+
+	it("ar: wrong key 'male' falls back to masculine map → same as 'masculine'", () => {
+		// 'male' is not a key in ordinalForms.words — falls to masculine via
+		// `forms.words['masculine']` fallback. Documents the behaviour explicitly.
+		renderWithVocoder(
+			<T value={1} ordinal gender="male" />,
+			"ar-SA",
+			{},
+			AR_SA_LOCALES,
+		);
+		expect(screen.getByText("الأول")).toBeInTheDocument(); // masculine fallback
+	});
+
+	it("ar: gender=undefined defaults to masculine", () => {
+		renderWithVocoder(
+			<T value={2} ordinal />,
+			"ar-SA",
+			{},
+			AR_SA_LOCALES,
+		);
+		expect(screen.getByText("الثاني")).toBeInTheDocument();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// P9 / P10 nested ICU — runtime correctly substitutes # in nested structures
+//
+// The browser audit found literal '#' in the output for nested select-in-plural
+// ICU strings when the stored AR/ES/JA translations were malformed (pipeline
+// issue). These tests confirm that when the bundle contains CORRECT nested ICU,
+// the runtime evaluates it properly — including # substitution inside deeply
+// nested branches. The pipeline fix (re-translating with correct probe expansion)
+// is separate; here we test the runtime layer.
+// ---------------------------------------------------------------------------
+
+const P9_SOURCE =
+	"{n, plural, one {{g, select, male {he has} female {she has} other {they have}} # item} other {{g, select, male {his} female {her} other {their}} # files were saved}}";
+
+const P10_SOURCE =
+	"{g, select, male {{n, plural, one {He has # unread message} other {He has # unread messages}}} female {{n, plural, one {She has # unread message} other {She has # unread messages}}} other {{n, plural, one {They have # unread message} other {They have # unread messages}}}}";
+
+describe("P9: select-inside-plural — # substituted in EN (no bundle)", () => {
+	it("n=1 g=male → 'he has 1 item'", () => {
+		renderWithVocoder(
+			<T message={P9_SOURCE} values={{ n: 1, g: "male" }} />,
+			"en",
+		);
+		expect(screen.getByText("he has 1 item")).toBeInTheDocument();
+	});
+
+	it("n=1 g=female → 'she has 1 item'", () => {
+		renderWithVocoder(
+			<T message={P9_SOURCE} values={{ n: 1, g: "female" }} />,
+			"en",
+		);
+		expect(screen.getByText("she has 1 item")).toBeInTheDocument();
+	});
+
+	it("n=5 g=male → 'his 5 files were saved'", () => {
+		renderWithVocoder(
+			<T message={P9_SOURCE} values={{ n: 5, g: "male" }} />,
+			"en",
+		);
+		expect(screen.getByText("his 5 files were saved")).toBeInTheDocument();
+	});
+
+	it("n=5 g=female → 'her 5 files were saved'", () => {
+		renderWithVocoder(
+			<T message={P9_SOURCE} values={{ n: 5, g: "female" }} />,
+			"en",
+		);
+		expect(screen.getByText("her 5 files were saved")).toBeInTheDocument();
+	});
+});
+
+describe("P9: select-inside-plural — # substituted with correct DE translation bundle", () => {
+	// Simulates a pipeline output that correctly translates the nested structure.
+	// IMPORTANT: # must remain at the TOP LEVEL of each plural branch — not moved
+	// inside nested select branches. IMF only substitutes # at the immediate
+	// plural branch level; # inside a nested select is treated as a literal.
+	// Source structure: one { {g,select,...} # item } — # is sibling of the select.
+	const P9_DE_BUNDLE: Record<string, string> = {
+		[generateMessageHash(P9_SOURCE)]:
+			"{n, plural, one {{g, select, male {er hat} female {sie hat} other {sie haben}} # Artikel} other {{g, select, male {seine} female {ihre} other {ihre}} # Dateien gespeichert}}",
+	};
+
+	it("n=1 g=male → 'er hat 1 Artikel'", () => {
+		renderWithVocoder(
+			<T message={P9_SOURCE} values={{ n: 1, g: "male" }} />,
+			"de",
+			P9_DE_BUNDLE,
+		);
+		expect(screen.getByText("er hat 1 Artikel")).toBeInTheDocument();
+	});
+
+	it("n=1 g=female → 'sie hat 1 Artikel'", () => {
+		renderWithVocoder(
+			<T message={P9_SOURCE} values={{ n: 1, g: "female" }} />,
+			"de",
+			P9_DE_BUNDLE,
+		);
+		expect(screen.getByText("sie hat 1 Artikel")).toBeInTheDocument();
+	});
+
+	it("n=5 g=male → 'seine 5 Dateien gespeichert'", () => {
+		renderWithVocoder(
+			<T message={P9_SOURCE} values={{ n: 5, g: "male" }} />,
+			"de",
+			P9_DE_BUNDLE,
+		);
+		expect(screen.getByText("seine 5 Dateien gespeichert")).toBeInTheDocument();
+	});
+});
+
+describe("P10: plural-inside-select — # substituted in EN (no bundle)", () => {
+	it("g=male n=1 → 'He has 1 unread message'", () => {
+		renderWithVocoder(
+			<T message={P10_SOURCE} values={{ n: 1, g: "male" }} />,
+			"en",
+		);
+		expect(screen.getByText("He has 1 unread message")).toBeInTheDocument();
+	});
+
+	it("g=female n=5 → 'She has 5 unread messages'", () => {
+		renderWithVocoder(
+			<T message={P10_SOURCE} values={{ n: 5, g: "female" }} />,
+			"en",
+		);
+		expect(screen.getByText("She has 5 unread messages")).toBeInTheDocument();
+	});
+
+	it("g=other n=1 → 'They have 1 unread message'", () => {
+		renderWithVocoder(
+			<T message={P10_SOURCE} values={{ n: 1, g: "other" }} />,
+			"en",
+		);
+		expect(screen.getByText("They have 1 unread message")).toBeInTheDocument();
+	});
+});
+
+describe("P10: plural-inside-select — # substituted with correct RU 4-form bundle", () => {
+	const P10_RU_BUNDLE: Record<string, string> = {
+		[generateMessageHash(P10_SOURCE)]:
+			"{g, select, male {{n, plural, one {У него # непрочитанное сообщение} few {У него # непрочитанных сообщения} many {У него # непрочитанных сообщений} other {У него # непрочитанных сообщений}}} female {{n, plural, one {У неё # непрочитанное сообщение} few {У неё # непрочитанных сообщения} many {У неё # непрочитанных сообщений} other {У неё # непрочитанных сообщений}}} other {{n, plural, one {У них # непрочитанное сообщение} few {У них # непрочитанных сообщения} many {У них # непрочитанных сообщений} other {У них # непрочитанных сообщений}}}}",
+	};
+
+	it("g=male n=1 → 'У него 1 непрочитанное сообщение'", () => {
+		renderWithVocoder(
+			<T message={P10_SOURCE} values={{ n: 1, g: "male" }} />,
+			"ru",
+			P10_RU_BUNDLE,
+			RU_LOCALES,
+		);
+		expect(screen.getByText("У него 1 непрочитанное сообщение")).toBeInTheDocument();
+	});
+
+	it("g=male n=5 → 'У него 5 непрочитанных сообщений' (many form)", () => {
+		renderWithVocoder(
+			<T message={P10_SOURCE} values={{ n: 5, g: "male" }} />,
+			"ru",
+			P10_RU_BUNDLE,
+			RU_LOCALES,
+		);
+		expect(screen.getByText("У него 5 непрочитанных сообщений")).toBeInTheDocument();
+	});
+
+	it("g=female n=2 → 'У неё 2 непрочитанных сообщения' (few form)", () => {
+		renderWithVocoder(
+			<T message={P10_SOURCE} values={{ n: 2, g: "female" }} />,
+			"ru",
+			P10_RU_BUNDLE,
+			RU_LOCALES,
+		);
+		expect(screen.getByText("У неё 2 непрочитанных сообщения")).toBeInTheDocument();
 	});
 });

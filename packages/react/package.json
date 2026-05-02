@@ -1,6 +1,6 @@
 {
   "name": "@vocoder/react",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "React components for internationalization (i18n) with SSR support, ICU MessageFormat, and build-time translation generation",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -66,6 +66,7 @@
     "access": "public"
   },
   "dependencies": {
+    "@formatjs/icu-messageformat-parser": "^2.11.4",
     "intl-messageformat": "^11.1.2"
   },
   "peerDependencies": {

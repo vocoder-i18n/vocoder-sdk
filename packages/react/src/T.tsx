@@ -3,7 +3,7 @@ import type { TProps } from "./types";
 import { generateMessageHash } from "./hash";
 import { extractText } from "./utils/extractText";
 import { formatElements } from "./utils/formatElements";
-import { formatICU } from "./utils/formatMessage";
+import { formatICU, rewriteSelectordinalInICU } from "./utils/formatMessage";
 import { formatValue } from "./utils/formatValue";
 import { useVocoder } from "./VocoderProvider";
 
@@ -30,7 +30,9 @@ function classifyProp(key: string): "plural" | "select" | "other" | "ignore" {
 }
 
 // Must stay byte-for-byte identical to DEFAULT_ORDINAL_ICU in @vocoder/extractor/src/index.ts.
-const DEFAULT_ORDINAL_ICU = "{count, selectordinal, one {#st} two {#nd} few {#rd} other {#th}}";
+// Locale-neutral: no source-language ordinal suffixes. The actual ordinal form is
+// resolved via ordinalForms (Tier 1). Tier 2 evaluates `other {#}` to String(rank).
+const DEFAULT_ORDINAL_ICU = "{count, selectordinal, other {#}}";
 
 /**
  * Build an ICU plural string from plural props.
@@ -169,7 +171,12 @@ export const T: React.FC<TProps> = ({
 				const genderMap = forms.words[genderKey] ?? forms.words["masculine"] ?? Object.values(forms.words)[0];
 				const word = genderMap?.[rank];
 				if (word) return <>{word}</>;
-				// rank not in map (> 100 or intermediate gap) — fall through to Tier 2/3
+				// Rank not in the word map (e.g. rank > 100 or a gap in coverage).
+				// Return String(value) directly — do NOT fall through to Tier 2 bundle
+				// lookup. For word-based locales the pipeline's tryBuildOrdinalFromDB
+				// returns null, so whatever the provider stored for DEFAULT_ORDINAL_ICU
+				// is unreliable garbage ("21الـ", etc.). Consistent with ordinal() hook.
+				return <>{String(value)}</>;
 			}
 
 			const ordinalValues = { count: value, ...(valuesObj ?? {}) };
@@ -203,7 +210,18 @@ export const T: React.FC<TProps> = ({
 		const lookupKey = id ?? generateMessageHash(sourceText, _context);
 
 		// Get translated text or fall back to source
-		const textToFormat = hasTranslation(lookupKey) ? t(sourceText, undefined, { id: lookupKey }) : sourceText;
+		const rawText = hasTranslation(lookupKey) ? t(sourceText, undefined, { id: lookupKey }) : sourceText;
+
+		// Rewrite any embedded selectordinal nodes using ordinalForms (Bug 1 fix).
+		// The pipeline's ordinal DB fast path only applies to pure standalone
+		// selectordinal strings; when selectordinal is embedded inside a larger
+		// sentence the pipeline stored whatever the provider returned, which is
+		// often wrong ("1el", "1th", "1الـ"). Rewrite before handing to formatICU.
+		const ordinalForms = locales?.[locale]?.ordinalForms;
+		const textToFormat =
+			ordinalForms && rawText?.includes("selectordinal")
+				? rewriteSelectordinalInICU(rawText, ordinalForms, formatValues)
+				: rawText;
 
 		// Nothing to format (id-only with no translation and no message)
 		if (!textToFormat) {

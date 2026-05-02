@@ -9,7 +9,7 @@ const translations = {
 		"0qy12rf": "You have {count} messages",
 		"0bt5k53": "{count, plural, one {# item} other {# items}}",
 		"1jkmkxh": "{count, plural, =0 {No items} one {# item} other {# items}}",
-		"0z8709g": "{count, selectordinal, one {#st} two {#nd} few {#rd} other {#th}}",
+		"1ql9h40": "{count, selectordinal, other {#}}", // DEFAULT_ORDINAL_ICU (locale-neutral; ordinals served via Tier 1 ordinalForms)
 		"1uanpsy": "{value, select, male {his} female {her} other {their}}",
 		"0x4ur6n": "{gender, select, male {He} female {She} other {They}} replied",
 		"1mx4siq": "Click <c0>here</c0> for help",
@@ -23,7 +23,7 @@ const translations = {
 		"0qy12rf": "Tienes {count} mensajes",
 		"0bt5k53": "{count, plural, one {# articulo} other {# articulos}}",
 		"1jkmkxh": "{count, plural, =0 {Sin articulos} one {# articulo} other {# articulos}}",
-		"0z8709g": "{count, selectordinal, one {#er} two {#do} few {#er} other {#to}}",
+		"1ql9h40": "{count, selectordinal, other {#}}", // DEFAULT_ORDINAL_ICU; ES ordinal via Tier 1 ordinalForms
 		"1uanpsy": "{value, select, male {su} female {su} other {su}}",
 		"0x4ur6n": "{gender, select, male {El} female {Ella} other {Elle}} respondio",
 		"1mx4siq": "Haz clic <c0>aqui</c0> para obtener ayuda",
@@ -51,9 +51,12 @@ export const config = {
 	sourceLocale: "en",
 	targetLocales: ["es", "fr", "pl"],
 	locales: {
-		en: { nativeName: "English",  currencyCode: "USD" },
-		es: { nativeName: "Espanol",  currencyCode: "EUR" },
-		fr: { nativeName: "Francais", currencyCode: "EUR" },
+		en: { nativeName: "English",  currencyCode: "USD",
+			ordinalForms: { type: "suffix" as const, suffixes: { one: "#st", two: "#nd", few: "#rd", other: "#th" } } },
+		es: { nativeName: "Espanol",  currencyCode: "EUR",
+			ordinalForms: { type: "suffix" as const, suffixes: { other: "#.\u00ba" } } },
+		fr: { nativeName: "Francais", currencyCode: "EUR",
+			ordinalForms: { type: "suffix" as const, suffixes: { one: "#er", other: "#e" } } },
 		pl: { nativeName: "Polski",   currencyCode: "PLN" },
 	},
 };
