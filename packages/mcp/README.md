@@ -21,10 +21,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
   "mcpServers": {
     "vocoder": {
       "command": "npx",
-      "args": ["-y", "@vocoder/mcp"],
-      "env": {
-        "VOCODER_API_KEY": "vc_..."
-      }
+      "args": ["-y", "@vocoder/mcp"]
     }
   }
 }
@@ -39,10 +36,7 @@ Add to your IDE's MCP config (`.cursor/mcp.json` or `.windsurf/mcp.json`):
   "mcpServers": {
     "vocoder": {
       "command": "npx",
-      "args": ["-y", "@vocoder/mcp"],
-      "env": {
-        "VOCODER_API_KEY": "vc_..."
-      }
+      "args": ["-y", "@vocoder/mcp"]
     }
   }
 }

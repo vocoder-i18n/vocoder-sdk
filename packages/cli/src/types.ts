@@ -76,7 +76,6 @@ export interface TranslationStringEntry {
 	context?: string;
 	formality?: "formal" | "informal" | "neutral" | "auto";
 	uiRole?: string;
-	featureArea?: string;
 }
 
 export interface TranslationBatchResponse {

@@ -16,11 +16,15 @@ export interface SyncBody {
 		text: string;
 		context?: string;
 		formality?: string;
+		uiRole?: string;
 	}>;
 	targetLocales: string[];
 	repoCanonical?: string;
-	repoScopePath?: string;
+	repoAppDir?: string;
 	requestedMode?: "auto" | "required" | "best-effort";
+	// sha256 of sorted string texts — server uses for fast UP_TO_DATE detection
+	stringsHash?: string;
+	force?: boolean;
 }
 
 export class VocoderClient {
@@ -79,13 +83,17 @@ export class VocoderClient {
 		);
 	}
 
+	// Matches CLI behavior: each locale is a separate targetLocale param.
+	// Pass locales=[] to fetch all configured locales.
 	async getSnapshot(
 		branch: string,
-		locale?: string,
+		locales: string[],
 		repoCanonical?: string,
 	): Promise<TranslationSnapshotResponse> {
 		const params = new URLSearchParams({ branch });
-		if (locale) params.set("targetLocale", locale);
+		for (const locale of locales) {
+			params.append("targetLocale", locale);
+		}
 		if (repoCanonical) params.set("repoCanonical", repoCanonical);
 		return this.request<TranslationSnapshotResponse>(
 			"GET",
@@ -118,6 +126,6 @@ export class VocoderClient {
 export function createClient(): VocoderClient | null {
 	const apiKey = process.env.VOCODER_API_KEY;
 	if (!apiKey) return null;
-	const apiUrl = process.env.VOCODER_API_URL ?? "https://vocoder.app";
+	const apiUrl = process.env.VOCODER_API_URL || "https://vocoder.app";
 	return new VocoderClient(apiKey, apiUrl);
 }

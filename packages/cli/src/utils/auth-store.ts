@@ -4,7 +4,6 @@ import { dirname, join } from "node:path";
 
 export interface AuthData {
 	token: string;
-	apiUrl: string;
 	userId: string;
 	email: string;
 	name: string | null;
@@ -24,7 +23,6 @@ export function readAuthData(): AuthData | null {
 		const data = parsed as Partial<AuthData>;
 		if (
 			typeof data.token !== "string" ||
-			typeof data.apiUrl !== "string" ||
 			typeof data.userId !== "string" ||
 			typeof data.email !== "string" ||
 			typeof data.createdAt !== "string"
@@ -33,7 +31,6 @@ export function readAuthData(): AuthData | null {
 		}
 		return {
 			token: data.token,
-			apiUrl: data.apiUrl,
 			userId: data.userId,
 			email: data.email,
 			name: typeof data.name === "string" ? data.name : null,

@@ -243,7 +243,6 @@ export class VocoderAPI {
 			...(entry.context ? { context: entry.context } : {}),
 			...(entry.formality ? { formality: entry.formality } : {}),
 			...(entry.uiRole ? { uiRole: entry.uiRole } : {}),
-			...(entry.featureArea ? { featureArea: entry.featureArea } : {}),
 		}));
 	}
 

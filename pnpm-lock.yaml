@@ -130,6 +130,9 @@ importers:
       '@vocoder/plugin':
         specifier: workspace:*
         version: link:../plugin
+      dotenv:
+        specifier: ^16.6.1
+        version: 16.6.1
       zod:
         specifier: ^3.24.0
         version: 3.25.76

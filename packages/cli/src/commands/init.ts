@@ -1,35 +1,37 @@
-import { execSync, spawn } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import * as p from "@clack/prompts";
-import chalk from "chalk";
-import { config as loadEnv } from "dotenv";
-import type { InitOptions } from "../types.js";
+
 import { VocoderAPI, VocoderAPIError } from "../utils/api.js";
-import {
-	clearAuthData,
-	readAuthData,
-	writeAuthData,
-} from "../utils/auth-store.js";
 import {
 	buildInstallCommand,
 	detectLocalEcosystem,
 	getPackagesToInstall,
 } from "../utils/detect-local.js";
+import {
+	clearAuthData,
+	readAuthData,
+	writeAuthData,
+} from "../utils/auth-store.js";
+import { execSync, spawn } from "node:child_process";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { findExistingConfig, writeVocoderConfig } from "../utils/write-config.js";
-import { resolveGitContext } from "../utils/git-identity.js";
 import {
 	runGitHubDiscoveryFlow,
 	runGitHubInstallFlow,
 	selectGitHubInstallation,
 } from "../utils/github-connect.js";
-import { startCallbackServer } from "../utils/local-server.js";
 import {
 	runProjectAppCreate,
 	runProjectCreate,
 } from "../utils/project-create.js";
+
+import type { InitOptions } from "../types.js";
+import chalk from "chalk";
 import { getSetupSnippets } from "../utils/setup-snippets.js";
+import { join } from "node:path";
+import { config as loadEnv } from "dotenv";
+import { resolveGitContext } from "../utils/git-identity.js";
 import { selectWorkspace } from "../utils/workspace.js";
+import { startCallbackServer } from "../utils/local-server.js";
 
 loadEnv();
 
@@ -273,8 +275,7 @@ function printApiKey(apiKey: string): void {
 // 				vocoder: {
 // 					type: "stdio",
 // 					command: "npx",
-// 					args: ["-y", "@vocoder/mcp"],
-// 					env: { VOCODER_API_KEY: "${env:VOCODER_API_KEY}" },
+// 					args: ["-y", "@vocoder/mcp"]
 // 				},
 // 			},
 // 		},
@@ -681,7 +682,7 @@ export async function init(options: InitOptions = {}): Promise<number> {
 		let authOrganizationId: string | undefined;
 
 		const stored = readAuthData();
-		if (stored && stored.apiUrl === apiUrl) {
+		if (stored) {
 			const verified = await verifyStoredToken(api, stored.token);
 
 			if (verified && !("userGone" in verified)) {
@@ -712,7 +713,6 @@ export async function init(options: InitOptions = {}): Promise<number> {
 
 				writeAuthData({
 					token: userToken,
-					apiUrl,
 					userId: authResult.userId,
 					email: userEmail,
 					name: userName,
@@ -734,7 +734,6 @@ export async function init(options: InitOptions = {}): Promise<number> {
 
 			writeAuthData({
 				token: userToken,
-				apiUrl,
 				userId: authResult.userId,
 				email: userEmail,
 				name: userName,

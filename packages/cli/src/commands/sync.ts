@@ -347,7 +347,6 @@ function buildStringEntries(
 				...(str.context ? { context: str.context } : {}),
 				...(str.formality ? { formality: str.formality } : {}),
 				...(str.uiRole ? { uiRole: str.uiRole } : {}),
-				...(str.featureArea ? { featureArea: str.featureArea } : {}),
 			});
 			continue;
 		}

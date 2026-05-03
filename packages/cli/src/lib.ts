@@ -22,6 +22,9 @@ export {
 	getPackagesToInstall,
 } from "./utils/detect-local.js";
 export { StringExtractor } from "./utils/extract.js";
+export { VocoderAPI, VocoderAPIError } from "./utils/api.js";
+export { readAuthData, writeAuthData, clearAuthData } from "./utils/auth-store.js";
+export type { AuthData } from "./utils/auth-store.js";
 export { loadVocoderConfig } from "@vocoder/extractor";
 export type { VocoderConfig } from "@vocoder/extractor";
 export { defineConfig } from "@vocoder/config";

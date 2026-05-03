@@ -27,8 +27,6 @@ export interface ExtractedString {
 	formality?: "formal" | "informal" | "neutral" | "auto";
 	/** Detected UI role from JSX parent element or prop. e.g. "button_label", "heading", "input_placeholder" */
 	uiRole?: string;
-	/** Feature area inferred from file path. e.g. "checkout", "auth", "settings" */
-	featureArea?: string;
 }
 
 export interface TransformResult {
@@ -474,35 +472,6 @@ function detectUiRole(path: any): string {
 }
 
 // ---------------------------------------------------------------------------
-// featureArea inference from file path
-// ---------------------------------------------------------------------------
-
-const FEATURE_PATTERNS: [RegExp, string][] = [
-	[/\/(checkout|cart|basket)/, "checkout"],
-	[/\/(auth|login|signup|sign-up|register|forgot|reset-password|verify)/, "auth"],
-	[/\/(onboarding|welcome|setup)/, "onboarding"],
-	[/\/(dashboard|overview|home)/, "dashboard"],
-	[/\/(settings|preferences|profile|account)/, "settings"],
-	[/\/(search|results|explore)/, "search"],
-	[/\/(product|item|detail|pdp)/, "product"],
-	[/\/(pricing|plans|billing|upgrade)/, "pricing"],
-	[/\/(admin|manage)/, "admin"],
-	[/\/(help|support|faq|docs)/, "support"],
-];
-
-/**
- * Infer a featureArea string from the file path.
- * Returns undefined when no pattern matches — the field stays null in the DB.
- */
-function inferFeatureArea(filePath: string): string | undefined {
-	const normalized = filePath.replace(/\\/g, "/").toLowerCase();
-	for (const [pattern, area] of FEATURE_PATTERNS) {
-		if (pattern.test(normalized)) return area;
-	}
-	return undefined;
-}
-
-// ---------------------------------------------------------------------------
 // Module-level implementation — shared by extractFromContent() and StringExtractor
 // ---------------------------------------------------------------------------
 
@@ -639,7 +608,6 @@ function _extractFromContent(
 							? explicitKey
 							: generateMessageHash(text.trim(), context);
 					const uiRole = detectUiRole(path);
-					const featureArea = inferFeatureArea(filePath);
 
 					strings.push({
 						key,
@@ -649,7 +617,6 @@ function _extractFromContent(
 						context,
 						formality,
 						uiRole: uiRole !== "unknown" ? uiRole : undefined,
-						featureArea,
 					});
 				},
 
@@ -694,7 +661,6 @@ function _extractFromContent(
 							? id.trim()
 							: generateMessageHash(text.trim(), context);
 					const uiRole = detectUiRole(path);
-					const featureArea = inferFeatureArea(filePath);
 
 					strings.push({
 						key,
@@ -704,7 +670,6 @@ function _extractFromContent(
 						context,
 						formality,
 						uiRole: uiRole !== "unknown" ? uiRole : undefined,
-						featureArea,
 					});
 				},
 			});
