@@ -1,0 +1,224 @@
+import * as p from "@clack/prompts";
+import chalk from "chalk";
+import { config as loadEnv } from "dotenv";
+import { VocoderAPI, VocoderAPIError } from "../utils/api.js";
+import { getLimitErrorGuidance } from "./sync.js";
+
+loadEnv();
+
+export interface LocaleCommandOptions {
+	apiUrl?: string;
+}
+
+function getApiConfig(options: LocaleCommandOptions): {
+	apiKey: string;
+	apiUrl: string;
+} | null {
+	const apiKey = process.env.VOCODER_API_KEY;
+	if (!apiKey) {
+		p.log.error(
+			"VOCODER_API_KEY is not set. Run `npx @vocoder/cli init` to set up your project.",
+		);
+		return null;
+	}
+	return {
+		apiKey,
+		apiUrl: options.apiUrl ?? process.env.VOCODER_API_URL ?? "https://vocoder.app",
+	};
+}
+
+/**
+ * Lists the project's configured source locale and target locales.
+ * Reads the project API key from VOCODER_API_KEY.
+ *
+ * Endpoint: GET /api/cli/config
+ *
+ * @throws If VOCODER_API_KEY is missing or the API call fails.
+ */
+export async function listProjectLocales(options: LocaleCommandOptions = {}): Promise<number> {
+	const config = getApiConfig(options);
+	if (!config) return 1;
+
+	const api = new VocoderAPI(config);
+
+	try {
+		const projectConfig = await api.getProjectConfig();
+
+		p.log.info(
+			`Source locale:  ${chalk.cyan(projectConfig.sourceLocale)}`,
+		);
+
+		if (projectConfig.targetLocales.length === 0) {
+			p.log.info("Target locales: (none configured)");
+		} else {
+			p.log.info(
+				`Target locales: ${projectConfig.targetLocales.map((l) => chalk.cyan(l)).join(", ")}`,
+			);
+		}
+
+		return 0;
+	} catch (error) {
+		p.log.error(
+			error instanceof Error ? error.message : "Failed to fetch project locales.",
+		);
+		return 1;
+	}
+}
+
+/**
+ * Adds one or more target locales to the project.
+ * Loops per locale — the API accepts one locale at a time.
+ * Idempotent: locales already configured are silently skipped.
+ *
+ * Endpoint: POST /api/cli/project/locales (one call per locale)
+ *
+ * @param locales  Array of BCP 47 locale codes to add, e.g. ["fr", "de", "pt-BR"].
+ * @throws {VocoderAPIError} status 422 for invalid/unsupported locale code.
+ * @throws {VocoderAPIError} status 403 when the plan's maxTargetLocalesPerProject limit is reached.
+ */
+export async function addLocales(
+	locales: string[],
+	options: LocaleCommandOptions = {},
+): Promise<number> {
+	if (locales.length === 0) {
+		p.log.error("No locale codes provided.");
+		return 1;
+	}
+
+	const config = getApiConfig(options);
+	if (!config) return 1;
+
+	const api = new VocoderAPI(config);
+	let lastTargetLocales: string[] = [];
+	let hadError = false;
+
+	for (const locale of locales) {
+		const spinner = p.spinner();
+		spinner.start(`Adding ${locale}…`);
+
+		try {
+			const result = await api.addLocale(locale);
+			lastTargetLocales = result.targetLocales;
+			spinner.stop(`Added ${chalk.cyan(locale)}`);
+		} catch (error) {
+			spinner.stop(`Failed to add ${chalk.red(locale)}`);
+			hadError = true;
+
+			if (error instanceof VocoderAPIError && error.limitError) {
+				const { limitError } = error;
+				p.log.error(limitError.message);
+				for (const line of getLimitErrorGuidance(limitError)) {
+					p.log.info(line);
+				}
+				// Plan limit hit — remaining locales will also fail, so stop early
+				break;
+			}
+
+			p.log.error(
+				error instanceof Error ? error.message : "Unknown error",
+			);
+		}
+	}
+
+	if (lastTargetLocales.length > 0) {
+		p.log.info(
+			`Target locales now: ${lastTargetLocales.map((l) => chalk.cyan(l)).join(", ")}`,
+		);
+	}
+
+	return hadError ? 1 : 0;
+}
+
+/**
+ * Removes one or more target locales from the project.
+ * Loops per locale — the API accepts one locale at a time.
+ * Idempotent: locales not currently configured are silently skipped.
+ *
+ * Endpoint: DELETE /api/cli/project/locales (one call per locale)
+ *
+ * @param locales  Array of BCP 47 locale codes to remove, e.g. ["fr", "de"].
+ */
+export async function removeLocales(
+	locales: string[],
+	options: LocaleCommandOptions = {},
+): Promise<number> {
+	if (locales.length === 0) {
+		p.log.error("No locale codes provided.");
+		return 1;
+	}
+
+	const config = getApiConfig(options);
+	if (!config) return 1;
+
+	const api = new VocoderAPI(config);
+	let lastTargetLocales: string[] = [];
+	let hadError = false;
+
+	for (const locale of locales) {
+		const spinner = p.spinner();
+		spinner.start(`Removing ${locale}…`);
+
+		try {
+			const result = await api.removeLocale(locale);
+			lastTargetLocales = result.targetLocales;
+			spinner.stop(`Removed ${chalk.cyan(locale)}`);
+		} catch (error) {
+			spinner.stop(`Failed to remove ${chalk.red(locale)}`);
+			hadError = true;
+			p.log.error(
+				error instanceof Error ? error.message : "Unknown error",
+			);
+		}
+	}
+
+	if (lastTargetLocales.length > 0) {
+		p.log.info(
+			`Target locales now: ${lastTargetLocales.map((l) => chalk.cyan(l)).join(", ")}`,
+		);
+	} else if (!hadError) {
+		p.log.info("Target locales now: (none configured)");
+	}
+
+	return hadError ? 1 : 0;
+}
+
+/**
+ * Lists all locales supported by Vocoder.
+ * Useful for discovering valid BCP 47 codes before calling `add`.
+ *
+ * Endpoint: GET /api/cli/locales (accepts both user tokens and project API keys)
+ */
+export async function listSupportedLocales(options: LocaleCommandOptions = {}): Promise<number> {
+	const config = getApiConfig(options);
+	if (!config) return 1;
+
+	const api = new VocoderAPI(config);
+
+	try {
+		// GET /api/cli/locales accepts both user tokens and project API keys as Bearer tokens
+		const result = await api.listLocales(config.apiKey);
+		p.log.info(chalk.bold("Source locales:"));
+		printLocaleTable(result.sourceLocales);
+		p.log.info("");
+		p.log.info(chalk.bold("Target locales:"));
+		printLocaleTable(result.targetLocales);
+		return 0;
+	} catch (error) {
+		p.log.error(
+			error instanceof Error ? error.message : "Failed to fetch supported locales.",
+		);
+		return 1;
+	}
+}
+
+function printLocaleTable(
+	locales: Array<{ code: string; name: string; nativeName?: string }>,
+): void {
+	for (const locale of locales) {
+		const native =
+			locale.nativeName && locale.nativeName !== locale.name
+				? ` (${locale.nativeName})`
+				: "";
+		p.log.info(`  ${chalk.cyan(locale.code.padEnd(10))} ${locale.name}${native}`);
+	}
+}

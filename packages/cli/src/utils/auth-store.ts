@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { VocoderAPI, VocoderAPIError } from "./api.js";
 
 export interface AuthData {
 	token: string;
@@ -46,6 +47,46 @@ export function writeAuthData(data: AuthData): void {
 	const dir = dirname(filePath);
 	mkdirSync(dir, { recursive: true, mode: 0o700 });
 	writeFileSync(filePath, JSON.stringify(data, null, 2), { mode: 0o600 });
+}
+
+// ── Stored token verification ────────────────────────────────────────────────
+
+/**
+ * Result of checking a stored CLI auth token against the API:
+ * - "valid"   — token is good; user info is returned
+ * - "expired" — token rejected (non-404); user record still exists → reauth,
+ *               do NOT run the GitHub App install flow again
+ * - "gone"    — 404; user record deleted → treat as first-time setup
+ * - "none"    — no token on disk
+ */
+export type StoredAuthStatus =
+	| { status: "valid"; token: string; userId: string; email: string; name: string | null }
+	| { status: "expired" }
+	| { status: "gone" }
+	| { status: "none" };
+
+/**
+ * Verify the stored CLI auth token. Clears the token on failure.
+ * Shared by the CLI (`commands/init.ts`) and the MCP (`tools/project-init.ts`)
+ * so reauth detection stays in sync.
+ */
+export async function verifyStoredAuth(
+	api: VocoderAPI,
+): Promise<StoredAuthStatus> {
+	const stored = readAuthData();
+	if (!stored) return { status: "none" };
+
+	try {
+		const userInfo = await api.getCliUserInfo(stored.token);
+		return { status: "valid", token: stored.token, ...userInfo };
+	} catch (err) {
+		clearAuthData();
+		// 404 = user record deleted — treat as first-time, not reauth
+		if (err instanceof VocoderAPIError && err.status === 404) {
+			return { status: "gone" };
+		}
+		return { status: "expired" };
+	}
 }
 
 export function clearAuthData(): void {

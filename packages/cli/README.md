@@ -136,6 +136,142 @@ Patterns can also be set via env vars: `VOCODER_INCLUDE_PATTERN` and `VOCODER_EX
 
 ---
 
+## Project Management
+
+These commands operate on an existing Vocoder project and require `VOCODER_API_KEY` in your environment (set it in `.env` or export it before running).
+
+### `vocoder locales`
+
+Show the project's configured source locale and all target locales.
+
+```bash
+vocoder locales
+# Source locale:  en
+# Target locales: fr, de, pt-BR
+```
+
+#### `vocoder locales add <codes...>`
+
+Add one or more target locales to the project. Accepts variadic BCP 47 codes.
+
+```bash
+vocoder locales add fr
+vocoder locales add fr de pt-BR
+```
+
+Returns an error with an upgrade link if the plan's locale limit is reached.
+
+#### `vocoder locales remove <codes...>`
+
+Remove one or more target locales from the project. Idempotent — silently skips locales that are not configured.
+
+```bash
+vocoder locales remove fr
+vocoder locales remove de pt-BR
+```
+
+#### `vocoder locales supported`
+
+List all locales supported by Vocoder. Useful for finding BCP 47 codes before calling `add`.
+
+```bash
+vocoder locales supported
+# Source locales:
+#   en         English
+#   ...
+# Target locales:
+#   ar         Arabic (العربية)
+#   de         German (Deutsch)
+#   es         Spanish (Español)
+#   fr         French (Français)
+#   ...
+```
+
+---
+
+### `vocoder project`
+
+Display the full project configuration: name, organization, source locale, target locales, target branches, and sync policy.
+
+```bash
+vocoder project
+# ╭─ My App — project config ────────────────────╮
+# │ Project:         My App                       │
+# │ Organization:    Acme Corp                    │
+# │ Source locale:   en                           │
+# │ Target locales:  fr, de, pt-BR                │
+# │ Target branches: main                         │
+# │ Primary branch:  main                         │
+# │ Sync policy:                                  │
+# │   Blocking branches: main, master             │
+# │   Blocking mode:     required                 │
+# │   Non-blocking mode: best-effort              │
+# │   Max wait:          60000 ms                 │
+# ╰───────────────────────────────────────────────╯
+```
+
+---
+
+### `vocoder translations`
+
+Download the current translation snapshot for a branch.
+
+```bash
+vocoder translations
+vocoder translations --branch main --locale fr
+vocoder translations --output ./public/locales
+```
+
+Without `--output`, prints the full snapshot as JSON to stdout (suitable for piping). With `--output <dir>`, writes one `<locale>.json` file per locale to the specified directory. Each file shape:
+
+```json
+{
+  "Hello": "Bonjour",
+  "Goodbye": "Au revoir"
+}
+```
+
+**Options:**
+
+| Flag | Description |
+|---|---|
+| `--branch <branch>` | Git branch (auto-detected from git/CI if omitted) |
+| `--locale <locale>` | Fetch a single locale only |
+| `--output <dir>` | Write locale JSON files to this directory |
+
+---
+
+### `vocoder create-project`
+
+Create a new Vocoder project without the interactive `init` flow. Requires authentication (run `vocoder init` first).
+
+```bash
+vocoder create-project \
+  --name "My App" \
+  --source-locale en \
+  --target-locales fr,de,pt-BR \
+  --target-branches main \
+  --workspace <org-id>
+```
+
+On success, prints the generated `VOCODER_API_KEY`. The organization ID can be found with `vocoder whoami`.
+
+Git repository is auto-detected from the current directory's git remote. Use `--repo github:owner/repo` to override, or omit to create the project without repo binding (push-based sync will not function until a repository is connected via the dashboard).
+
+**Options:**
+
+| Flag | Description |
+|---|---|
+| `--name <name>` | Project display name (required) |
+| `--source-locale <code>` | Source language BCP 47 code, e.g. `en` (required) |
+| `--workspace <org-id>` | Organization ID (required) |
+| `--target-locales <codes>` | Comma-separated target locale codes, e.g. `fr,de,pt-BR` |
+| `--target-branches <names>` | Comma-separated branch names to sync (default: `main`) |
+| `--repo <canonical>` | Git repo canonical, e.g. `github:owner/repo` |
+| `--app-dir <path>` | App directory within the repo for monorepos (default: `.`) |
+
+---
+
 ### `vocoder logout`
 
 Revoke the stored credentials and clear `~/.config/vocoder/auth.json`.
@@ -183,7 +319,7 @@ The CLI auto-detects repository context from the working directory:
 
 | Variable | Used by | Purpose |
 |---|---|---|
-| `VOCODER_API_KEY` | `sync`, MCP | Project API key (`vc_` prefix) |
+| `VOCODER_API_KEY` | `sync`, `locales`, `project`, `translations`, MCP | Project API key (`vcp_` prefix) |
 | `VOCODER_AUTH_TOKEN` | `init` | Override stored user token (`vcu_` prefix) |
 | `VOCODER_API_URL` | All commands | Override API base URL (default: `https://vocoder.app`) |
 

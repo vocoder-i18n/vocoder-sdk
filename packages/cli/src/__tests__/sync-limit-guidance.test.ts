@@ -30,6 +30,12 @@ describe("getLimitErrorGuidance", () => {
 		expect(lines.join(" ")).toContain("Required for this sync");
 	});
 
+	it("returns locale limit guidance for target_locales limits", () => {
+		const lines = getLimitErrorGuidance(createLimitError("target_locales"));
+		expect(lines[0]).toContain("Current target locales");
+		expect(lines.join(" ")).toContain("Upgrade plan");
+	});
+
 	it("keeps legacy guidance for generic plan limits", () => {
 		const lines = getLimitErrorGuidance(createLimitError("projects"));
 		expect(lines[0]).toBe("Plan: free");

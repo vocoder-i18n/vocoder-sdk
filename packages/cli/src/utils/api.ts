@@ -900,6 +900,57 @@ export class VocoderAPI {
 
 	// ── Locales ───────────────────────────────────────────────────────────────────
 
+	/**
+	 * Add a target locale to the project.
+	 * Idempotent: returns the current list unchanged if the locale is already configured.
+	 * Project determined from API key.
+	 *
+	 * @throws {VocoderAPIError} status 422 for invalid/unsupported locale code
+	 * @throws {VocoderAPIError} status 403 with limitError.limitType "target_locales" when plan limit reached
+	 */
+	async addLocale(
+		locale: string,
+		repoCanonical?: string,
+	): Promise<{ targetLocales: string[] }> {
+		return this.request<{ targetLocales: string[] }>(
+			"/api/cli/project/locales",
+			{
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					locale,
+					...(repoCanonical ? { repoCanonical } : {}),
+				}),
+			},
+			"Failed to add locale",
+		);
+	}
+
+	/**
+	 * Remove a target locale from the project.
+	 * Idempotent: returns the current list unchanged if the locale is not configured.
+	 * Project determined from API key.
+	 *
+	 * @throws {VocoderAPIError} on auth or server errors
+	 */
+	async removeLocale(
+		locale: string,
+		repoCanonical?: string,
+	): Promise<{ targetLocales: string[] }> {
+		return this.request<{ targetLocales: string[] }>(
+			"/api/cli/project/locales",
+			{
+				method: "DELETE",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					locale,
+					...(repoCanonical ? { repoCanonical } : {}),
+				}),
+			},
+			"Failed to remove locale",
+		);
+	}
+
 	async listLocales(userToken: string): Promise<{
 		sourceLocales: Array<{ code: string; name: string; nativeName?: string }>;
 		targetLocales: Array<{ code: string; name: string; nativeName?: string }>;

@@ -55,6 +55,22 @@ export class VocoderClient {
 
 		if (!response.ok) {
 			const text = await response.text().catch(() => response.statusText);
+
+			// Surface plan limit errors with the upgrade URL
+			if (response.status === 403) {
+				let payload: unknown;
+				try { payload = JSON.parse(text); } catch { /* not JSON */ }
+				if (
+					typeof payload === "object" && payload !== null &&
+					(payload as Record<string, unknown>).errorCode === "LIMIT_EXCEEDED"
+				) {
+					const err = payload as { message?: string; upgradeUrl?: string };
+					const msg = err.message ?? "Plan limit reached.";
+					const upgradeUrl = err.upgradeUrl ?? "https://vocoder.app/settings/billing";
+					throw new Error(`${msg} Upgrade your plan: ${upgradeUrl}`);
+				}
+			}
+
 			throw new Error(`Vocoder API error ${response.status}: ${text}`);
 		}
 
@@ -101,12 +117,35 @@ export class VocoderClient {
 		);
 	}
 
+	/**
+	 * Add a target locale to the project.
+	 * Idempotent: returns the current list unchanged if the locale is already configured.
+	 *
+	 * @throws On invalid BCP 47 code, unsupported locale, or plan limit exceeded (status 403).
+	 */
 	async addLocale(
 		locale: string,
 		repoCanonical?: string,
 	): Promise<{ targetLocales: string[] }> {
 		return this.request<{ targetLocales: string[] }>(
 			"POST",
+			"/api/cli/project/locales",
+			{ locale, repoCanonical },
+		);
+	}
+
+	/**
+	 * Remove a target locale from the project.
+	 * Idempotent: returns the current list unchanged if the locale is not configured.
+	 *
+	 * @throws On auth or server errors.
+	 */
+	async removeLocale(
+		locale: string,
+		repoCanonical?: string,
+	): Promise<{ targetLocales: string[] }> {
+		return this.request<{ targetLocales: string[] }>(
+			"DELETE",
 			"/api/cli/project/locales",
 			{ locale, repoCanonical },
 		);

@@ -2,8 +2,17 @@
 
 import { Command } from "commander";
 import { init } from "./commands/init.js";
+import {
+	addLocales,
+	listProjectLocales,
+	listSupportedLocales,
+	removeLocales,
+} from "./commands/locales.js";
 import { logout } from "./commands/logout.js";
+import { projectConfig } from "./commands/project-config.js";
 import { sync } from "./commands/sync.js";
+import { getTranslations } from "./commands/translations.js";
+import { createProject } from "./commands/create-project.js";
 import { whoami } from "./commands/whoami.js";
 
 /**
@@ -77,5 +86,85 @@ program
 	.description("Show the currently authenticated user")
 	.option("--api-url <url>", "Override Vocoder API URL")
 	.action((options) => runCommand(whoami, options));
+
+// ── Project management ────────────────────────────────────────────────────────
+
+const localesCmd = program
+	.command("locales")
+	.description("Manage project target locales")
+	.option("--api-url <url>", "Override Vocoder API URL")
+	.action((options) => runCommand(listProjectLocales, options));
+
+localesCmd
+	.command("add <codes...>")
+	.description("Add one or more target locales by BCP 47 code (e.g. fr de pt-BR)")
+	.option("--api-url <url>", "Override Vocoder API URL")
+	.action((codes: string[], options) =>
+		runCommand((opts) => addLocales(codes, opts), options),
+	);
+
+localesCmd
+	.command("remove <codes...>")
+	.description("Remove one or more target locales by BCP 47 code")
+	.option("--api-url <url>", "Override Vocoder API URL")
+	.action((codes: string[], options) =>
+		runCommand((opts) => removeLocales(codes, opts), options),
+	);
+
+localesCmd
+	.command("supported")
+	.description("List all locales supported by Vocoder")
+	.option("--api-url <url>", "Override Vocoder API URL")
+	.action((options) => runCommand(listSupportedLocales, options));
+
+program
+	.command("project")
+	.description("Show current project configuration")
+	.option("--api-url <url>", "Override Vocoder API URL")
+	.action((options) => runCommand(projectConfig, options));
+
+program
+	.command("translations")
+	.description("Download the current translation snapshot")
+	.option("--branch <branch>", "Git branch (auto-detected if omitted)")
+	.option("--locale <locale>", "Fetch a specific locale only")
+	.option("--output <dir>", "Write locale JSON files to this directory")
+	.option("--api-url <url>", "Override Vocoder API URL")
+	.action((options) => runCommand(getTranslations, options));
+
+program
+	.command("create-project")
+	.description("Create a new Vocoder project (requires prior `vocoder init`)")
+	.requiredOption("--name <name>", "Project display name")
+	.requiredOption("--source-locale <code>", "Source language BCP 47 code (e.g. en)")
+	.requiredOption("--workspace <org-id>", "Workspace organization ID")
+	.option(
+		"--target-locales <codes>",
+		"Comma-separated target locale codes (e.g. fr,de,pt-BR)",
+	)
+	.option(
+		"--target-branches <branches>",
+		"Comma-separated branch names to sync (default: main)",
+	)
+	.option(
+		"--repo <canonical>",
+		"Git repo canonical (e.g. github:owner/repo). Auto-detected from git remote if omitted.",
+	)
+	.option(
+		"--app-dir <path>",
+		"App directory within the repo for monorepos (default: .)",
+	)
+	.option("--api-url <url>", "Override Vocoder API URL")
+	.action((options) => {
+		const translated = {
+			...options,
+			// Commander camelCases dashed options
+			sourceLocale: options.sourceLocale,
+			targetLocales: options.targetLocales,
+			targetBranches: options.targetBranches,
+			workspace: options.workspace,
+		};
+		return runCommand(createProject, translated);
+	});
 
 program.parse(process.argv);

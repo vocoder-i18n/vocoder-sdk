@@ -127,6 +127,7 @@ export interface LimitErrorResponse {
 		| "providers"
 		| "translation_chars"
 		| "source_strings"
+		| "target_locales"
 		| "credits";
 	planId: string;
 	current: number;

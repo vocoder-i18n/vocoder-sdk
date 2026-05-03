@@ -281,6 +281,14 @@ export function getLimitErrorGuidance(
 		];
 	}
 
+	if (limitError.limitType === "target_locales") {
+		return [
+			`Current target locales: ${limitError.current}`,
+			`Plan limit: ${limitError.current} (${limitError.planId})`,
+			`Upgrade plan: ${limitError.upgradeUrl}`,
+		];
+	}
+
 	return [
 		`Plan: ${limitError.planId}`,
 		`Current: ${limitError.current}`,

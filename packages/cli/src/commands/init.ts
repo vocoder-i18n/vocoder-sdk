@@ -10,6 +10,7 @@ import {
 	clearAuthData,
 	readAuthData,
 	writeAuthData,
+	verifyStoredAuth,
 } from "../utils/auth-store.js";
 import { execSync, spawn } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -325,33 +326,7 @@ function printCodeBlock(code: string): void {
 
 // ── Auth helpers ─────────────────────────────────────────────────────────────
 
-/**
- * Verify a stored auth token against the API.
- * Returns user info on success, null if the token is invalid/expired.
- * Always clears the stored token on failure.
- *
- * Returns `{ userGone: true }` when the server confirms the user no longer
- * exists (404) — callers should treat this as a first-time setup, not a reauth.
- */
-async function verifyStoredToken(
-	api: VocoderAPI,
-	token: string,
-): Promise<
-	| { userId: string; email: string; name: string | null }
-	| { userGone: true }
-	| null
-> {
-	try {
-		return await api.getCliUserInfo(token);
-	} catch (err) {
-		clearAuthData();
-		// 404 = user record deleted — treat as first-time, not reauth
-		if (err instanceof VocoderAPIError && err.status === 404) {
-			return { userGone: true };
-		}
-		return null;
-	}
-}
+
 
 /**
  * Run the browser authentication flow.
@@ -681,28 +656,27 @@ export async function init(options: InitOptions = {}): Promise<number> {
 		// organizationId is set when auth+GitHub install completed in one browser trip
 		let authOrganizationId: string | undefined;
 
-		const stored = readAuthData();
-		if (stored) {
-			const verified = await verifyStoredToken(api, stored.token);
+		const storedAuth = await verifyStoredAuth(api);
 
-			if (verified && !("userGone" in verified)) {
-				p.log.success(`Authenticated as ${chalk.bold(verified.email)}`);
-				userToken = stored.token;
-				userEmail = verified.email;
-				userName = verified.name;
+			if (storedAuth.status === "valid") {
+				p.log.success(`Authenticated as ${chalk.bold(storedAuth.email)}`);
+				userToken = storedAuth.token;
+				userEmail = storedAuth.email;
+				userName = storedAuth.name;
 			} else {
-				// userGone = user deleted from DB → full first-time flow (installUrl)
-				// null = token expired → reauth via verificationUrl
-				const isFirstTime = verified !== null && "userGone" in verified;
-				if (isFirstTime) {
-					p.log.warn("Account not found — starting fresh setup");
-				} else {
+				// "gone" = user deleted from DB → full first-time flow (installUrl)
+				// "expired" = token rejected → reauth via verificationUrl (no new org)
+				// "none" = no stored token → full first-time flow (installUrl)
+				const reauth = storedAuth.status === "expired";
+				if (reauth) {
 					p.log.warn("Stored credentials expired — signing in again");
+				} else if (storedAuth.status === "gone") {
+					p.log.warn("Account not found — starting fresh setup");
 				}
 				const authResult = await runAuthFlow(
 					api,
 					options,
-					/* reauth */ !isFirstTime,
+					reauth,
 					identity?.repoCanonical,
 				);
 				if (!authResult) return 1;
@@ -719,27 +693,6 @@ export async function init(options: InitOptions = {}): Promise<number> {
 					createdAt: new Date().toISOString(),
 				});
 			}
-		} else {
-			const authResult = await runAuthFlow(
-				api,
-				options,
-				false,
-				identity?.repoCanonical,
-			);
-			if (!authResult) return 1;
-			userToken = authResult.token;
-			userEmail = authResult.email;
-			userName = authResult.name;
-			authOrganizationId = authResult.organizationId;
-
-			writeAuthData({
-				token: userToken,
-				userId: authResult.userId,
-				email: userEmail,
-				name: userName,
-				createdAt: new Date().toISOString(),
-			});
-		}
 
 		// ── Workspace selection ─────────────────────────────────────────────────────
 		let selectedWorkspaceId: string;

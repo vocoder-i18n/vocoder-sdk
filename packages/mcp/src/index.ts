@@ -4,9 +4,9 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { createClient, NO_API_KEY_MESSAGE } from "./client.js";
 import { runImplementI18n } from "./tools/implement-i18n.js";
-import { runInitStatus } from "./tools/init-status.js";
-import { runInitComplete, runInitStart, runProjectCreate } from "./tools/project-init.js";
-import { runAddLocale } from "./tools/locale.js";
+// import { runInitStatus } from "./tools/init-status.js";
+// import { runInitComplete, runInitStart, runProjectCreate } from "./tools/project-init.js";
+import { runAddLocale, runRemoveLocale } from "./tools/locale.js";
 import { runSetup } from "./tools/setup.js";
 import { runStatus } from "./tools/status.js";
 import { runSync } from "./tools/sync.js";
@@ -24,9 +24,7 @@ Key principles:
 - Plurals and selects belong in <T> props (one/other, _male/_female), not in JavaScript ternaries.
 - Wrap all visible UI strings. Skip: import paths, CSS classes, URLs, console.log, test files, technical HTML attributes.
 - After implementing, always run vocoder_sync to extract strings and submit for translation.
-- When auth is missing (vocoder_init_status returns ready: false), use the vocoder_init_start and vocoder_init_complete tools — do NOT run \`npx @vocoder/cli init\` via Bash. The CLI is an interactive TTY app and will hang. The init tools handle everything headlessly.
-- Init flow order: (1) ask if GitHub App already installed, (2) call vocoder_init_start to get the auth URL, (3) show the auth URL and wait for the user to confirm they've completed the browser flow, (4) call vocoder_init_complete — this writes credentials, (5) collect sourceLocale/targetLocales/targetBranches from the user, (6) call vocoder_project_create — this resolves the workspace and creates the project.
-- After vocoder_project_create returns an apiKey: find the appropriate env file for this project and write VOCODER_API_KEY there, then run /mcp reset to reload.`,
+- If VOCODER_API_KEY is missing or invalid, tell the user to run \`npx @vocoder/cli init\` in their terminal to set up their project, then add VOCODER_API_KEY to their .env and run /mcp reset to reload.`,
 	},
 );
 
@@ -65,135 +63,8 @@ server.tool(
 	},
 );
 
-// vocoder_init_start — open auth session, show browser URL immediately.
-// Auth comes first (matching CLI flow). Project config is collected while user is in browser.
-server.tool(
-	"vocoder_init_start",
-	"Start Vocoder authentication. Before calling: ask the user one question — have they already installed the Vocoder GitHub App? (yes = mode 'link', no = mode 'install'). Then call this tool. Show the returned link to the user and tell them to reply when they've completed the browser flow. Wait for their reply before doing anything else.",
-	{
-		mode: z
-			.enum(["install", "link"])
-			.optional()
-			.describe(
-				'Auth mode: "install" (default) — installs GitHub App + authenticates in one browser trip; "link" — OAuth only, for users who already have the App installed.',
-			),
-	},
-	async ({ mode }) => {
-		try {
-			const result = await runInitStart({ mode });
-			return {
-				content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-			};
-		} catch (error) {
-			return {
-				content: [
-					{
-						type: "text",
-						text: `Failed to start initialization: ${error instanceof Error ? error.message : String(error)}`,
-					},
-				],
-			};
-		}
-	},
-);
-
-// vocoder_init_complete — poll for token, write auth.
-// Workspace resolution is deferred to vocoder_project_create so re-runs don't
-// hit "already claimed" errors from claimCliGitHubInstallation.
-server.tool(
-	"vocoder_init_complete",
-	"Call this immediately after the user confirms they've finished the browser auth flow. Takes only the sessionId — no project config yet. Polls for the auth token and writes credentials to disk. Returns confirmation and instructions to collect project config next.",
-	{
-		sessionId: z
-			.string()
-			.describe("The sessionId returned by vocoder_init_start"),
-	},
-	async ({ sessionId }) => {
-		try {
-			const result = await runInitComplete({ sessionId });
-			return {
-				content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-			};
-		} catch (error) {
-			return {
-				content: [
-					{
-						type: "text",
-						text: `Authentication failed: ${error instanceof Error ? error.message : String(error)}`,
-					},
-				],
-			};
-		}
-	},
-);
-
-// vocoder_project_create — collect project config and create the project.
-server.tool(
-	"vocoder_project_create",
-	"Call this after vocoder_init_complete succeeds. Collect sourceLocale, targetLocales, targetBranches, and optional projectName from the user, then call this tool. Creates the project and returns the API key. Find the appropriate env file for this project and write VOCODER_API_KEY there, then run /mcp reset to reload.",
-	{
-		sessionId: z
-			.string()
-			.describe("The sessionId returned by vocoder_init_start"),
-		sourceLocale: z
-			.string()
-			.describe('Source language BCP 47 code, e.g. "en"'),
-		targetLocales: z
-			.array(z.string())
-			.describe('Target language codes to translate into, e.g. ["es", "fr", "de"]'),
-		targetBranches: z
-			.array(z.string())
-			.describe('Git branches that trigger translation on push, e.g. ["main"]'),
-		projectName: z
-			.string()
-			.optional()
-			.describe("Project name (auto-detected from git repo name if omitted)"),
-	},
-	async ({ sessionId, sourceLocale, targetLocales, targetBranches, projectName }) => {
-		try {
-			const result = await runProjectCreate({ sessionId, sourceLocale, targetLocales, targetBranches, projectName });
-			return {
-				content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-			};
-		} catch (error) {
-			return {
-				content: [
-					{
-						type: "text",
-						text: `Project creation failed: ${error instanceof Error ? error.message : String(error)}`,
-					},
-				],
-			};
-		}
-	},
-);
-
-// vocoder_init_status — check whether Vocoder is initialized with a valid API key.
-// Use this to determine if auth-gated tools (vocoder_sync, vocoder_add_locale, etc.)
-// are available. If ready: false, show the user the instructions field.
-server.tool(
-	"vocoder_init_status",
-	"Check whether Vocoder is initialized and the API key is valid. Returns ready: true when the project is connected and translation tools are available. Returns ready: false with step-by-step instructions to run vocoder init when not configured. Call this before using any tool that requires VOCODER_API_KEY.",
-	{},
-	async () => {
-		const client = createClient();
-		try {
-			const result = await runInitStatus(client);
-			return {
-				content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-			};
-		} catch (error) {
-			return {
-				content: [
-					{
-						type: "text",
-						text: `Init status check failed: ${error instanceof Error ? error.message : String(error)}`,
-					},
-				],
-			};
-		}
-	},
-);
+// ── Setup tools (commented out — coming back to these) ────────────────────────
+// vocoder_init_start, vocoder_init_complete, vocoder_project_create, vocoder_init_status
 
 // vocoder_implement_i18n — generate a complete implementation plan.
 // Returns exact file paths, install commands, provider setup, files to scan,
@@ -376,7 +247,7 @@ server.tool(
 // vocoder_add_locale — add a new target language to the project.
 server.tool(
 	"vocoder_add_locale",
-	'Add a new target locale to the Vocoder project. The locale must be a valid BCP 47 code (e.g. "fr", "de", "pt-BR", "zh-TW").',
+	'Add a new target locale to the Vocoder project. The locale must be a valid BCP 47 code (e.g. "fr", "de", "pt-BR", "zh-TW"). Use vocoder_list_locales to find the correct code for a language.',
 	{
 		locale: z
 			.string()
@@ -395,6 +266,35 @@ server.tool(
 					{
 						type: "text",
 						text: `Failed to add locale: ${error instanceof Error ? error.message : String(error)}`,
+					},
+				],
+			};
+		}
+	},
+);
+
+// vocoder_remove_locale — remove a target language from the project.
+server.tool(
+	"vocoder_remove_locale",
+	'Remove a target locale from the Vocoder project. Pass the BCP 47 code of a currently-configured target locale (e.g. "fr", "de"). Use vocoder_status to see the current target locales before calling.',
+	{
+		locale: z
+			.string()
+			.describe('BCP 47 locale code to remove, e.g. "fr" or "pt-BR"'),
+	},
+	async ({ locale }) => {
+		const client = createClient();
+		if (!client)
+			return { content: [{ type: "text", text: NO_API_KEY_MESSAGE }] };
+		try {
+			const text = await runRemoveLocale(locale, client);
+			return { content: [{ type: "text", text }] };
+		} catch (error) {
+			return {
+				content: [
+					{
+						type: "text",
+						text: `Failed to remove locale: ${error instanceof Error ? error.message : String(error)}`,
 					},
 				],
 			};

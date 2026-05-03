@@ -1,0 +1,157 @@
+import * as p from "@clack/prompts";
+import chalk from "chalk";
+import { config as loadEnv } from "dotenv";
+import { VocoderAPI, VocoderAPIError } from "../utils/api.js";
+import { readAuthData } from "../utils/auth-store.js";
+import { resolveGitRepositoryIdentity } from "../utils/git-identity.js";
+import { getLimitErrorGuidance } from "./sync.js";
+
+loadEnv();
+
+export interface CreateProjectOptions {
+	/** Project display name (required). */
+	name: string;
+	/** BCP 47 source locale code, e.g. "en" (required). */
+	sourceLocale: string;
+	/** Comma-separated target locale codes, e.g. "fr,de,pt-BR". */
+	targetLocales?: string;
+	/** Comma-separated branch names to enable sync on. Defaults to "main". */
+	targetBranches?: string;
+	/** Organization ID of the workspace to create the project in (required). */
+	workspace: string;
+	/**
+	 * Explicit git repository canonical, e.g. "github:owner/repo".
+	 * Auto-detected from git remote if omitted.
+	 */
+	repo?: string;
+	/**
+	 * App directory within the repository for monorepos, e.g. "apps/web".
+	 * Defaults to "." (repo root).
+	 */
+	appDir?: string;
+	apiUrl?: string;
+}
+
+/**
+ * Creates a new Vocoder project without the interactive init flow.
+ *
+ * Requires a valid user token in the local auth store (run `vocoder init` first).
+ * Prints the generated VOCODER_API_KEY to stdout on success.
+ *
+ * Git identity is auto-detected from the git remote. The detected repository
+ * must be accessible via the workspace's GitHub App installation for
+ * push-based sync to function. Use --repo to override auto-detection, or
+ * omit repo binding entirely if not in a git repository.
+ *
+ * Endpoint: POST /api/cli/projects
+ *
+ * @param options.name           Project display name (required).
+ * @param options.sourceLocale   Source language BCP 47 code (required).
+ * @param options.targetLocales  Comma-separated target locale codes.
+ * @param options.targetBranches Comma-separated branch names (default: "main").
+ * @param options.workspace      Organization ID (required).
+ * @param options.repo           Git repo canonical override.
+ * @param options.appDir         App directory for monorepos (default: ".").
+ *
+ * @throws If user token is missing, workspace is invalid, or the plan's
+ *         maxProjects limit is exceeded.
+ */
+export async function createProject(options: CreateProjectOptions): Promise<number> {
+	const authData = readAuthData();
+	if (!authData) {
+		p.log.error(
+			"Not logged in. Run `npx @vocoder/cli init` to authenticate first.",
+		);
+		return 1;
+	}
+
+	const apiUrl = options.apiUrl ?? process.env.VOCODER_API_URL ?? "https://vocoder.app";
+	const api = new VocoderAPI({ apiKey: "", apiUrl });
+
+	// Resolve repo identity — auto-detect if not overridden
+	let repoCanonical: string | undefined;
+	let appDir = options.appDir ?? ".";
+
+	if (options.repo) {
+		repoCanonical = options.repo;
+	} else {
+		const identity = resolveGitRepositoryIdentity();
+		if (identity) {
+			repoCanonical = identity.repoCanonical;
+			// Only override appDir from git if the caller didn't specify one
+			if (!options.appDir && identity.repoAppDir) {
+				appDir = identity.repoAppDir;
+			}
+		} else {
+			p.log.warn(
+				"Could not detect a git remote. The project will be created without repo binding — " +
+					"sync-on-push will not function until a repository is connected via the Vocoder dashboard.",
+			);
+		}
+	}
+
+	const targetLocales = options.targetLocales
+		? options.targetLocales.split(",").map((l) => l.trim()).filter(Boolean)
+		: [];
+
+	const targetBranches = options.targetBranches
+		? options.targetBranches.split(",").map((b) => b.trim()).filter(Boolean)
+		: ["main"];
+
+	const spinner = p.spinner();
+	spinner.start(`Creating project "${options.name}"…`);
+
+	try {
+		const result = await api.createProject(authData.token, {
+			organizationId: options.workspace,
+			name: options.name,
+			sourceLocale: options.sourceLocale,
+			targetLocales,
+			targetBranches,
+			appDirs: [appDir],
+			...(repoCanonical ? { repoCanonical } : {}),
+		});
+
+		spinner.stop(`Created project ${chalk.bold(result.projectName)}`);
+
+		const lines = [
+			`Project ID:     ${result.projectId}`,
+			`Source locale:  ${chalk.cyan(result.sourceLocale)}`,
+			`Target locales: ${result.targetLocales.length > 0 ? result.targetLocales.map((l) => chalk.cyan(l)).join(", ") : chalk.dim("(none)")}`,
+			`Branches:       ${result.targetBranches.map((b) => chalk.cyan(b)).join(", ")}`,
+			...(repoCanonical
+				? [`Repository:     ${chalk.cyan(repoCanonical)}${appDir !== "." ? ` (${appDir})` : ""}`]
+				: []),
+			"",
+			`Add this to your .env file:`,
+			`  ${chalk.bold("VOCODER_API_KEY")}=${chalk.cyan(result.apiKey)}`,
+		];
+
+		p.note(lines.join("\n"), "Project created");
+
+		if (!result.repositoryBound && repoCanonical) {
+			p.log.warn(
+				`Repository "${repoCanonical}" was not automatically connected. ` +
+					"Ensure your GitHub App installation covers this repository.",
+			);
+		}
+
+		return 0;
+	} catch (error) {
+		spinner.stop("Failed to create project.");
+
+		if (error instanceof VocoderAPIError && error.limitError) {
+			const { limitError } = error;
+			p.log.error(limitError.message);
+			for (const line of getLimitErrorGuidance(limitError)) {
+				p.log.info(line);
+			}
+			return 1;
+		}
+
+		p.log.error(
+			error instanceof Error ? error.message : "Unknown error.",
+		);
+		return 1;
+	}
+}

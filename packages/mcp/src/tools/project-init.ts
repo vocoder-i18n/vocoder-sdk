@@ -3,9 +3,8 @@ import { detectRepoIdentity } from "@vocoder/plugin";
 import {
 	VocoderAPI,
 	VocoderAPIError,
-	readAuthData,
 	writeAuthData,
-	clearAuthData,
+	verifyStoredAuth,
 } from "@vocoder/cli/lib";
 
 export interface InitStartInput {
@@ -75,43 +74,51 @@ export async function runInitStart(
 	const identity = detectRepoIdentity();
 	const expiresAt = new Date(Date.now() + AUTH_TIMEOUT_MS).toISOString();
 
-	// Check for a valid stored auth token (shared with CLI at ~/.config/vocoder/auth.json).
-	// If found, skip the browser flow entirely.
-	const stored = readAuthData();
-	if (stored) {
-		const api = new VocoderAPI({ apiUrl, apiKey: "" });
-		try {
-			const userInfo = await api.getCliUserInfo(stored.token);
-			const sessionId = randomUUID();
-			pendingSessions.set(sessionId, {
-				sessionId,
-				apiUrl,
-				repoCanonical: identity?.repoCanonical,
-				repoAppDir: identity?.appDir,
-				mode: "existing",
-				storedToken: stored.token,
-			});
-			return {
-				authUrl: null,
-				sessionId,
-				expiresAt,
-				mode: "existing",
-				instructions: `Already authenticated as ${userInfo.email} — no browser flow needed. Call vocoder_init_complete with the sessionId to confirm, then collect project config.`,
-			};
-		} catch {
-			// Token expired or invalid — clear it and fall through to browser flow
-			clearAuthData();
-		}
+	const api = new VocoderAPI({ apiUrl, apiKey: "" });
+
+	// Check stored auth using the same logic as the CLI (shared via @vocoder/cli/lib).
+	// verifyStoredAuth distinguishes three cases:
+	// - "valid":   token still good — skip browser flow entirely
+	// - "expired": token rejected but user record exists — reauth via verificationUrl
+	//              (same as CLI reauth=true: no new org, no new GitHub App install)
+	// - "gone":    404, user deleted — treat as first-time, use installUrl
+	// - "none":    no stored token — first-time, use installUrl
+	const storedAuth = await verifyStoredAuth(api);
+
+	if (storedAuth.status === "valid") {
+		const sessionId = randomUUID();
+		pendingSessions.set(sessionId, {
+			sessionId,
+			apiUrl,
+			repoCanonical: identity?.repoCanonical,
+			repoAppDir: identity?.appDir,
+			mode: "existing",
+			storedToken: storedAuth.token,
+		});
+		return {
+			authUrl: null,
+			sessionId,
+			expiresAt,
+			mode: "existing",
+			instructions: `Already authenticated as ${storedAuth.email} — no browser flow needed. Call vocoder_init_complete with the sessionId to confirm, then collect project config.`,
+		};
 	}
 
-	const api = new VocoderAPI({ apiUrl, apiKey: "" });
 	const session = await api.startCliAuthSession(undefined, identity?.repoCanonical);
+
+	// Mirror the CLI reauth logic exactly:
+	// - expired token → verificationUrl (user has an account, just sign in again —
+	//   no GitHub App install, no new org created)
+	// - gone/none → installUrl (first-time: GitHub App install + auth in one trip)
+	const isReauth = storedAuth.status === "expired";
 	const mode = input.mode ?? "install";
 
-	// "install": installUrl combines GitHub App install + Vocoder auth in one browser trip.
-	// "link": OAuth-only URL — user already has the App installed, just needs to authenticate.
 	let authUrl: string;
-	if (mode === "link") {
+	if (isReauth) {
+		// Reauth: use the verification URL just like the CLI does — avoids creating
+		// a duplicate workspace for a returning user with an expired token.
+		authUrl = session.verificationUrl;
+	} else if (mode === "link") {
 		try {
 			const linkSession = await api.startCliGitHubLinkSession(session.sessionId);
 			authUrl = linkSession.oauthUrl;
@@ -127,11 +134,12 @@ export async function runInitStart(
 		apiUrl,
 		repoCanonical: identity?.repoCanonical,
 		repoAppDir: identity?.appDir,
-		mode,
+		mode: isReauth ? "existing" : mode,
 	});
 
-	const modeNote =
-		mode === "link"
+	const modeNote = isReauth
+		? "This URL just signs you back in — your existing workspace and GitHub connection are preserved."
+		: mode === "link"
 			? "This URL only requires GitHub authorization (no App install needed)."
 			: "This URL installs the Vocoder GitHub App and authenticates in one step.";
 
