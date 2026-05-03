@@ -242,6 +242,8 @@ export class VocoderAPI {
 			text: entry.text,
 			...(entry.context ? { context: entry.context } : {}),
 			...(entry.formality ? { formality: entry.formality } : {}),
+			...(entry.uiRole ? { uiRole: entry.uiRole } : {}),
+			...(entry.featureArea ? { featureArea: entry.featureArea } : {}),
 		}));
 	}
 
@@ -254,6 +256,8 @@ export class VocoderAPI {
 			requestedMaxWaitMs?: number;
 			clientRunId?: string;
 			force?: boolean;
+			/** From vocoder.config.ts — synced to ProjectApp on every push */
+			appIndustry?: string;
 		},
 		repoIdentity?: RepoIdentityPayload,
 	): Promise<TranslationBatchResponse> {
@@ -296,6 +300,7 @@ export class VocoderAPI {
 					...(repoIdentity?.commitSha
 						? { commitSha: repoIdentity.commitSha }
 						: {}),
+					...(options?.appIndustry ? { appIndustry: options.appIndustry } : {}),
 				}),
 			},
 			"Translation submission failed",

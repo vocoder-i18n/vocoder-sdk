@@ -117,6 +117,14 @@ function extractFromObject(obj: any): VocoderConfig {
 		if (key === "localesPath" && prop.value.type === "StringLiteral") {
 			config.localesPath = prop.value.value as string;
 		}
+
+		if (key === "appIndustry" && prop.value.type === "StringLiteral") {
+			config.appIndustry = prop.value.value as VocoderConfig["appIndustry"];
+		}
+
+		if (key === "formality" && prop.value.type === "StringLiteral") {
+			config.formality = prop.value.value as VocoderConfig["formality"];
+		}
 	}
 
 	return config;

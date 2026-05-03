@@ -64,6 +64,8 @@ export interface ProjectConfig extends LocalConfig, APIProjectConfig {
 	includePattern: string | string[];
 	excludePattern?: string | string[];
 	timeout: number;
+	/** From vocoder.config.ts — synced to ProjectApp on every push */
+	appIndustry?: string;
 }
 
 export type { ExtractedString } from "@vocoder/extractor";
@@ -73,6 +75,8 @@ export interface TranslationStringEntry {
 	text: string;
 	context?: string;
 	formality?: "formal" | "informal" | "neutral" | "auto";
+	uiRole?: string;
+	featureArea?: string;
 }
 
 export interface TranslationBatchResponse {

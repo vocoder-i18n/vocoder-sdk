@@ -1,3 +1,28 @@
+/**
+ * Supported app industry classifications.
+ * Set once in vocoder.config.ts; synced to ProjectApp at extraction time.
+ * Cannot be edited from the dashboard — config file is the source of truth.
+ *
+ * Keep in sync with APP_INDUSTRIES in
+ * vocoder-app/lib/vocoder/translation/context-constants.ts.
+ */
+export type AppIndustry =
+	| "ecommerce"
+	| "saas"
+	| "healthcare"
+	| "fintech"
+	| "gaming"
+	| "education"
+	| "media"
+	| "productivity";
+
+/**
+ * Translation formality level.
+ * Can be set project-wide in vocoder.config.ts or overridden per-string
+ * via <T formality="formal"> (requires allowAiTranslations plan).
+ */
+export type Formality = "formal" | "informal" | "neutral";
+
 export interface VocoderConfig {
 	/** Glob patterns for files to extract strings from. */
 	include?: string[];
@@ -13,6 +38,19 @@ export interface VocoderConfig {
 	 * If set, `vocoder sync` writes {locale}.json files to this path.
 	 */
 	localesPath?: string;
+	/**
+	 * The industry or domain of this application.
+	 * Used to improve translation quality for domain-specific terminology
+	 * and to isolate cache entries by industry in the global translation cache.
+	 * Synced to ProjectApp at extraction time.
+	 */
+	appIndustry?: AppIndustry;
+	/**
+	 * Project-wide default formality level for translations.
+	 * Can be overridden per-string via <T formality="..."> on the AI plan.
+	 * Synced to ProjectApp at extraction time.
+	 */
+	formality?: Formality;
 }
 
 /** Type helper for vocoder.config.ts — provides autocomplete and type checking. */

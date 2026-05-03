@@ -8,6 +8,7 @@ import {
 	fetchTranslationsFromCDN,
 	loadEnvFile,
 	registerAndGetFingerprint,
+	triggerOnDemandSync,
 } from "./core";
 
 import { createUnplugin } from "unplugin";
@@ -53,6 +54,12 @@ export const unplugin = createUnplugin(
 
 		async function runInit(): Promise<InitResult> {
 			const verbose = options.verbose ?? false;
+			// True when running under a dev server (not a production build).
+			// Used to gate sync-on-startup: we only seed translations in dev mode
+			// so production builds are never delayed by a translation job.
+			const isDev =
+				process.env.NODE_ENV === "development" ||
+				process.env.VOCODER_DEV === "1";
 
 			// VOCODER_FINGERPRINT: manual escape hatch for unusual environments.
 			if (process.env.VOCODER_FINGERPRINT) {
@@ -143,6 +150,22 @@ export const unplugin = createUnplugin(
 
 			if (verbose) {
 				console.log(`[vocoder] Fetch: ${Date.now() - fetchStart}ms`);
+			}
+
+			// ── Sync-on-startup ──────────────────────────────────────────────────────────────────
+			// If we're in dev mode and fetched empty translations (no bundle exists
+			// yet for this fingerprint), trigger a sync now so the developer sees
+			// translated UI on first run rather than raw source strings.
+			const hasTranslations = d.config.sourceLocale !== "";
+			if (isDev && !hasTranslations && fp && sourceTexts.length > 0) {
+				const synced = await triggerOnDemandSync({
+					fingerprint: fp,
+					branch,
+					apiUrl,
+					apiKey,
+					cdnUrl,
+				});
+				if (synced) d = synced;
 			}
 
 			if (d.config.sourceLocale) {

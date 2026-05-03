@@ -4,6 +4,7 @@ import { join } from "node:path";
 import * as p from "@clack/prompts";
 import chalk from "chalk";
 import type { VocoderTranslationData } from "@vocoder/config";
+import { loadVocoderConfig } from "@vocoder/extractor";
 import type {
 	EffectiveSyncMode,
 	ExtractedString,
@@ -345,6 +346,8 @@ function buildStringEntries(
 				text: str.text,
 				...(str.context ? { context: str.context } : {}),
 				...(str.formality ? { formality: str.formality } : {}),
+				...(str.uiRole ? { uiRole: str.uiRole } : {}),
+				...(str.featureArea ? { featureArea: str.featureArea } : {}),
 			});
 			continue;
 		}
@@ -420,9 +423,7 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 	const spinner = p.spinner();
 
 	try {
-		spinner.start("Detecting branch");
 		const branch = detectBranch(options.branch);
-		spinner.stop(`Branch: ${chalk.cyan(branch)}`);
 
 		spinner.start("Loading project configuration");
 
@@ -442,15 +443,18 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 			fallbackTimeoutMs: 60_000,
 		});
 
+		const fileConfig = loadVocoderConfig(process.cwd());
 		const config: ProjectConfig = {
 			...localConfig,
 			...apiConfig,
 			includePattern: mergedConfig.includePattern,
 			excludePattern: mergedConfig.excludePattern,
 			timeout: waitTimeoutMs,
+			...(fileConfig?.appIndustry ? { appIndustry: fileConfig.appIndustry } : {}),
+			...(fileConfig?.formality ? { formality: fileConfig.formality } : {}),
 		};
 
-		spinner.stop("Project configuration loaded");
+		spinner.stop(`Branch: ${chalk.cyan(branch)}`);
 
 		if (!options.force && !isTargetBranch(branch, config.targetBranches)) {
 			p.log.warn(
@@ -559,13 +563,13 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 				requestedMaxWaitMs: waitTimeoutMs,
 				clientRunId: randomUUID(),
 				force: options.force,
+				// Sync appIndustry from vocoder.config.ts to ProjectApp on every push
+				...(config.appIndustry ? { appIndustry: config.appIndustry } : {}),
 			},
 			repoIdentity ? { ...repoIdentity, commitSha } : { commitSha },
 		);
 
-		spinner.stop(
-			`Submitted to API - Batch ${chalk.cyan(batchResponse.batchId)}`,
-		);
+		spinner.stop("Strings submitted");
 
 		const effectiveMode =
 			batchResponse.effectiveMode ??
@@ -576,6 +580,7 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 			});
 
 		if (options.verbose) {
+			p.log.info(`Batch: ${chalk.dim(batchResponse.batchId)}`);
 			p.log.info(`Requested mode: ${requestedMode}`);
 			p.log.info(`Effective mode: ${effectiveMode}`);
 			p.log.info(`Wait timeout: ${waitTimeoutMs}ms`);
@@ -585,29 +590,20 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 		}
 
 		if (batchResponse.status === "UP_TO_DATE" && batchResponse.noChanges) {
-			p.log.success("No changes detected - strings are up to date");
-		}
-
-		p.log.info(`New strings: ${chalk.cyan(batchResponse.newStrings)}`);
-
-		if (batchResponse.deletedStrings && batchResponse.deletedStrings > 0) {
-			p.log.info(
-				`Deleted strings: ${chalk.yellow(batchResponse.deletedStrings)} (archived)`,
-			);
-		}
-
-		p.log.info(`Total strings: ${chalk.cyan(batchResponse.totalStrings)}`);
-
-		if (batchResponse.newStrings === 0) {
-			p.log.success("No new strings - using existing translations");
+			p.log.success(`Up to date — ${chalk.cyan(batchResponse.totalStrings)} strings, no changes`);
+		} else if (batchResponse.newStrings === 0) {
+			const archivedNote =
+				batchResponse.deletedStrings && batchResponse.deletedStrings > 0
+					? `, ${chalk.yellow(batchResponse.deletedStrings)} archived`
+					: "";
+			p.log.success(`No new strings — ${chalk.cyan(batchResponse.totalStrings)} total${archivedNote}, using existing translations`);
 		} else {
-			p.log.info(
-				`Syncing to ${config.targetLocales.length} locales (${config.targetLocales.join(", ")})`,
-			);
-
-			if (batchResponse.estimatedTime) {
-				p.log.info(`Estimated time: ~${batchResponse.estimatedTime}s`);
+			const statParts = [`${chalk.cyan(batchResponse.newStrings)} new, ${chalk.cyan(batchResponse.totalStrings)} total`];
+			if (batchResponse.deletedStrings && batchResponse.deletedStrings > 0) {
+				statParts.push(`${chalk.yellow(batchResponse.deletedStrings)} archived`);
 			}
+			const estTime = batchResponse.estimatedTime ? ` (~${batchResponse.estimatedTime}s)` : "";
+			p.log.info(`${statParts.join(", ")} → syncing to ${config.targetLocales.join(", ")}${estTime}`);
 		}
 
 		let artifacts: TranslationArtifacts | null = null;
@@ -623,7 +619,8 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 			!artifacts &&
 			(effectiveMode === "required" || effectiveMode === "best-effort")
 		) {
-			spinner.start(`Waiting for translations (max ${waitTimeoutMs}ms)`);
+			const waitTimeoutSecs = Math.round(waitTimeoutMs / 1000);
+			spinner.start(`Waiting for translations (max ${waitTimeoutSecs}s)`);
 
 			let lastProgress = 0;
 			try {
