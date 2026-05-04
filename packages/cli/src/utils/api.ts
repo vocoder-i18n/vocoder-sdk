@@ -255,7 +255,7 @@ export class VocoderAPI {
 			requestedMaxWaitMs?: number;
 			clientRunId?: string;
 			force?: boolean;
-			/** From vocoder.config.ts — synced to ProjectApp on every push */
+			/** From vocoder.config.ts — synced to App on every push */
 			appIndustry?: string;
 		},
 		repoIdentity?: RepoIdentityPayload,
@@ -1131,10 +1131,10 @@ export class VocoderAPI {
 	}
 
 	/**
-	 * Add a new ProjectApp to an existing project (monorepo: new app directory).
+	 * Add a new App to an existing project (monorepo: new app directory).
 	 * Does not check plan limits — no new project is created.
 	 */
-	async createProjectApp(
+	async createApp(
 		userToken: string,
 		params: {
 			projectId: string;
@@ -1166,7 +1166,7 @@ export class VocoderAPI {
 			throw new VocoderAPIError({
 				message: extractErrorMessage(
 					payload,
-					`Failed to create project app (${response.status})`,
+					`Failed to create app (${response.status})`,
 				),
 				status: response.status,
 				payload,

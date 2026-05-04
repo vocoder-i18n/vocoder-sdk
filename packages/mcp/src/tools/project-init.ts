@@ -268,7 +268,7 @@ export async function runProjectCreate(
 			sourceLocale: input.sourceLocale,
 			targetLocales: input.targetLocales,
 			targetBranches: input.targetBranches,
-			appDirs: [],
+			appDirs: session.repoAppDir ? [session.repoAppDir] : [],
 			repoCanonical: session.repoCanonical,
 		});
 	} catch (err) {

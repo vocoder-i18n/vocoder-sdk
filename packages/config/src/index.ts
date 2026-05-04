@@ -1,6 +1,6 @@
 /**
  * Supported app industry classifications.
- * Set once in vocoder.config.ts; synced to ProjectApp at extraction time.
+ * Set once in vocoder.config.ts; synced to App at extraction time.
  * Cannot be edited from the dashboard — config file is the source of truth.
  *
  * Keep in sync with APP_INDUSTRIES in
@@ -42,13 +42,13 @@ export interface VocoderConfig {
 	 * The industry or domain of this application.
 	 * Used to improve translation quality for domain-specific terminology
 	 * and to isolate cache entries by industry in the global translation cache.
-	 * Synced to ProjectApp at extraction time.
+	 * Synced to App at extraction time.
 	 */
 	appIndustry?: AppIndustry;
 	/**
 	 * Project-wide default formality level for translations.
 	 * Can be overridden per-string via <T formality="..."> on the AI plan.
-	 * Synced to ProjectApp at extraction time.
+	 * Synced to App at extraction time.
 	 */
 	formality?: Formality;
 }

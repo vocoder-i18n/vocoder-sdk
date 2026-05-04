@@ -570,7 +570,7 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 				requestedMaxWaitMs: waitTimeoutMs,
 				clientRunId: randomUUID(),
 				force: options.force,
-				// Sync appIndustry from vocoder.config.ts to ProjectApp on every push
+				// Sync appIndustry from vocoder.config.ts to App on every push
 				...(config.appIndustry ? { appIndustry: config.appIndustry } : {}),
 			},
 			repoIdentity ? { ...repoIdentity, commitSha } : { commitSha },

@@ -30,11 +30,13 @@ export function writeVocoderConfig(options: {
 	targetBranches?: string[];
 	useTypeScript?: boolean;
 	cwd?: string;
+	appDir?: string;
 }): string | null {
 	const {
 		targetBranches = ["main"],
 		useTypeScript = true,
 		cwd = process.cwd(),
+		appDir,
 	} = options;
 
 	// Don't write if any config variant already exists
@@ -44,6 +46,13 @@ export function writeVocoderConfig(options: {
 	const configPath = join(cwd, `vocoder.config.${ext}`);
 	const branchesStr = targetBranches.map((b) => `'${b}'`).join(", ");
 
+	const defaultIncludes = ["**/*.{tsx,jsx,ts,js}"];
+	// Scope include patterns to the app subdirectory when running from a monorepo subdir
+	const includes = appDir
+		? defaultIncludes.map((p) => `${appDir}/${p}`)
+		: defaultIncludes;
+	const includesStr = includes.map((p) => `'${p}'`).join(", ");
+
 	// Both TS and JS use ESM import syntax — the content is identical.
 	// TypeScript users get type-checking from defineConfig; JS users get
 	// the same runtime behaviour with no TS toolchain required.
@@ -51,7 +60,7 @@ export function writeVocoderConfig(options: {
 
 export default defineConfig({
   targetBranches: [${branchesStr}],
-  include: ['**/*.{tsx,jsx,ts,js}'],
+  include: [${includesStr}],
   exclude: [
     '**/node_modules/**',
     '**/.next/**',

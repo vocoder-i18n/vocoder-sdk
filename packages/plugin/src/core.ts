@@ -145,7 +145,7 @@ export async function triggerOnDemandSync(params: {
 			body: JSON.stringify({
 				branch,
 				stringEntries,
-				targetLocales: [], // server resolves from ProjectApp config
+				targetLocales: [], // server resolves from App config
 				requestedMode: "best-effort",
 			}),
 			signal: AbortSignal.timeout(15_000),

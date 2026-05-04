@@ -64,7 +64,7 @@ export interface ProjectConfig extends LocalConfig, APIProjectConfig {
 	includePattern: string | string[];
 	excludePattern?: string | string[];
 	timeout: number;
-	/** From vocoder.config.ts — synced to ProjectApp on every push */
+	/** From vocoder.config.ts — synced to App on every push */
 	appIndustry?: string;
 }
 

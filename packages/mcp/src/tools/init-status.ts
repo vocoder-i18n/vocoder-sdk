@@ -66,7 +66,7 @@ export async function runInitStatus(
 			// Try silent key regeneration using stored CLI auth token
 			const stored = readAuthData();
 			if (stored) {
-				const apiUrl = stored.apiUrl;
+				const apiUrl = process.env.VOCODER_API_URL ?? "https://vocoder.app";
 				const api = new VocoderAPI({ apiUrl, apiKey: "" });
 				try {
 					await api.getCliUserInfo(stored.token); // validate token still good

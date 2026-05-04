@@ -15,6 +15,7 @@ export function getSetupSnippets(params: {
 	ecosystem: DetectedEcosystem;
 	sourceLocale: string;
 	targetBranches: string[];
+	appDir?: string;
 }): SetupSnippets {
 	const { framework, ecosystem, sourceLocale } = params;
 

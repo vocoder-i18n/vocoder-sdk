@@ -21,7 +21,7 @@ import {
 	selectGitHubInstallation,
 } from "../utils/github-connect.js";
 import {
-	runProjectAppCreate,
+	runAppCreate,
 	runProjectCreate,
 } from "../utils/project-create.js";
 
@@ -110,10 +110,11 @@ function printPlanLimitMessage(apiUrl: string, message: string): void {
 interface ScaffoldParams {
 	sourceLocale: string;
 	targetBranches: string[];
+	appDir?: string;
 }
 
 function runScaffold(params: ScaffoldParams): void {
-	const { sourceLocale, targetBranches } = params;
+	const { sourceLocale, targetBranches, appDir } = params;
 
 	const detection = detectLocalEcosystem();
 	const useTypeScript = detection.isTypeScript;
@@ -168,6 +169,7 @@ function runScaffold(params: ScaffoldParams): void {
 		ecosystem: detection.ecosystem,
 		sourceLocale,
 		targetBranches,
+		appDir,
 	});
 
 	const steps: Array<{ label: string; hint: string; code: string }> = [];
@@ -208,7 +210,7 @@ function runScaffold(params: ScaffoldParams): void {
 	}
 
 	// Write vocoder.config.{ts,js} if not already present
-	const written = writeVocoderConfig({ targetBranches, useTypeScript });
+	const written = writeVocoderConfig({ targetBranches, useTypeScript, appDir });
 	if (written) {
 		p.log.success(`Created ${chalk.cyan(written)}`);
 	} else if (!findExistingConfig(process.cwd())) {
@@ -1012,7 +1014,7 @@ export async function init(options: InitOptions = {}): Promise<number> {
 		} // closes if (authOrganizationId) else
 
 		// ── Add-app path: repo already has a project with scoped apps ───────────────
-		// Skip plan limit check — we're adding a ProjectApp to an existing project,
+		// Skip plan limit check — we're adding an App to an existing project,
 		// not creating a new one. Run the project config prompts then call
 		// POST /api/cli/project/apps.
 		if (repoProjectId && repoProjectName && existingAppsForRepo.length > 0) {
@@ -1023,7 +1025,7 @@ export async function init(options: InitOptions = {}): Promise<number> {
 						.join(", ")}`,
 			);
 
-			const appResult = await runProjectAppCreate({
+			const appResult = await runAppCreate({
 				api,
 				userToken,
 				projectId: repoProjectId,
@@ -1042,6 +1044,7 @@ export async function init(options: InitOptions = {}): Promise<number> {
 			runScaffold({
 				sourceLocale: appResult.sourceLocale,
 				targetBranches: appResult.targetBranches,
+				appDir: identity?.repoAppDir,
 			});
 			p.outro("You're all set.");
 			return 0;
@@ -1089,7 +1092,7 @@ export async function init(options: InitOptions = {}): Promise<number> {
 					return 1;
 				}
 
-				// connect: list projects in this workspace, pick one, create ProjectApp binding
+				// connect: list projects in this workspace, pick one, create App binding
 				const existingProjects = await api.listProjects(
 					userToken,
 					selectedWorkspaceId,
@@ -1114,7 +1117,7 @@ export async function init(options: InitOptions = {}): Promise<number> {
 
 				const chosen = existingProjects.find((proj) => proj.id === chosenId)!;
 
-				const appResult = await runProjectAppCreate({
+				const appResult = await runAppCreate({
 					api,
 					userToken,
 					projectId: chosen.id,
@@ -1133,6 +1136,7 @@ export async function init(options: InitOptions = {}): Promise<number> {
 				runScaffold({
 					sourceLocale: appResult.sourceLocale,
 					targetBranches: appResult.targetBranches,
+					appDir: identity?.repoAppDir,
 				});
 				p.outro("You're all set.");
 				return 0;
@@ -1178,6 +1182,7 @@ export async function init(options: InitOptions = {}): Promise<number> {
 		runScaffold({
 			sourceLocale: projectResult.sourceLocale,
 			targetBranches: projectResult.targetBranches,
+			appDir: identity?.repoAppDir,
 		});
 
 		printApiKey(projectResult.apiKey);

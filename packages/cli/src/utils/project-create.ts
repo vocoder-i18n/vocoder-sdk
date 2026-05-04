@@ -35,7 +35,7 @@ export interface ProjectCreateParams {
 	defaultAppDir?: string;
 }
 
-export interface ProjectAppCreateParams {
+export interface AppCreateParams {
 	api: VocoderAPI;
 	userToken: string;
 	projectId: string;
@@ -47,7 +47,7 @@ export interface ProjectAppCreateParams {
 	existingApps: ExistingApp[];
 }
 
-export interface ProjectAppCreateResult {
+export interface AppCreateResult {
 	projectId: string;
 	projectName: string;
 	apiKey: string;
@@ -133,26 +133,9 @@ export async function runProjectCreate(
 	const languageOptions = buildLanguageOptions(sourceLocales);
 
 	// ── Scope path (monorepo) ───────────────────────────────────────────────────
-	let appDir: string;
-	if (params.defaultAppDir) {
-		// Auto-detected from CWD — confirm silently, same pattern as project name.
-		appDir = params.defaultAppDir;
+	const appDir = params.defaultAppDir ?? "";
+	if (appDir) {
 		p.log.success(`App directory: ${chalk.bold(appDir)}`);
-	} else {
-		const rawScope = await p.text({
-			message: "App directory (leave blank for the entire repo)",
-			placeholder: "e.g. apps/web, packages/frontend",
-			initialValue: "",
-			validate(value) {
-				const v = value.trim();
-				if (!v) return;
-				if (v.startsWith("/"))
-					return "Use a relative path, not an absolute path";
-				if (v.includes("..")) return 'Path must not contain ".."';
-			},
-		});
-		if (p.isCancel(rawScope)) return null;
-		appDir = ((rawScope as string | undefined) ?? "").trim();
 	}
 
 	// ── Source locale ───────────────────────────────────────────────────────────
@@ -251,13 +234,13 @@ export async function runProjectCreate(
 }
 
 /**
- * Configure and create a new ProjectApp under an existing project.
+ * Configure and create a new App under an existing project.
  * Used when the repo already has a project (monorepo: adding a new app directory).
- * No plan limit check runs — only a new ProjectApp is created, not a new Project.
+ * No plan limit check runs — only a new App is created, not a new Project.
  */
-export async function runProjectAppCreate(
-	params: ProjectAppCreateParams,
-): Promise<ProjectAppCreateResult | null> {
+export async function runAppCreate(
+	params: AppCreateParams,
+): Promise<AppCreateResult | null> {
 	const { api, userToken, projectId, projectName, repoCanonical } = params;
 	const existingScopes = new Set(params.existingApps.map((a) => a.appDir));
 
@@ -275,41 +258,13 @@ export async function runProjectAppCreate(
 	const languageOptions = buildLanguageOptions(sourceLocales);
 
 	// ── App directory ───────────────────────────────────────────────────────────
-	let appDir: string;
-	if (params.defaultAppDir && !existingScopes.has(params.defaultAppDir)) {
-		// Auto-detected scope is new — confirm silently.
-		appDir = params.defaultAppDir;
+	const appDir = params.defaultAppDir ?? "";
+	if (existingScopes.has(appDir)) {
+		p.log.error(`App directory "${appDir}" is already configured for this project.`);
+		return null;
+	}
+	if (appDir) {
 		p.log.success(`App directory: ${chalk.bold(appDir)}`);
-	} else {
-		// Show existing apps so the user knows what's already configured.
-		if (params.existingApps.length > 0) {
-			const configuredList = params.existingApps
-				.map((a) => chalk.dim(a.appDir || "(entire repo)"))
-				.join(", ");
-			p.log.info(`Already configured: ${configuredList}`);
-		}
-
-		const hasWholeRepoApp = existingScopes.has("");
-
-		const rawScope = await p.text({
-			message: "App directory for this new app",
-			placeholder: "e.g. apps/backend",
-			initialValue: params.defaultAppDir ?? "",
-			validate(value) {
-				const v = value.trim();
-				if (!v && hasWholeRepoApp)
-					return "This project already covers the entire repo.";
-				if (!v)
-					return "App directory is required when other apps already exist.";
-				if (v.startsWith("/"))
-					return "Use a relative path, not an absolute path.";
-				if (v.includes("..")) return 'Path must not contain "..".';
-				if (existingScopes.has(v))
-					return `"${v}" is already configured. Choose a different directory.`;
-			},
-		});
-		if (p.isCancel(rawScope)) return null;
-		appDir = ((rawScope as string | undefined) ?? "").trim();
 	}
 
 	// ── Source locale ───────────────────────────────────────────────────────────
@@ -371,9 +326,9 @@ export async function runProjectAppCreate(
 
 	const targetBranches = appPushBranches;
 
-	// ── Create the ProjectApp ───────────────────────────────────────────────────
+	// ── Create the App ─────────────────────────────────────────────────────────
 	try {
-		const result = await api.createProjectApp(userToken, {
+		const result = await api.createApp(userToken, {
 			projectId,
 			appDir,
 			sourceLocale,
