@@ -395,8 +395,9 @@ async function runAuthFlow(
 					return null;
 				}
 				if (!shouldOpen) {
-					p.note(browserUrl, "Sign In");
-					p.log.info("Open the URL above manually in your browser to continue.");
+					server?.close();
+					p.cancel("Setup cancelled.");
+					return null;
 				} else {
 					const opened = await tryOpenBrowser(browserUrl);
 					if (!opened) {
