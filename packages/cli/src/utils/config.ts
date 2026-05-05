@@ -20,14 +20,9 @@ export function validateLocalConfig(config: LocalConfig): void {
 		throw new Error("VOCODER_API_KEY is required. Set it in your .env file.");
 	}
 
-	if (!config.apiKey.startsWith("vcp_")) {
-		if (config.apiKey.startsWith("vco_") || config.apiKey.startsWith("vcu_")) {
-			throw new Error(
-				"VOCODER_API_KEY must be a project-scoped key (starts with vcp_). Got an org or user key.",
-			);
-		}
+	if (!config.apiKey.startsWith("vca_")) {
 		throw new Error(
-			"Invalid API key format. Expected a project API key starting with vcp_.",
+			"Invalid API key format. Expected an app API key starting with vca_.",
 		);
 	}
 

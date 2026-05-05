@@ -26,7 +26,7 @@ describe("VocoderAPI.addLocale", () => {
 		});
 		globalThis.fetch = mockFetch as typeof globalThis.fetch;
 
-		const api = new VocoderAPI({ apiKey: "vcp_test", apiUrl: "https://vocoder.app" });
+		const api = new VocoderAPI({ apiKey: "vca_test", apiUrl: "https://vocoder.app" });
 		const result = await api.addLocale("de");
 
 		expect(result.targetLocales).toEqual(["fr", "de"]);
@@ -56,7 +56,7 @@ describe("VocoderAPI.addLocale", () => {
 			text: async () => JSON.stringify(payload),
 		}) as typeof globalThis.fetch;
 
-		const api = new VocoderAPI({ apiKey: "vcp_test", apiUrl: "https://vocoder.app" });
+		const api = new VocoderAPI({ apiKey: "vca_test", apiUrl: "https://vocoder.app" });
 
 		await expect(api.addLocale("pt-BR")).rejects.toMatchObject({
 			limitError: expect.objectContaining({ limitType: "target_locales" }),
@@ -74,7 +74,7 @@ describe("VocoderAPI.removeLocale", () => {
 		});
 		globalThis.fetch = mockFetch as typeof globalThis.fetch;
 
-		const api = new VocoderAPI({ apiKey: "vcp_test", apiUrl: "https://vocoder.app" });
+		const api = new VocoderAPI({ apiKey: "vca_test", apiUrl: "https://vocoder.app" });
 		const result = await api.removeLocale("de");
 
 		expect(result.targetLocales).toEqual(["fr"]);
@@ -93,7 +93,7 @@ describe("VocoderAPI.removeLocale", () => {
 			text: async () => JSON.stringify({ targetLocales: ["fr"] }),
 		}) as typeof globalThis.fetch;
 
-		const api = new VocoderAPI({ apiKey: "vcp_test", apiUrl: "https://vocoder.app" });
+		const api = new VocoderAPI({ apiKey: "vca_test", apiUrl: "https://vocoder.app" });
 		// "de" was never in the list — backend returns current list unchanged
 		const result = await api.removeLocale("de");
 		expect(result.targetLocales).toEqual(["fr"]);
@@ -104,7 +104,7 @@ describe("VocoderAPI.removeLocale", () => {
 
 describe("addLocales command", () => {
 	beforeEach(() => {
-		process.env.VOCODER_API_KEY = "vcp_test";
+		process.env.VOCODER_API_KEY = "vca_test";
 	});
 
 	it("returns 0 and calls addLocale once per locale", async () => {
@@ -153,7 +153,7 @@ describe("addLocales command", () => {
 
 describe("removeLocales command", () => {
 	beforeEach(() => {
-		process.env.VOCODER_API_KEY = "vcp_test";
+		process.env.VOCODER_API_KEY = "vca_test";
 	});
 
 	it("returns 0 and calls removeLocale once per locale", async () => {
@@ -184,7 +184,7 @@ describe("removeLocales command", () => {
 
 describe("listProjectLocales command", () => {
 	beforeEach(() => {
-		process.env.VOCODER_API_KEY = "vcp_test";
+		process.env.VOCODER_API_KEY = "vca_test";
 	});
 
 	it("returns 0 when project config loads successfully", async () => {
@@ -223,7 +223,7 @@ describe("listProjectLocales command", () => {
 
 describe("getTranslations command", () => {
 	beforeEach(() => {
-		process.env.VOCODER_API_KEY = "vcp_test";
+		process.env.VOCODER_API_KEY = "vca_test";
 	});
 
 	it("writes one file per locale when --output is set", async () => {
