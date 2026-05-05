@@ -1059,16 +1059,15 @@ export async function init(options: InitOptions = {}): Promise<number> {
 					`Project limit reached — ${ws.projectCount}/${ws.maxProjects} on your ${chalk.bold(ws.planId)} plan.`,
 				);
 
-				// If we're in a known repo, offer to connect an existing project to it.
-				// This handles the case where the project exists but the repo binding
-				// is missing (e.g. was lost in a migration or never created).
-				const hasRepoContext = !!identity?.repoCanonical;
-
+				// "Connect" only makes sense when this repo already has a project
+				// (found by the repo lookup above). Showing all workspace projects
+				// would let users bind this repo to an unrelated project — invalid
+				// given the 1:1 project↔repo coupling.
 				const options: Array<{ value: string; label: string }> = [];
-				if (hasRepoContext) {
+				if (repoProjectId) {
 					options.push({
 						value: "connect",
-						label: "Connect this repo to an existing project",
+						label: `Reconnect this repo to ${chalk.bold(repoProjectName ?? "existing project")}`,
 					});
 				}
 				options.push({ value: "upgrade", label: "Upgrade plan" });
@@ -1092,52 +1091,42 @@ export async function init(options: InitOptions = {}): Promise<number> {
 					return 1;
 				}
 
-				// connect: list projects in this workspace, pick one, create App binding
+				// connect: fetch existing project config and create App binding without
+				// prompting — the project already owns sourceLocale/targetBranches.
 				const existingProjects = await api.listProjects(
 					userToken,
 					selectedWorkspaceId,
 				);
-				if (existingProjects.length === 0) {
-					p.log.error("No projects found in this workspace.");
+				const chosenProject = existingProjects.find(
+					(proj) => proj.id === repoProjectId,
+				);
+				if (!chosenProject) {
+					p.log.error("Could not find the project. Try again.");
 					return 1;
 				}
 
-				const chosenId = await p.select<string>({
-					message: "Which project should this repo be connected to?",
-					options: existingProjects.map((proj) => ({
-						value: proj.id,
-						label: proj.name,
-					})),
-				});
-
-				if (p.isCancel(chosenId)) {
-					p.cancel("Setup cancelled.");
+				try {
+					const appResult = await api.createApp(userToken, {
+						projectId: chosenProject.id,
+						appDir: identity?.repoAppDir ?? "",
+						sourceLocale: chosenProject.sourceLocale,
+						targetLocales: chosenProject.targetLocales,
+						targetBranches: chosenProject.targetBranches,
+						repoCanonical: identity?.repoCanonical ?? "",
+					});
+					p.log.success(`Connected to project: ${chalk.bold(chosenProject.name)}`);
+					printApiKey(appResult.apiKey);
+					runScaffold({
+						sourceLocale: chosenProject.sourceLocale,
+						targetBranches: chosenProject.targetBranches,
+						appDir: identity?.repoAppDir,
+					});
+				} catch (err) {
+					const msg = err instanceof Error ? err.message : String(err);
+					p.log.error(`Failed to create app binding: ${msg}`);
 					return 1;
 				}
 
-				const chosen = existingProjects.find((proj) => proj.id === chosenId)!;
-
-				const appResult = await runAppCreate({
-					api,
-					userToken,
-					projectId: chosen.id,
-					projectName: chosen.name,
-					organizationName: selectedWorkspaceName,
-					repoCanonical: identity?.repoCanonical,
-					defaultAppDir: identity?.repoAppDir,
-					existingApps: [],
-				});
-
-				if (!appResult) {
-					p.log.error("Setup failed. Run `vocoder init` again.");
-					return 1;
-				}
-
-				runScaffold({
-					sourceLocale: appResult.sourceLocale,
-					targetBranches: appResult.targetBranches,
-					appDir: identity?.repoAppDir,
-				});
 				p.outro("You're all set.");
 				return 0;
 			}
