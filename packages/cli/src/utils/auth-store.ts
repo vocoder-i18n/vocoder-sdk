@@ -12,7 +12,7 @@ export interface AuthData {
 }
 
 function getAuthFilePath(): string {
-	return join(homedir(), ".config", "vocoder", "auth.json");
+	return join(homedir(), ".vocoder", "auth.json");
 }
 
 export function readAuthData(): AuthData | null {

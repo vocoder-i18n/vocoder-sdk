@@ -100,13 +100,13 @@ When running `vocoder init` from a subdirectory of a git repository, the CLI aut
 
 **Stored credentials:**
 
-After first sign-in, the CLI stores credentials at `~/.config/vocoder/auth.json` (mode `0600`). Tokens do not expire. Use `vocoder logout` to revoke.
+After first sign-in, the CLI stores credentials at `~/.vocoder/auth.json` (mode `0600`). Tokens do not expire. Use `vocoder logout` to revoke.
 
 **Token resolution:**
 
 | Command | Source |
 |---|---|
-| `vocoder init` | `VOCODER_AUTH_TOKEN` env var → `~/.config/vocoder/auth.json` |
+| `vocoder init` | `VOCODER_AUTH_TOKEN` env var → `~/.vocoder/auth.json` |
 | `vocoder sync` | `VOCODER_API_KEY` env var → `.env` file |
 | MCP tools | `VOCODER_API_KEY` env var |
 
@@ -274,7 +274,7 @@ Git repository is auto-detected from the current directory's git remote. Use `--
 
 ### `vocoder logout`
 
-Revoke the stored credentials and clear `~/.config/vocoder/auth.json`.
+Revoke the stored credentials and clear `~/.vocoder/auth.json`.
 
 ```bash
 vocoder logout
