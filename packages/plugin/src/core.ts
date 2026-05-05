@@ -187,7 +187,7 @@ export async function triggerOnDemandSync(params: {
 
 			if (!statusRes?.ok) continue;
 
-			const statusData = (await statusRes.json()) as { status: string; progress?: number };
+			const statusData = (await statusRes.json()) as { status: string; progress?: number; errorMessage?: string };
 
 			if (statusData.progress !== undefined) {
 				const pct = Math.round(statusData.progress * 100);
@@ -211,7 +211,8 @@ export async function triggerOnDemandSync(params: {
 
 			if (statusData.status === "FAILED") {
 				process.stdout.write("\n");
-				console.warn("[vocoder] Translation batch failed — continuing without translations");
+				const reason = statusData.errorMessage ? `: ${statusData.errorMessage}` : "";
+				console.warn(`[vocoder] Translation batch failed${reason} — continuing without translations`);
 				return null;
 			}
 		}
