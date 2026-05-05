@@ -30,13 +30,11 @@ export function writeVocoderConfig(options: {
 	targetBranches?: string[];
 	useTypeScript?: boolean;
 	cwd?: string;
-	appDir?: string;
 }): string | null {
 	const {
 		targetBranches = ["main"],
 		useTypeScript = true,
 		cwd = process.cwd(),
-		appDir,
 	} = options;
 
 	// Don't write if any config variant already exists
@@ -46,11 +44,11 @@ export function writeVocoderConfig(options: {
 	const configPath = join(cwd, `vocoder.config.${ext}`);
 	const branchesStr = targetBranches.map((b) => `'${b}'`).join(", ");
 
-	const defaultIncludes = ["**/*.{tsx,jsx,ts,js}"];
-	// Scope include patterns to the app subdirectory when running from a monorepo subdir
-	const includes = appDir
-		? defaultIncludes.map((p) => `${appDir}/${p}`)
-		: defaultIncludes;
+	// Patterns are always relative to the config file's own directory.
+	// In a monorepo, the config lives in the app subdirectory, so `**` naturally
+	// scopes to that app — no `appDir/` prefix needed (and adding it would break
+	// extraction when the CLI or build plugin runs with the app dir as cwd).
+	const includes = ["**/*.{tsx,jsx,ts,js}"];
 	const includesStr = includes.map((p) => `'${p}'`).join(", ");
 
 	// Both TS and JS use ESM import syntax — the content is identical.
@@ -61,14 +59,6 @@ export function writeVocoderConfig(options: {
 export default defineConfig({
   targetBranches: [${branchesStr}],
   include: [${includesStr}],
-  exclude: [
-    '**/node_modules/**',
-    '**/.next/**',
-    '**/dist/**',
-    '**/build/**',
-    '**/*.test.*',
-    '**/*.spec.*',
-  ],
 })
 `;
 

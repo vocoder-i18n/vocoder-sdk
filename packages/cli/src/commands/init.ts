@@ -210,7 +210,7 @@ function runScaffold(params: ScaffoldParams): void {
 	}
 
 	// Write vocoder.config.{ts,js} if not already present
-	const written = writeVocoderConfig({ targetBranches, useTypeScript, appDir });
+	const written = writeVocoderConfig({ targetBranches, useTypeScript });
 	if (written) {
 		p.log.success(`Created ${chalk.cyan(written)}`);
 	} else if (!findExistingConfig(process.cwd())) {
