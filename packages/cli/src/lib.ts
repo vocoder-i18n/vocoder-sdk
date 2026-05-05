@@ -1,5 +1,5 @@
 export type {
-	APIProjectConfig,
+	APIAppConfig,
 	ExtractedString,
 	LimitErrorResponse,
 	LocaleInfo,

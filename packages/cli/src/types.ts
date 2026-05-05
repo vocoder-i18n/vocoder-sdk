@@ -31,7 +31,7 @@ export interface InitOptions {
 	apiUrl?: string;
 	yes?: boolean;
 	ci?: boolean;
-	projectName?: string;
+	appName?: string;
 	sourceLocale?: string;
 	targetLocales?: string;
 }
@@ -48,7 +48,7 @@ export interface LocalConfig {
 	apiUrl: string;
 }
 
-export interface APIProjectConfig {
+export interface APIAppConfig {
 	projectName: string;
 	organizationName: string;
 	shortCode: string;
@@ -60,7 +60,7 @@ export interface APIProjectConfig {
 }
 
 // Combined configuration used by CLI
-export interface ProjectConfig extends LocalConfig, APIProjectConfig {
+export interface ProjectConfig extends LocalConfig, APIAppConfig {
 	includePattern: string | string[];
 	excludePattern?: string | string[];
 	timeout: number;

@@ -37,7 +37,7 @@ describe("VocoderAPI limit errors", () => {
 		});
 
 		try {
-			await api.getProjectConfig();
+			await api.getAppConfig();
 			throw new Error("Expected VocoderAPIError");
 		} catch (error) {
 			expect(error).toBeInstanceOf(VocoderAPIError);

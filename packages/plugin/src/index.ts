@@ -7,7 +7,6 @@ import {
 	fetchTranslations,
 	fetchTranslationsFromCDN,
 	loadEnvFile,
-	registerAndGetFingerprint,
 	triggerOnDemandSync,
 } from "./core";
 
@@ -72,13 +71,13 @@ export const unplugin = createUnplugin(
 			}
 
 			const apiKey = process.env.VOCODER_API_KEY ?? "";
-			const shortCode = apiKey.startsWith("vcp_")
+			const shortCode = apiKey.startsWith("vca_")
 				? apiKey.slice(4, 14)
 				: null;
 
 			if (!shortCode) {
 				console.warn(
-					"[vocoder] VOCODER_API_KEY missing or not a project key (vcp_...). Translations not loaded.",
+					"[vocoder] VOCODER_API_KEY missing or not an app key (vca_...). Translations not loaded.",
 				);
 				return {
 					fingerprint: "",
@@ -102,26 +101,11 @@ export const unplugin = createUnplugin(
 				);
 			}
 
-			// Ask the server for the canonical fingerprint — it is the oracle.
-			// Falls back to local computation if the API is unreachable (offline builds).
+			// Compute fingerprint fully offline — appShortCode is embedded in the vca_ key.
+			// No network call needed; formula matches server computeBranchFingerprint().
 			const branch = detectBranch();
-			const commitSha = detectCommitSha();
-			let fp = await registerAndGetFingerprint({
-				strings: sourceTexts,
-				branch,
-				commitSha,
-				apiUrl,
-				apiKey,
-			});
-
-			if (fp) {
-				console.log(`[vocoder] ${sourceTexts.length} string(s) → fingerprint ${fp}`);
-			} else {
-				fp = computeFingerprint(shortCode, sourceTexts);
-				console.log(
-					`[vocoder] ${sourceTexts.length} string(s) → fingerprint ${fp} (offline fallback)`,
-				);
-			}
+			const fp = computeFingerprint(shortCode, sourceTexts);
+			console.log(`[vocoder] ${sourceTexts.length} string(s) → fingerprint ${fp}`);
 
 			if (verbose) {
 				console.log(`[vocoder] Fetching: ${apiUrl}/api/t/${fp}`);

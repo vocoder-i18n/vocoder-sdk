@@ -72,7 +72,7 @@ export async function runInitStatus(
 					await api.getCliUserInfo(stored.token); // validate token still good
 					const identity = detectRepoIdentity();
 					if (identity) {
-						const lookup = await api.lookupProjectByRepo({
+						const lookup = await api.lookupAppByRepo({
 							repoCanonical: identity.repoCanonical,
 							appDir: identity.appDir,
 						});

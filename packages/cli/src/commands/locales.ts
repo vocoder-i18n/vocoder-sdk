@@ -1,5 +1,6 @@
 import * as p from "@clack/prompts";
 import chalk from "chalk";
+import { active, highlight } from "../utils/theme.js";
 import { config as loadEnv } from "dotenv";
 import { VocoderAPI, VocoderAPIError } from "../utils/api.js";
 import { getLimitErrorGuidance } from "./sync.js";
@@ -42,17 +43,17 @@ export async function listProjectLocales(options: LocaleCommandOptions = {}): Pr
 	const api = new VocoderAPI(config);
 
 	try {
-		const projectConfig = await api.getProjectConfig();
+		const projectConfig = await api.getAppConfig();
 
 		p.log.info(
-			`Source locale:  ${chalk.cyan(projectConfig.sourceLocale)}`,
+			`Source locale:  ${highlight(projectConfig.sourceLocale)}`,
 		);
 
 		if (projectConfig.targetLocales.length === 0) {
 			p.log.info("Target locales: (none configured)");
 		} else {
 			p.log.info(
-				`Target locales: ${projectConfig.targetLocales.map((l) => chalk.cyan(l)).join(", ")}`,
+				`Target locales: ${projectConfig.targetLocales.map((l) => highlight(l)).join(", ")}`,
 			);
 		}
 
@@ -99,7 +100,7 @@ export async function addLocales(
 		try {
 			const result = await api.addLocale(locale);
 			lastTargetLocales = result.targetLocales;
-			spinner.stop(`Added ${chalk.cyan(locale)}`);
+			spinner.stop(`Added ${highlight(locale)}`);
 		} catch (error) {
 			spinner.stop(`Failed to add ${chalk.red(locale)}`);
 			hadError = true;
@@ -122,7 +123,7 @@ export async function addLocales(
 
 	if (lastTargetLocales.length > 0) {
 		p.log.info(
-			`Target locales now: ${lastTargetLocales.map((l) => chalk.cyan(l)).join(", ")}`,
+			`Target locales now: ${lastTargetLocales.map((l) => highlight(l)).join(", ")}`,
 		);
 	}
 
@@ -161,7 +162,7 @@ export async function removeLocales(
 		try {
 			const result = await api.removeLocale(locale);
 			lastTargetLocales = result.targetLocales;
-			spinner.stop(`Removed ${chalk.cyan(locale)}`);
+			spinner.stop(`Removed ${highlight(locale)}`);
 		} catch (error) {
 			spinner.stop(`Failed to remove ${chalk.red(locale)}`);
 			hadError = true;
@@ -173,7 +174,7 @@ export async function removeLocales(
 
 	if (lastTargetLocales.length > 0) {
 		p.log.info(
-			`Target locales now: ${lastTargetLocales.map((l) => chalk.cyan(l)).join(", ")}`,
+			`Target locales now: ${lastTargetLocales.map((l) => highlight(l)).join(", ")}`,
 		);
 	} else if (!hadError) {
 		p.log.info("Target locales now: (none configured)");
@@ -219,6 +220,6 @@ function printLocaleTable(
 			locale.nativeName && locale.nativeName !== locale.name
 				? ` (${locale.nativeName})`
 				: "";
-		p.log.info(`  ${chalk.cyan(locale.code.padEnd(10))} ${locale.name}${native}`);
+		p.log.info(`  ${highlight(locale.code.padEnd(10))} ${locale.name}${native}`);
 	}
 }

@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as p from "@clack/prompts";
 import chalk from "chalk";
+import { active, highlight } from "../utils/theme.js";
 import { config as loadEnv } from "dotenv";
 import { VocoderAPI } from "../utils/api.js";
 import { detectBranch } from "../utils/branch.js";
@@ -63,11 +64,11 @@ export async function getTranslations(options: TranslationsOptions = {}): Promis
 	}
 
 	const spinner = p.spinner();
-	spinner.start(`Fetching translations for ${chalk.cyan(branch)}…`);
+	spinner.start(`Fetching translations for ${highlight(branch)}…`);
 
 	try {
 		// Fetch the project config to resolve which target locales to request
-		const projectConfig = await api.getProjectConfig();
+		const projectConfig = await api.getAppConfig();
 		const targetLocales = options.locale
 			? [options.locale]
 			: projectConfig.targetLocales;
@@ -79,7 +80,7 @@ export async function getTranslations(options: TranslationsOptions = {}): Promis
 		}
 
 		const snapshot = await api.getTranslationSnapshot({ branch, targetLocales });
-		spinner.stop(`Fetched translations for ${chalk.cyan(branch)}`);
+		spinner.stop(`Fetched translations for ${highlight(branch)}`);
 
 		if (snapshot.status === "NOT_FOUND") {
 			p.log.warn(
@@ -123,6 +124,6 @@ function writeLocaleFiles(
 	for (const [locale, strings] of Object.entries(translations)) {
 		const filePath = join(outputDir, `${locale}.json`);
 		writeFileSync(filePath, JSON.stringify(strings, null, 2) + "\n", "utf-8");
-		p.log.success(`Wrote ${chalk.cyan(filePath)}`);
+		p.log.success(`Wrote ${highlight(filePath)}`);
 	}
 }

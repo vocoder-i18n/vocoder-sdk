@@ -1,5 +1,5 @@
 import type {
-	APIProjectConfig,
+	APIAppConfig,
 	InitStartResponse,
 	InitStatusResponse,
 	LimitErrorResponse,
@@ -171,7 +171,7 @@ export class VocoderAPI {
 	 * Fetch project configuration from API
 	 * Project is determined from the API key
 	 */
-	async getProjectConfig(): Promise<APIProjectConfig> {
+	async getAppConfig(): Promise<APIAppConfig> {
 		const data = await this.request<{
 			projectName: string;
 			organizationName: string;
@@ -646,7 +646,7 @@ export class VocoderAPI {
 		};
 	}
 
-	async listProjects(
+	async listApps(
 		userToken: string,
 		organizationId: string,
 	): Promise<
@@ -1071,7 +1071,7 @@ export class VocoderAPI {
 	 * existing apps in other scopes, and whether a whole-repo app exists.
 	 * No auth required.
 	 */
-	async lookupProjectByRepo(params: {
+	async lookupAppByRepo(params: {
 		repoCanonical: string;
 		appDir: string;
 	}): Promise<{

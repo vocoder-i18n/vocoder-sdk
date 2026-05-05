@@ -1,26 +1,27 @@
 import * as p from "@clack/prompts";
 import chalk from "chalk";
+import { active, highlight } from "../utils/theme.js";
 import { config as loadEnv } from "dotenv";
 import { VocoderAPI } from "../utils/api.js";
 
 loadEnv();
 
-export interface ProjectConfigOptions {
+export interface AppConfigOptions {
 	apiUrl?: string;
 }
 
 /**
- * Displays the current Vocoder project configuration.
+ * Displays the current Vocoder app configuration.
  *
  * Shows: project name, organization, source locale, target locales,
  * target branches, primary branch, and sync policy settings.
  *
- * Reads the project API key from VOCODER_API_KEY.
+ * Reads the app API key from VOCODER_API_KEY.
  * Endpoint: GET /api/cli/config
  *
  * @throws If VOCODER_API_KEY is missing or invalid.
  */
-export async function projectConfig(options: ProjectConfigOptions = {}): Promise<number> {
+export async function appConfig(options: AppConfigOptions = {}): Promise<number> {
 	const apiKey = process.env.VOCODER_API_KEY;
 	if (!apiKey) {
 		p.log.error(
@@ -33,29 +34,29 @@ export async function projectConfig(options: ProjectConfigOptions = {}): Promise
 	const api = new VocoderAPI({ apiKey, apiUrl });
 
 	try {
-		const config = await api.getProjectConfig();
+		const config = await api.getAppConfig();
 
 		const lines = [
-			`Project:         ${chalk.bold(config.projectName)}`,
+			`App:             ${chalk.bold(config.projectName)}`,
 			`Organization:    ${config.organizationName}`,
-			`Source locale:   ${chalk.cyan(config.sourceLocale)}`,
+			`Source locale:   ${highlight(config.sourceLocale)}`,
 			`Target locales:  ${
 				config.targetLocales.length > 0
-					? config.targetLocales.map((l) => chalk.cyan(l)).join(", ")
+					? config.targetLocales.map((l) => highlight(l)).join(", ")
 					: chalk.dim("(none)")
 			}`,
-			`Target branches: ${config.targetBranches.map((b) => chalk.cyan(b)).join(", ")}`,
+			`Target branches: ${config.targetBranches.map((b) => highlight(b)).join(", ")}`,
 			...(config.primaryBranch
-				? [`Primary branch:  ${chalk.cyan(config.primaryBranch)}`]
+				? [`Primary branch:  ${highlight(config.primaryBranch)}`]
 				: []),
 			`Sync policy:`,
-			`  Blocking branches: ${config.syncPolicy.blockingBranches.map((b) => chalk.cyan(b)).join(", ")}`,
-			`  Blocking mode:     ${chalk.cyan(config.syncPolicy.blockingMode)}`,
-			`  Non-blocking mode: ${chalk.cyan(config.syncPolicy.nonBlockingMode)}`,
-			`  Max wait:          ${chalk.cyan(String(config.syncPolicy.defaultMaxWaitMs))} ms`,
+			`  Blocking branches: ${config.syncPolicy.blockingBranches.map((b) => highlight(b)).join(", ")}`,
+			`  Blocking mode:     ${highlight(config.syncPolicy.blockingMode)}`,
+			`  Non-blocking mode: ${highlight(config.syncPolicy.nonBlockingMode)}`,
+			`  Max wait:          ${highlight(String(config.syncPolicy.defaultMaxWaitMs))} ms`,
 		];
 
-		p.note(lines.join("\n"), `${config.projectName} — project config`);
+		p.note(lines.join("\n"), `${config.projectName} — app config`);
 		return 0;
 	} catch (error) {
 		p.log.error(

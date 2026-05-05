@@ -9,10 +9,10 @@ import {
 	removeLocales,
 } from "./commands/locales.js";
 import { logout } from "./commands/logout.js";
-import { projectConfig } from "./commands/project-config.js";
+import { appConfig } from "./commands/app-config.js";
 import { sync } from "./commands/sync.js";
 import { getTranslations } from "./commands/translations.js";
-import { createProject } from "./commands/create-project.js";
+import { createApp } from "./commands/create-app.js";
 import { whoami } from "./commands/whoami.js";
 
 /**
@@ -48,7 +48,7 @@ program
 		"--ci",
 		"Non-interactive mode: print auth URL to stdout, skip browser open",
 	)
-	.option("--project-name <name>", "Starter project name to create")
+	.option("--app-name <name>", "Starter app name to create")
 	.option("--source-locale <locale>", "Source locale for the starter project")
 	.option(
 		"--target-locales <list>",
@@ -119,9 +119,9 @@ localesCmd
 
 program
 	.command("project")
-	.description("Show current project configuration")
+	.description("Show current app configuration")
 	.option("--api-url <url>", "Override Vocoder API URL")
-	.action((options) => runCommand(projectConfig, options));
+	.action((options) => runCommand(appConfig, options));
 
 program
 	.command("translations")
@@ -133,9 +133,9 @@ program
 	.action((options) => runCommand(getTranslations, options));
 
 program
-	.command("create-project")
-	.description("Create a new Vocoder project (requires prior `vocoder init`)")
-	.requiredOption("--name <name>", "Project display name")
+	.command("create-app")
+	.description("Create a new Vocoder app (requires prior `vocoder init`)")
+	.requiredOption("--name <name>", "App display name")
 	.requiredOption("--source-locale <code>", "Source language BCP 47 code (e.g. en)")
 	.requiredOption("--workspace <org-id>", "Workspace organization ID")
 	.option(
@@ -164,7 +164,7 @@ program
 			targetBranches: options.targetBranches,
 			workspace: options.workspace,
 		};
-		return runCommand(createProject, translated);
+		return runCommand(createApp, translated);
 	});
 
 program.parse(process.argv);

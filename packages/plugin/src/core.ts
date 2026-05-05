@@ -127,7 +127,7 @@ export async function triggerOnDemandSync(params: {
 }): Promise<VocoderTranslationData | null> {
 	const { fingerprint, branch, apiUrl, apiKey, cdnUrl } = params;
 
-	if (!apiKey.startsWith("vcp_")) return null;
+	if (!apiKey.startsWith("vca_")) return null;
 
 	console.log(`[vocoder] No translations found for fingerprint ${fingerprint} — triggering sync`);
 
@@ -221,44 +221,6 @@ export async function triggerOnDemandSync(params: {
 		return null;
 	} catch (err) {
 		console.warn("[vocoder] Sync-on-startup failed (non-fatal):", err instanceof Error ? err.message : err);
-		return null;
-	}
-}
-
-/**
- * Register extracted strings with the Vocoder API and receive the canonical fingerprint.
- * The server is the fingerprint oracle: it computes sha256(shortCode + sorted(strings))
- * and upserts a BranchFingerprint row. This guarantees the build plugin, CLI, and git
- * webhook all converge on the same fingerprint for the same string set.
- *
- * Returns null if the API is unreachable (offline build) — callers fall back to
- * local computeFingerprint() so offline builds continue to work.
- */
-export async function registerAndGetFingerprint(params: {
-	strings: string[];
-	branch: string;
-	commitSha?: string | null;
-	apiUrl: string;
-	apiKey: string;
-}): Promise<string | null> {
-	const { strings, branch, commitSha, apiUrl, apiKey } = params;
-
-	try {
-		const response = await fetch(`${apiUrl}/api/t/register`, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				Authorization: `Bearer ${apiKey}`,
-			},
-			body: JSON.stringify({ strings, branch, ...(commitSha ? { commitSha } : {}) }),
-			signal: AbortSignal.timeout(15000),
-		});
-
-		if (!response.ok) return null;
-
-		const data = (await response.json()) as { fingerprint: string };
-		return data.fingerprint ?? null;
-	} catch {
 		return null;
 	}
 }

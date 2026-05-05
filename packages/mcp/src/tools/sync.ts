@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { StringExtractor } from "@vocoder/extractor";
 import {
 	detectBranch,
@@ -69,6 +70,7 @@ export async function runSync(
 		repoAppDir: identity?.appDir || undefined,
 		requestedMode: input.mode ?? "auto",
 		...(stringsHash ? { stringsHash } : {}),
+		clientRunId: randomUUID(),
 	});
 
 	if (response.status === "UP_TO_DATE") {

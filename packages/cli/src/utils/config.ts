@@ -1,5 +1,6 @@
 import * as p from "@clack/prompts";
 import chalk from "chalk";
+import { active, highlight } from "./theme.js";
 import { config as loadEnv } from "dotenv";
 import { loadVocoderConfig } from "@vocoder/extractor";
 import type {
@@ -110,7 +111,7 @@ export async function getMergedConfig(
 
 	if (!fileConfig) {
 		p.log.warn(
-			`No ${chalk.cyan("vocoder.config.ts")} found — run ${chalk.cyan("npx @vocoder/cli init")} to generate one.`,
+			`No ${highlight("vocoder.config.ts")} found — run ${highlight("npx @vocoder/cli init")} to generate one.`,
 		);
 	}
 
@@ -216,17 +217,17 @@ export async function getMergedConfig(
 	// Log config sources in verbose mode
 	if (verbose) {
 		const lines = [
-			`Include patterns: ${chalk.cyan(configSources.includePattern)}`,
+			`Include patterns: ${highlight(configSources.includePattern)}`,
 			...(excludePattern.length > 0
-				? [`Exclude patterns: ${chalk.cyan(configSources.excludePattern)}`]
+				? [`Exclude patterns: ${highlight(configSources.excludePattern)}`]
 				: []),
-			`API key:          ${chalk.cyan(configSources.apiKey)}`,
-			`API URL:          ${chalk.cyan(configSources.apiUrl)}`,
-			`Sync mode:        ${chalk.cyan(configSources.mode)}`,
+			`API key:          ${highlight(configSources.apiKey)}`,
+			`API URL:          ${highlight(configSources.apiUrl)}`,
+			`Sync mode:        ${highlight(configSources.mode)}`,
 			...(maxWaitMs
-				? [`Max wait:         ${chalk.cyan(String(configSources.maxWaitMs))}`]
+				? [`Max wait:         ${highlight(String(configSources.maxWaitMs))}`]
 				: []),
-			`No fallback:      ${chalk.cyan(String(configSources.noFallback))}`,
+			`No fallback:      ${highlight(String(configSources.noFallback))}`,
 		];
 		p.note(lines.join("\n"), "Configuration sources");
 	}

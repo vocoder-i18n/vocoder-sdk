@@ -27,6 +27,7 @@ import {
 
 import type { InitOptions } from "../types.js";
 import chalk from "chalk";
+import { active, highlight, info } from "../utils/theme.js";
 import { getSetupSnippets } from "../utils/setup-snippets.js";
 import { join } from "node:path";
 import { config as loadEnv } from "dotenv";
@@ -158,7 +159,7 @@ function runScaffold(params: ScaffoldParams): void {
 			]
 				.filter(Boolean)
 				.join(" && ");
-			p.log.warn(`Run manually: ${chalk.cyan(cmds)}`);
+			p.log.warn(`Run manually: ${highlight(cmds)}`);
 		}
 	} else if (detection.ecosystem) {
 		p.log.info(`Packages:  ${chalk.green("already installed")}`);
@@ -212,7 +213,7 @@ function runScaffold(params: ScaffoldParams): void {
 	// Write vocoder.config.{ts,js} if not already present
 	const written = writeVocoderConfig({ targetBranches, useTypeScript });
 	if (written) {
-		p.log.success(`Created ${chalk.cyan(written)}`);
+		p.log.success(`Created ${highlight(written)}`);
 	} else if (!findExistingConfig(process.cwd())) {
 		const ext = useTypeScript ? "ts" : "js";
 		p.log.warn(
@@ -223,12 +224,12 @@ function runScaffold(params: ScaffoldParams): void {
 	p.log.message("");
 	const branchList =
 		targetBranches.length > 0
-			? targetBranches.map((b) => chalk.cyan(b)).join(" or ")
-			: chalk.cyan("your target branch");
+			? targetBranches.map((b) => highlight(b)).join(" or ")
+			: highlight("your target branch");
 	p.log.success(
 		`Push to ${branchList} to trigger your first translation run.`,
 	);
-	p.log.message(chalk.gray("  Docs: https://vocoder.app/docs/getting-started"));
+	p.log.message(info("  Docs: https://vocoder.app/docs/getting-started"));
 }
 
 
@@ -294,11 +295,11 @@ function printApiKey(apiKey: string): void {
 // 	p.log.message("");
 // 	p.log.message(
 // 		"To share with your team, commit " +
-// 			chalk.cyan(".mcp.json") +
+// 			highlight(".mcp.json") +
 // 			" with an env var reference —",
 // 	);
 // 	p.log.message(
-// 		"each developer sets " + chalk.cyan("VOCODER_API_KEY") + " in their own .env:",
+// 		"each developer sets " + highlight("VOCODER_API_KEY") + " in their own .env:",
 // 	);
 // 	printCodeBlock(teamConfig);
 // 	p.log.message("");
@@ -549,7 +550,7 @@ export async function init(options: InitOptions = {}): Promise<number> {
 	const apiUrl =
 		options.apiUrl || process.env.VOCODER_API_URL || "https://vocoder.app";
 
-	p.intro(chalk.bold("Vocoder Setup"));
+	p.intro(active(chalk.bold("Vocoder Setup")));
 
 	try {
 		// ── Detect git context ──────────────────────────────────────────────────
@@ -575,7 +576,7 @@ export async function init(options: InitOptions = {}): Promise<number> {
 
 		if (identity) {
 			const anonApi = new VocoderAPI({ apiUrl, apiKey: "" });
-			const lookup = await anonApi.lookupProjectByRepo({
+			const lookup = await anonApi.lookupAppByRepo({
 				repoCanonical: identity.repoCanonical,
 				appDir: identity.repoAppDir,
 			});
@@ -585,7 +586,7 @@ export async function init(options: InitOptions = {}): Promise<number> {
 				const { exactMatch } = lookup;
 				p.log.success(`Project: ${chalk.bold(exactMatch.projectName)}`);
 				p.log.info(
-					`Branches: ${chalk.cyan((exactMatch.targetBranches ?? ["main"]).join(", "))}`,
+					`Branches: ${highlight((exactMatch.targetBranches ?? ["main"]).join(", "))}`,
 				);
 
 				const needsKey = await p.confirm({
@@ -622,8 +623,8 @@ export async function init(options: InitOptions = {}): Promise<number> {
 
 				const isTs = detectLocalEcosystem().isTypeScript;
 				const written = writeVocoderConfig({ targetBranches: exactMatch.targetBranches ?? ["main"], useTypeScript: isTs });
-				if (written) p.log.success(`Created ${chalk.cyan(written)}`);
-				p.outro("Vocoder is already set up for this repository.");
+				if (written) p.log.success(`Created ${highlight(written)}`);
+				p.outro(active("Vocoder is already set up for this repository."));
 				return 0;
 			}
 
@@ -634,8 +635,8 @@ export async function init(options: InitOptions = {}): Promise<number> {
 					p.log.success(`Project: ${chalk.bold(wholeRepo.projectName)}`);
 					const isTs = detectLocalEcosystem().isTypeScript;
 					const written = writeVocoderConfig({ targetBranches: ["main"], useTypeScript: isTs });
-					if (written) p.log.success(`Created ${chalk.cyan(written)}`);
-					p.outro("Vocoder is already set up for this repository.");
+					if (written) p.log.success(`Created ${highlight(written)}`);
+					p.outro(active("Vocoder is already set up for this repository."));
 					return 0;
 				}
 			}
@@ -1021,7 +1022,7 @@ export async function init(options: InitOptions = {}): Promise<number> {
 			p.log.info(
 				`${chalk.bold(repoProjectName)} is already set up for this repo.\n` +
 					`  Configured apps: ${existingAppsForRepo
-						.map((a) => chalk.cyan(a.appDir || "(entire repo)"))
+						.map((a) => highlight(a.appDir || "(entire repo)"))
 						.join(", ")}`,
 			);
 
@@ -1046,7 +1047,7 @@ export async function init(options: InitOptions = {}): Promise<number> {
 				targetBranches: appResult.targetBranches,
 				appDir: identity?.repoAppDir,
 			});
-			p.outro("You're all set.");
+			p.outro(active("You're all set."));
 			return 0;
 		}
 
@@ -1093,7 +1094,7 @@ export async function init(options: InitOptions = {}): Promise<number> {
 
 				// connect: fetch existing project config and create App binding without
 				// prompting — the project already owns sourceLocale/targetBranches.
-				const existingProjects = await api.listProjects(
+				const existingProjects = await api.listApps(
 					userToken,
 					selectedWorkspaceId,
 				);
@@ -1127,7 +1128,7 @@ export async function init(options: InitOptions = {}): Promise<number> {
 					return 1;
 				}
 
-				p.outro("You're all set.");
+				p.outro(active("You're all set."));
 				return 0;
 			}
 		} catch {
@@ -1176,7 +1177,7 @@ export async function init(options: InitOptions = {}): Promise<number> {
 
 		printApiKey(projectResult.apiKey);
 
-		p.outro("You're all set.");
+		p.outro(active("You're all set."));
 		return 0;
 	} catch (error) {
 		if (error instanceof Error) {

@@ -1,5 +1,5 @@
 import type {
-	APIProjectConfig,
+	APIAppConfig,
 	TranslationBatchResponse,
 	TranslationSnapshotResponse,
 	TranslationStatusResponse,
@@ -25,6 +25,9 @@ export interface SyncBody {
 	// sha256 of sorted string texts — server uses for fast UP_TO_DATE detection
 	stringsHash?: string;
 	force?: boolean;
+	requestedMaxWaitMs?: number;
+	clientRunId?: string;
+	appIndustry?: string;
 }
 
 export class VocoderClient {
@@ -77,11 +80,11 @@ export class VocoderClient {
 		return response.json() as Promise<T>;
 	}
 
-	async getConfig(repoCanonical?: string): Promise<APIProjectConfig> {
+	async getConfig(repoCanonical?: string): Promise<APIAppConfig> {
 		const params = repoCanonical
 			? `?repoCanonical=${encodeURIComponent(repoCanonical)}`
 			: "";
-		return this.request<APIProjectConfig>("GET", `/api/cli/config${params}`);
+		return this.request<APIAppConfig>("GET", `/api/cli/config${params}`);
 	}
 
 	async sync(body: SyncBody): Promise<TranslationBatchResponse> {

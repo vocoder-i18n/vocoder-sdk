@@ -1,6 +1,6 @@
 import { execSync } from "node:child_process";
 import { isCancel, Prompt } from "@clack/core";
-import chalk from "chalk";
+import { active, bld, dim, grn, info, red, ylw } from "./theme.js";
 
 // ── Symbols ───────────────────────────────────────────────────────────────────
 
@@ -11,14 +11,6 @@ const S_SUBMIT = "◆";
 const S_CANCEL = "■";
 const S_ERROR = "▲";
 
-const noColor = process.env.NO_COLOR === "1" || process.env.FORCE_COLOR === "0";
-const dim = (s: string) => (noColor ? s : chalk.gray(s));
-const cyan = (s: string) => (noColor ? s : chalk.cyan(s));
-const grn = (s: string) => (noColor ? s : chalk.green(s));
-const ylw = (s: string) => (noColor ? s : chalk.yellow(s));
-const red = (s: string) => (noColor ? s : chalk.red(s));
-const bld = (s: string) => (noColor ? s : chalk.bold(s));
-
 function symbol(state: string): string {
 	switch (state) {
 		case "submit":
@@ -28,7 +20,7 @@ function symbol(state: string): string {
 		case "error":
 			return ylw(S_ERROR);
 		default:
-			return cyan(S_ACTIVE);
+			return active(S_ACTIVE);
 	}
 }
 
@@ -165,16 +157,16 @@ function buildList(
 
 		const icon = isChecked
 			? isCursor
-				? grn("◼")
-				: "◼"
+				? info("◼")
+				: info("◼")
 			: isCursor
-				? grn("◻")
+				? active("◻")
 				: dim("◻");
 
 		let label = item.isCustom ? `${item.label} ${dim("(custom)")}` : item.label;
 		if (isCursor) label = bld(label);
 
-		lines.push(`${cyan(S_BAR)}  ${icon}  ${label}`);
+		lines.push(`${info(S_BAR)}  ${icon}  ${label}`);
 	}
 
 	// "Add pattern" option
@@ -191,11 +183,11 @@ function buildList(
 			(excludedPatterns.has(trimmed)
 				? "Already used for automatic translation"
 				: null);
-		const icon = addCursor ? grn("◻") : dim("◻");
+		const icon = addCursor ? active("◻") : dim("◻");
 		const label = err
 			? `${ylw("+")}  ${dim(`"${trimmed}" — ${err}`)}`
 			: `${grn("+")}  Add "${trimmed}" as branch pattern`;
-		lines.push(`${cyan(S_BAR)}  ${icon}  ${label}`);
+		lines.push(`${info(S_BAR)}  ${icon}  ${label}`);
 	} else if (filtered.length === 0 && trimmed.length === 0) {
 		lines.push(dim(`${S_BAR}  No branches detected`));
 	}
@@ -305,7 +297,7 @@ export async function filterableBranchSelect(params: {
 					default:
 						return [
 							hdr.trimEnd(),
-							`${cyan(S_BAR)}  ${dim("/")} ${hint}`,
+							`${info(S_BAR)}  ${dim("/")} ${hint}`,
 							buildList(
 								filtered,
 								cursor,
@@ -317,7 +309,7 @@ export async function filterableBranchSelect(params: {
 								optional,
 								excludedSet,
 							),
-							`${cyan(S_BAR_END)}`,
+							`${info(S_BAR_END)}`,
 							"",
 						].join("\n");
 				}

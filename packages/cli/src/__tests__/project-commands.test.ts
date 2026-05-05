@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { addLocales, listProjectLocales, removeLocales } from "../commands/locales.js";
 import { getTranslations } from "../commands/translations.js";
-import type { APIProjectConfig, TranslationSnapshotResponse } from "../types.js";
+import type { APIAppConfig, TranslationSnapshotResponse } from "../types.js";
 import { VocoderAPI } from "../utils/api.js";
 
 const originalFetch = globalThis.fetch;
@@ -188,7 +188,7 @@ describe("listProjectLocales command", () => {
 	});
 
 	it("returns 0 when project config loads successfully", async () => {
-		const config: APIProjectConfig = {
+		const config: APIAppConfig = {
 			projectName: "Test",
 			organizationName: "Acme",
 			shortCode: "test123",
@@ -227,7 +227,7 @@ describe("getTranslations command", () => {
 	});
 
 	it("writes one file per locale when --output is set", async () => {
-		const config: APIProjectConfig = {
+		const config: APIAppConfig = {
 			projectName: "Test",
 			organizationName: "Acme",
 			shortCode: "test123",
@@ -278,7 +278,7 @@ describe("getTranslations command", () => {
 	});
 
 	it("returns 1 when snapshot is NOT_FOUND", async () => {
-		const config: APIProjectConfig = {
+		const config: APIAppConfig = {
 			projectName: "Test",
 			organizationName: "Acme",
 			shortCode: "test123",

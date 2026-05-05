@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as p from "@clack/prompts";
 import chalk from "chalk";
+import { active, highlight } from "../utils/theme.js";
 import type { VocoderTranslationData } from "@vocoder/config";
 import { loadVocoderConfig } from "@vocoder/extractor";
 import type {
@@ -411,7 +412,7 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 	const startTime = Date.now();
 	const projectRoot = process.cwd();
 
-	p.intro("Vocoder Sync");
+	p.intro(active("Vocoder Sync"));
 
 	// Check for API key before doing any work — missing key is an onboarding
 	// issue, not an error. Show friendly guidance and exit cleanly.
@@ -423,7 +424,7 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 		p.log.info(
 			"  Or add your key to .env: VOCODER_API_KEY=vcp_...",
 		);
-		p.outro("Run `npx @vocoder/cli init` to set up your project.");
+		p.outro(active("Run `npx @vocoder/cli init` to set up your project."));
 		return 1;
 	}
 
@@ -441,7 +442,7 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 		validateLocalConfig(localConfig);
 
 		const api = new VocoderAPI(localConfig);
-		const apiConfig = await api.getProjectConfig();
+		const apiConfig = await api.getAppConfig();
 
 		const requestedMode = mergedConfig.mode;
 		const waitTimeoutMs = resolveWaitTimeoutMs({
@@ -461,11 +462,11 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 			...(fileConfig?.formality ? { formality: fileConfig.formality } : {}),
 		};
 
-		spinner.stop(`Branch: ${chalk.cyan(branch)}`);
+		spinner.stop(`Branch: ${highlight(branch)}`);
 
 		if (!options.force && !isTargetBranch(branch, config.targetBranches)) {
 			p.log.warn(
-				`Skipping translations (${chalk.cyan(branch)} is not a target branch)`,
+				`Skipping translations (${highlight(branch)} is not a target branch)`,
 			);
 			p.log.info(`Target branches: ${config.targetBranches.join(", ")}`);
 			p.log.info("Use --force to translate anyway");
@@ -495,7 +496,7 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 		}
 
 		spinner.stop(
-			`Extracted ${chalk.cyan(extractedStrings.length)} strings from ${chalk.cyan(patternsDisplay)}`,
+			`Extracted ${highlight(extractedStrings.length)} strings from ${highlight(patternsDisplay)}`,
 		);
 
 		if (options.verbose) {
@@ -520,7 +521,7 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 				].join("\n"),
 				"Dry run - would translate",
 			);
-			p.outro("No API calls made.");
+			p.outro(active("No API calls made."));
 			return 0;
 		}
 
@@ -548,14 +549,14 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 			const cacheFile = getCacheFilePath(projectRoot, fingerprint);
 			if (existsSync(cacheFile)) {
 				if (options.verbose) {
-					p.log.info(`Cache hit: ${chalk.dim(cacheFile)} (fingerprint ${chalk.cyan(fingerprint)})`);
+					p.log.info(`Cache hit: ${chalk.dim(cacheFile)} (fingerprint ${highlight(fingerprint)})`);
 				}
 				const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-				p.outro(`Up to date (${duration}s)`);
+				p.outro(active(`Up to date (${duration}s)`));
 				return 0;
 			}
 			if (options.verbose) {
-				p.log.info(`No cache for fingerprint ${chalk.cyan(fingerprint)} — will submit to API`);
+				p.log.info(`No cache for fingerprint ${highlight(fingerprint)} — will submit to API`);
 			}
 		}
 
@@ -597,15 +598,15 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 		}
 
 		if (batchResponse.status === "UP_TO_DATE" && batchResponse.noChanges) {
-			p.log.success(`Up to date — ${chalk.cyan(batchResponse.totalStrings)} strings, no changes`);
+			p.log.success(`Up to date — ${highlight(batchResponse.totalStrings)} strings, no changes`);
 		} else if (batchResponse.newStrings === 0) {
 			const archivedNote =
 				batchResponse.deletedStrings && batchResponse.deletedStrings > 0
 					? `, ${chalk.yellow(batchResponse.deletedStrings)} archived`
 					: "";
-			p.log.success(`No new strings — ${chalk.cyan(batchResponse.totalStrings)} total${archivedNote}, using existing translations`);
+			p.log.success(`No new strings — ${highlight(batchResponse.totalStrings)} total${archivedNote}, using existing translations`);
 		} else {
-			const statParts = [`${chalk.cyan(batchResponse.newStrings)} new, ${chalk.cyan(batchResponse.totalStrings)} total`];
+			const statParts = [`${highlight(batchResponse.newStrings)} new, ${highlight(batchResponse.totalStrings)} total`];
 			if (batchResponse.deletedStrings && batchResponse.deletedStrings > 0) {
 				statParts.push(`${chalk.yellow(batchResponse.deletedStrings)} archived`);
 			}
@@ -755,7 +756,7 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 		}
 
 		const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-		p.outro(`Sync complete! (${duration}s)`);
+		p.outro(active(`Sync complete! (${duration}s)`));
 		return 0;
 	} catch (error) {
 		spinner.stop();

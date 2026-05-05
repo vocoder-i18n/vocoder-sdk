@@ -1,5 +1,6 @@
 import * as p from "@clack/prompts";
 import chalk from "chalk";
+import { active, highlight } from "../utils/theme.js";
 import { config as loadEnv } from "dotenv";
 import { VocoderAPI, VocoderAPIError } from "../utils/api.js";
 import { readAuthData } from "../utils/auth-store.js";
@@ -8,7 +9,7 @@ import { getLimitErrorGuidance } from "./sync.js";
 
 loadEnv();
 
-export interface CreateProjectOptions {
+export interface CreateAppOptions {
 	/** Project display name (required). */
 	name: string;
 	/** BCP 47 source locale code, e.g. "en" (required). */
@@ -56,7 +57,7 @@ export interface CreateProjectOptions {
  * @throws If user token is missing, workspace is invalid, or the plan's
  *         maxProjects limit is exceeded.
  */
-export async function createProject(options: CreateProjectOptions): Promise<number> {
+export async function createApp(options: CreateAppOptions): Promise<number> {
 	const authData = readAuthData();
 	if (!authData) {
 		p.log.error(
@@ -99,7 +100,7 @@ export async function createProject(options: CreateProjectOptions): Promise<numb
 		: ["main"];
 
 	const spinner = p.spinner();
-	spinner.start(`Creating project "${options.name}"…`);
+	spinner.start(`Creating app "${options.name}"…`);
 
 	try {
 		const result = await api.createProject(authData.token, {
@@ -112,19 +113,19 @@ export async function createProject(options: CreateProjectOptions): Promise<numb
 			...(repoCanonical ? { repoCanonical } : {}),
 		});
 
-		spinner.stop(`Created project ${chalk.bold(result.projectName)}`);
+		spinner.stop(`Created app ${chalk.bold(result.projectName)}`);
 
 		const lines = [
 			`Project ID:     ${result.projectId}`,
-			`Source locale:  ${chalk.cyan(result.sourceLocale)}`,
-			`Target locales: ${result.targetLocales.length > 0 ? result.targetLocales.map((l) => chalk.cyan(l)).join(", ") : chalk.dim("(none)")}`,
-			`Branches:       ${result.targetBranches.map((b) => chalk.cyan(b)).join(", ")}`,
+			`Source locale:  ${highlight(result.sourceLocale)}`,
+			`Target locales: ${result.targetLocales.length > 0 ? result.targetLocales.map((l) => highlight(l)).join(", ") : chalk.dim("(none)")}`,
+			`Branches:       ${result.targetBranches.map((b) => highlight(b)).join(", ")}`,
 			...(repoCanonical
-				? [`Repository:     ${chalk.cyan(repoCanonical)}${appDir !== "." ? ` (${appDir})` : ""}`]
+				? [`Repository:     ${highlight(repoCanonical)}${appDir !== "." ? ` (${appDir})` : ""}`]
 				: []),
 			"",
 			`Add this to your .env file:`,
-			`  ${chalk.bold("VOCODER_API_KEY")}=${chalk.cyan(result.apiKey)}`,
+			`  ${chalk.bold("VOCODER_API_KEY")}=${highlight(result.apiKey)}`,
 		];
 
 		p.note(lines.join("\n"), "Project created");

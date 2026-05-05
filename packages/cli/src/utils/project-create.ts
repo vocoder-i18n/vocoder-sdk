@@ -328,7 +328,7 @@ export async function runAppCreate(
 
 	// ── Create the App ─────────────────────────────────────────────────────────
 	try {
-		const result = await api.createApp(userToken, {
+		const result = await api.createProject(userToken, {
 			projectId,
 			appDir,
 			sourceLocale,
