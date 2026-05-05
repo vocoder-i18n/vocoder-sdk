@@ -27,7 +27,7 @@ import {
 
 import type { InitOptions } from "../types.js";
 import chalk from "chalk";
-import { active, highlight, info } from "../utils/theme.js";
+import { highlight, info } from "../utils/theme.js";
 import { getSetupSnippets } from "../utils/setup-snippets.js";
 import { join } from "node:path";
 import { config as loadEnv } from "dotenv";
@@ -550,7 +550,7 @@ export async function init(options: InitOptions = {}): Promise<number> {
 	const apiUrl =
 		options.apiUrl || process.env.VOCODER_API_URL || "https://vocoder.app";
 
-	p.intro(active(chalk.bold("Vocoder Setup")));
+	p.intro(chalk.bold("Vocoder Setup"));
 
 	try {
 		// ── Detect git context ──────────────────────────────────────────────────
@@ -624,7 +624,7 @@ export async function init(options: InitOptions = {}): Promise<number> {
 				const isTs = detectLocalEcosystem().isTypeScript;
 				const written = writeVocoderConfig({ targetBranches: exactMatch.targetBranches ?? ["main"], useTypeScript: isTs });
 				if (written) p.log.success(`Created ${highlight(written)}`);
-				p.outro(active("Vocoder is already set up for this repository."));
+				p.outro("Vocoder is already set up for this repository.");
 				return 0;
 			}
 
@@ -636,7 +636,7 @@ export async function init(options: InitOptions = {}): Promise<number> {
 					const isTs = detectLocalEcosystem().isTypeScript;
 					const written = writeVocoderConfig({ targetBranches: ["main"], useTypeScript: isTs });
 					if (written) p.log.success(`Created ${highlight(written)}`);
-					p.outro(active("Vocoder is already set up for this repository."));
+					p.outro("Vocoder is already set up for this repository.");
 					return 0;
 				}
 			}
@@ -1047,7 +1047,7 @@ export async function init(options: InitOptions = {}): Promise<number> {
 				targetBranches: appResult.targetBranches,
 				appDir: identity?.repoAppDir,
 			});
-			p.outro(active("You're all set."));
+			p.outro("You're all set.");
 			return 0;
 		}
 
@@ -1128,7 +1128,7 @@ export async function init(options: InitOptions = {}): Promise<number> {
 					return 1;
 				}
 
-				p.outro(active("You're all set."));
+				p.outro("You're all set.");
 				return 0;
 			}
 		} catch {
@@ -1177,7 +1177,7 @@ export async function init(options: InitOptions = {}): Promise<number> {
 
 		printApiKey(projectResult.apiKey);
 
-		p.outro(active("You're all set."));
+		p.outro("You're all set.");
 		return 0;
 	} catch (error) {
 		if (error instanceof Error) {

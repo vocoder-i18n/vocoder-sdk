@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as p from "@clack/prompts";
 import chalk from "chalk";
-import { active, highlight } from "../utils/theme.js";
+import { highlight } from "../utils/theme.js";
 import type { VocoderTranslationData } from "@vocoder/config";
 import { loadVocoderConfig } from "@vocoder/extractor";
 import type {
@@ -412,7 +412,7 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 	const startTime = Date.now();
 	const projectRoot = process.cwd();
 
-	p.intro(active("Vocoder Sync"));
+	p.intro("Vocoder Sync");
 
 	// Check for API key before doing any work — missing key is an onboarding
 	// issue, not an error. Show friendly guidance and exit cleanly.
@@ -424,7 +424,7 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 		p.log.info(
 			"  Or add your key to .env: VOCODER_API_KEY=vcp_...",
 		);
-		p.outro(active("Run `npx @vocoder/cli init` to set up your project."));
+		p.outro("Run `npx @vocoder/cli init` to set up your project.");
 		return 1;
 	}
 
@@ -521,7 +521,7 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 				].join("\n"),
 				"Dry run - would translate",
 			);
-			p.outro(active("No API calls made."));
+			p.outro("No API calls made.");
 			return 0;
 		}
 
@@ -552,7 +552,7 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 					p.log.info(`Cache hit: ${chalk.dim(cacheFile)} (fingerprint ${highlight(fingerprint)})`);
 				}
 				const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-				p.outro(active(`Up to date (${duration}s)`));
+				p.outro(`Up to date (${duration}s)`);
 				return 0;
 			}
 			if (options.verbose) {
@@ -756,7 +756,7 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 		}
 
 		const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-		p.outro(active(`Sync complete! (${duration}s)`));
+		p.outro(`Sync complete! (${duration}s)`);
 		return 0;
 	} catch (error) {
 		spinner.stop();
