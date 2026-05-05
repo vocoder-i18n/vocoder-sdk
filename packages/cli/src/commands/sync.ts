@@ -412,7 +412,7 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 	const startTime = Date.now();
 	const projectRoot = process.cwd();
 
-	p.intro("Vocoder Sync");
+	p.intro(chalk.bold("Vocoder Sync"));
 
 	// Check for API key before doing any work — missing key is an onboarding
 	// issue, not an error. Show friendly guidance and exit cleanly.
@@ -468,7 +468,7 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 			p.log.warn(
 				`Skipping translations (${highlight(branch)} is not a target branch)`,
 			);
-			p.log.info(`Target branches: ${config.targetBranches.join(", ")}`);
+			p.log.info(`Target branches: ${config.targetBranches.map((b) => highlight(b)).join(", ")}`);
 			p.log.info("Use --force to translate anyway");
 			p.outro("");
 			return 0;
@@ -514,7 +514,7 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 				[
 					`Strings: ${extractedStrings.length}`,
 					`Branch: ${branch}`,
-					`Target locales: ${config.targetLocales.join(", ")}`,
+					`Target locales: ${config.targetLocales.map((l) => highlight(l)).join(", ")}`,
 					`Requested mode: ${requestedMode}`,
 					`Max wait: ${waitTimeoutMs}ms`,
 					`No fallback: ${mergedConfig.noFallback ? "yes" : "no"}`,
@@ -611,7 +611,7 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 				statParts.push(`${chalk.yellow(batchResponse.deletedStrings)} archived`);
 			}
 			const estTime = batchResponse.estimatedTime ? ` (~${batchResponse.estimatedTime}s)` : "";
-			p.log.info(`${statParts.join(", ")} → syncing to ${config.targetLocales.join(", ")}${estTime}`);
+			p.log.info(`${statParts.join(", ")} → syncing to ${config.targetLocales.map((l) => highlight(l)).join(", ")}${estTime}`);
 		}
 
 		let artifacts: TranslationArtifacts | null = null;
@@ -735,7 +735,7 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 			});
 			const cachePath = writeCache({ projectRoot, fingerprint, data });
 			if (options.verbose) {
-				p.log.info(`Cache written: ${cachePath}`);
+				p.log.info(`Cache written: ${highlight(cachePath)}`);
 			}
 		} catch (error) {
 			if (options.verbose) {
