@@ -51,7 +51,6 @@ export interface LocalConfig {
 export interface APIAppConfig {
 	projectName: string;
 	organizationName: string;
-	shortCode: string;
 	sourceLocale: string;
 	targetLocales: string[];
 	targetBranches: string[];

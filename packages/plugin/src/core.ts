@@ -106,6 +106,8 @@ export async function extractStringEntries(
 
 const SYNC_POLL_INTERVAL_MS = 2000;
 const SYNC_MAX_WAIT_MS = 60_000;
+const CDN_POLL_INTERVAL_MS = 3000;
+const CDN_POLL_MAX_WAIT_MS = 30_000;
 
 /**
  * Submit a translation sync for the current fingerprint if no TranslationBundle
@@ -196,13 +198,12 @@ export async function triggerOnDemandSync(params: {
 
 			if (statusData.status === "COMPLETED") {
 				process.stdout.write("\n");
-				// Try CDN first, then API.
 				const data =
-					(cdnUrl ? await fetchTranslationsFromCDN(fingerprint, cdnUrl) : null) ??
+					(cdnUrl ? await pollCDNForTranslations(fingerprint, cdnUrl) : null) ??
 					(await fetchTranslations(fingerprint, apiUrl));
 				const localeCount = data.config.targetLocales.length;
 				const stringCount = Object.values(data.translations).reduce(
-					(sum, t) => sum + Object.keys(t as object).length,
+					(sum: number, t) => sum + Object.keys(t as object).length,
 					0,
 				);
 				console.log(`[vocoder] Loaded ${localeCount} locale(s), ${stringCount} translation(s)`);
@@ -592,51 +593,94 @@ export async function fetchTranslations(
 }
 
 /**
- * Attempt to fetch translations from the CDN bundle file.
+ * Poll the CDN for a translation bundle until it appears or the timeout elapses.
+ * The CDN is only populated after the translation batch fully completes, so a
+ * successful response guarantees translations are complete — no partial results.
  *
- * Returns null on any failure (404, network error, malformed JSON) so the
- * caller can fall back to `fetchTranslations` which has the server-side
- * "wait for pending batches" logic.
- *
- * On success the result is written to the disk cache so offline builds
- * continue to work even when the CDN was the original source.
+ * Returns null if the bundle never appears within the timeout, so the caller
+ * can fall back to the API endpoint which has its own server-side wait logic.
  */
-export async function fetchTranslationsFromCDN(
+export async function pollCDNForTranslations(
 	fingerprint: string,
 	cdnUrl: string,
 ): Promise<VocoderTranslationData | null> {
 	const url = `${cdnUrl}/${fingerprint}/bundle.json`;
 	const cacheDir = resolve(process.cwd(), "node_modules", ".vocoder", "cache");
 	const cacheFile = resolve(cacheDir, `${fingerprint}.json`);
+	const deadline = Date.now() + CDN_POLL_MAX_WAIT_MS;
+
+	while (Date.now() < deadline) {
+		try {
+			const response = await fetch(url, {
+				headers: { Accept: "application/json" },
+				signal: AbortSignal.timeout(10_000),
+			});
+
+			if (response.ok) {
+				const data = (await response.json()) as VocoderTranslationData;
+				try {
+					mkdirSync(cacheDir, { recursive: true });
+					writeFileSync(cacheFile, JSON.stringify(data), "utf-8");
+				} catch {
+					// Non-fatal
+				}
+				return data;
+			}
+
+			// Any non-404 failure (5xx, network) — bail immediately to API fallback
+			if (response.status !== 404) return null;
+		} catch {
+			// Network/timeout error — bail to API fallback
+			return null;
+		}
+
+		if (Date.now() + CDN_POLL_INTERVAL_MS < deadline) {
+			await new Promise((r) => setTimeout(r, CDN_POLL_INTERVAL_MS));
+		} else {
+			break;
+		}
+	}
+
+	return null;
+}
+
+/**
+ * Fire-and-forget telemetry ping to Vocoder when the build could not bake
+ * translations and fell back to runtime CDN fetching. Never throws — a telemetry
+ * failure must never affect the build outcome.
+ */
+export async function reportBuildFallback(params: {
+	apiUrl: string;
+	apiKey: string;
+	fingerprint: string;
+	reason: string;
+	stringsCount?: number;
+}): Promise<void> {
+	const { apiUrl, apiKey, fingerprint, reason, stringsCount } = params;
+
+	const buildEnv =
+		process.env.GITHUB_ACTIONS ? "github-actions" :
+		process.env.VERCEL ? "vercel" :
+		process.env.RENDER ? "render" :
+		process.env.CI ? "ci" : "local";
 
 	try {
-		const response = await fetch(url, {
-			headers: { Accept: "application/json" },
-			signal: AbortSignal.timeout(15000),
+		await fetch(`${apiUrl}/api/plugin/build-event`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Authorization: `Bearer ${apiKey}`,
+			},
+			body: JSON.stringify({
+				fingerprint,
+				event: "build_fallback_to_runtime",
+				reason,
+				stringsCount,
+				buildEnv,
+			}),
+			signal: AbortSignal.timeout(5_000),
 		});
-
-		if (response.status === 404) {
-			// Bundle not yet published to CDN — fall back to API
-			return null;
-		}
-
-		if (!response.ok) {
-			return null;
-		}
-
-		const data = (await response.json()) as VocoderTranslationData;
-
-		// Update disk cache so offline fallback stays current
-		try {
-			mkdirSync(cacheDir, { recursive: true });
-			writeFileSync(cacheFile, JSON.stringify(data), "utf-8");
-		} catch {
-			// Non-fatal
-		}
-
-		return data;
 	} catch {
-		// Network error, timeout, or parse failure — fall back to API
-		return null;
+		// Never let telemetry affect the build
 	}
 }

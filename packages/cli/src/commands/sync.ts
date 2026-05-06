@@ -19,7 +19,7 @@ import type {
 } from "../types.js";
 import { VocoderAPI, VocoderAPIError } from "../utils/api.js";
 import { detectBranch, isTargetBranch } from "../utils/branch.js";
-import { getMergedConfig, validateLocalConfig } from "../utils/config.js";
+import { extractShortCodeFromApiKey, getMergedConfig, validateLocalConfig } from "../utils/config.js";
 import { StringExtractor } from "../utils/extract.js";
 import {
 	detectCommitSha,
@@ -542,7 +542,7 @@ export async function sync(options: TranslateOptions = {}): Promise<number> {
 			);
 		}
 
-		const fingerprint = computeFingerprint(config.shortCode, sourceStrings);
+		const fingerprint = computeFingerprint(extractShortCodeFromApiKey(localConfig.apiKey), sourceStrings);
 
 		// Local cache check — skip API submission if translations already exist for this fingerprint.
 		if (!options.force) {

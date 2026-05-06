@@ -13,6 +13,15 @@ import type {
 loadEnv();
 
 /**
+ * Extracts the app short code embedded in the API key token.
+ * Key format: vca_{shortCode(10)}_{random(22)}
+ * Safe to call offline — no network required.
+ */
+export function extractShortCodeFromApiKey(apiKey: string): string {
+	return apiKey.slice(4, 14);
+}
+
+/**
  * Validates the local configuration
  */
 export function validateLocalConfig(config: LocalConfig): void {

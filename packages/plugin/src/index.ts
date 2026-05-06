@@ -5,8 +5,9 @@ import {
 	detectCommitSha,
 	extractSourceTexts,
 	fetchTranslations,
-	fetchTranslationsFromCDN,
 	loadEnvFile,
+	pollCDNForTranslations,
+	reportBuildFallback,
 	triggerOnDemandSync,
 } from "./core";
 
@@ -113,23 +114,35 @@ export const unplugin = createUnplugin(
 
 			const fetchStart = Date.now();
 
-			// CDN-first: try the public bundle file directly before hitting the API.
-			// The API is still used as fallback because it contains the
-			// "wait for pending batches" logic needed on first builds.
+			// Poll CDN first — a 200 response guarantees the translation batch is fully
+			// complete (the CDN is only populated after compileTranslationBundleForApp).
+			// Falls back to the API which has its own server-side wait logic.
 			let d: VocoderTranslationData | null = null;
+			let fellBackToRuntime = false;
 			if (cdnUrl) {
 				if (verbose) {
-					console.log(`[vocoder] Trying CDN: ${cdnUrl}/${fp}/bundle.json`);
+					console.log(`[vocoder] Polling CDN: ${cdnUrl}/${fp}/bundle.json`);
 				}
-				d = await fetchTranslationsFromCDN(fp, cdnUrl);
+				d = await pollCDNForTranslations(fp, cdnUrl);
 				if (d && verbose) {
 					console.log(`[vocoder] CDN hit: ${Date.now() - fetchStart}ms`);
 				} else if (!d && verbose) {
-					console.log(`[vocoder] CDN miss — falling back to API`);
+					console.log(`[vocoder] CDN polling timed out — falling back to API`);
 				}
 			}
 			if (!d) {
 				d = await fetchTranslations(fp, apiUrl);
+			}
+
+			// If we still have no translations, the build will ship without baked
+			// translations and fall back to runtime CDN fetching. Log clearly and
+			// report to Vocoder so it surfaces in operator alerting.
+			if (!isDev && d && !d.config.sourceLocale) {
+				fellBackToRuntime = true;
+				const reason = "No translations available after CDN polling and API fallback";
+				console.warn(`[vocoder] WARNING: ${reason}. Translations will be fetched from CDN at runtime.`);
+				console.warn(`[vocoder] Fingerprint: ${fp} — check your Vocoder dashboard if this persists.`);
+				void reportBuildFallback({ apiUrl, apiKey, fingerprint: fp, reason, stringsCount: sourceTexts.length });
 			}
 
 			if (verbose) {

@@ -192,7 +192,6 @@ export class VocoderAPI {
 		const data = await this.request<{
 			projectName: string;
 			organizationName: string;
-			shortCode: string;
 			sourceLocale: string;
 			targetLocales: string[];
 			targetBranches: string[];
@@ -208,7 +207,6 @@ export class VocoderAPI {
 		return {
 			projectName: data.projectName,
 			organizationName: data.organizationName,
-			shortCode: data.shortCode,
 			sourceLocale: data.sourceLocale,
 			targetLocales: data.targetLocales,
 			targetBranches: data.targetBranches ?? ["main"],
