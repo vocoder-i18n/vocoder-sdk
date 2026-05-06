@@ -1,5 +1,5 @@
 import React from "react";
-import type { TProps } from "./types";
+import type { ComponentSlot, TProps } from "./types";
 import { generateMessageHash } from "./hash";
 import { extractText } from "./utils/extractText";
 import { formatElements } from "./utils/formatElements";
@@ -231,12 +231,53 @@ export const T: React.FC<TProps> = ({
 			return <>{id ?? children ?? null}</>;
 		}
 
-		// ICU formatting: variables, plural, select, number, date
-		const icuFormatted = formatICU(textToFormat, formatValues, locale);
+		// Hoist React elements out of formatValues into component slots.
+		// Allows <T message="Click {icon} here" values={{ icon: <Icon /> }} /> to
+		// render correctly — {icon} is replaced with a <N/> placeholder so it
+		// passes through formatICU as literal text and lands in formatElements.
+		let activeText = textToFormat;
+		let activeValues = formatValues;
+		let activeComponents: ComponentSlot[] | Record<number, ComponentSlot> | undefined =
+			components;
 
-		// Component rendering: <c0>, <c1> placeholders → React elements
-		if (components && components.length > 0) {
-			return <>{formatElements(icuFormatted, components)}</>;
+		const reactElementKeys = Object.keys(formatValues).filter((k) =>
+			React.isValidElement(formatValues[k]),
+		);
+		if (reactElementKeys.length > 0) {
+			const baseIdx = activeComponents == null
+				? 0
+				: Array.isArray(activeComponents)
+					? activeComponents.length
+					: Object.keys(activeComponents).length === 0
+						? 0
+						: Math.max(...Object.keys(activeComponents).map(Number)) + 1;
+			const extra: Record<number, ComponentSlot> = {};
+			activeValues = { ...formatValues };
+			for (let i = 0; i < reactElementKeys.length; i++) {
+				const key = reactElementKeys[i]!;
+				const slotIdx = baseIdx + i;
+				extra[slotIdx] = formatValues[key] as ComponentSlot;
+				delete activeValues[key];
+				// Replace {key} in the translated text with a self-closing component placeholder.
+				activeText = activeText.replace(
+					new RegExp(`\\{${key}\\}`, "g"),
+					`<${slotIdx}/>`,
+				);
+			}
+			activeComponents = { ...(activeComponents ?? {}), ...extra };
+		}
+
+		// ICU formatting: variables, plural, select, number, date
+		const icuFormatted = formatICU(activeText, activeValues, locale);
+
+		// Component rendering: <N> placeholders → React elements
+		const hasComponents =
+			activeComponents != null &&
+			(Array.isArray(activeComponents)
+				? activeComponents.length > 0
+				: Object.keys(activeComponents).length > 0);
+		if (hasComponents) {
+			return <>{formatElements(icuFormatted, activeComponents!)}</>;
 		}
 
 		return <>{icuFormatted}</>;

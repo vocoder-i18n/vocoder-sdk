@@ -9,7 +9,7 @@ describe("Rich text formatting", () => {
 		render(
 			<VocoderProvider>
 				<T
-					message="Click <c0>here</c0> for help"
+					message="Click <0>here</0> for help"
 					components={[<a href="/help" className="help-link" />]}
 				/>
 			</VocoderProvider>,
@@ -29,7 +29,7 @@ describe("Rich text formatting", () => {
 		render(
 			<VocoderProvider>
 				<T
-					message="Click <c0>here</c0> for help"
+					message="Click <0>here</0> for help"
 					components={[<a href="/ayuda" />]}
 				/>
 			</VocoderProvider>,
@@ -46,7 +46,7 @@ describe("Rich text formatting", () => {
 		render(
 			<VocoderProvider>
 				<T
-					message="Read our <c0>Privacy Policy</c0> and <c1>Terms of Service</c1>"
+					message="Read our <0>Privacy Policy</0> and <1>Terms of Service</1>"
 					components={[<a href="/privacy" />, <a href="/terms" />]}
 				/>
 			</VocoderProvider>,
@@ -55,6 +55,57 @@ describe("Rich text formatting", () => {
 		await waitFor(() => {
 			expect(screen.getByText("Privacy Policy")).toHaveAttribute("href", "/privacy");
 			expect(screen.getByText("Terms of Service")).toHaveAttribute("href", "/terms");
+		});
+	});
+
+	it("supports function slot — receives translated children", async () => {
+		render(
+			<VocoderProvider>
+				<T
+					message="<0>Click here</0>"
+					components={[(children) => <strong data-testid="fn-slot">{children}</strong>]}
+				/>
+			</VocoderProvider>,
+		);
+
+		await waitFor(() => {
+			const el = screen.getByTestId("fn-slot");
+			expect(el.tagName).toBe("STRONG");
+			expect(el.textContent).toBe("Click here");
+		});
+	});
+
+	it("supports sparse object form for components", async () => {
+		render(
+			<VocoderProvider>
+				<T
+					message="<0>A</0> and <2>B</2>"
+					components={{ 0: <em data-testid="slot0" />, 2: <strong data-testid="slot2" /> }}
+				/>
+			</VocoderProvider>,
+		);
+
+		await waitFor(() => {
+			expect(screen.getByTestId("slot0").tagName).toBe("EM");
+			expect(screen.getByTestId("slot0").textContent).toBe("A");
+			expect(screen.getByTestId("slot2").tagName).toBe("STRONG");
+			expect(screen.getByTestId("slot2").textContent).toBe("B");
+		});
+	});
+
+	it("promotes React elements from values prop to component slots", async () => {
+		render(
+			<VocoderProvider>
+				<T
+					message="Click {icon} to continue"
+					values={{ icon: <span data-testid="icon-slot">★</span> }}
+				/>
+			</VocoderProvider>,
+		);
+
+		await waitFor(() => {
+			const icon = screen.getByTestId("icon-slot");
+			expect(icon.textContent).toBe("★");
 		});
 	});
 });

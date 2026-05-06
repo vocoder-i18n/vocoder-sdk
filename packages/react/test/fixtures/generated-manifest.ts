@@ -1,5 +1,6 @@
 // Keys are FNV-1a 32-bit hashes of the source text (generateMessageHash).
 // Must match the hash function in src/hash.ts — update both together.
+// Component placeholder format is <N> (numeric, Lingui style). Old <cN> keys removed.
 const translations = {
 	en: {
 		"1w2u0qz": "Hello",
@@ -12,8 +13,8 @@ const translations = {
 		"1ql9h40": "{count, selectordinal, other {#}}", // DEFAULT_ORDINAL_ICU (locale-neutral; ordinals served via Tier 1 ordinalForms)
 		"1uanpsy": "{value, select, male {his} female {her} other {their}}",
 		"0x4ur6n": "{gender, select, male {He} female {She} other {They}} replied",
-		"1mx4siq": "Click <c0>here</c0> for help",
-		"0ydwi6n": "Read our <c0>Privacy Policy</c0> and <c1>Terms of Service</c1>",
+		"1fb9e3q": "Click <0>here</0> for help",
+		"0og04vn": "Read our <0>Privacy Policy</0> and <1>Terms of Service</1>",
 	},
 	es: {
 		"1w2u0qz": "Hola",
@@ -26,8 +27,8 @@ const translations = {
 		"1ql9h40": "{count, selectordinal, other {#}}", // DEFAULT_ORDINAL_ICU; ES ordinal via Tier 1 ordinalForms
 		"1uanpsy": "{value, select, male {su} female {su} other {su}}",
 		"0x4ur6n": "{gender, select, male {El} female {Ella} other {Elle}} respondio",
-		"1mx4siq": "Haz clic <c0>aqui</c0> para obtener ayuda",
-		"0ydwi6n": "Lee nuestra <c0>Politica de Privacidad</c0> y <c1>Terminos de Servicio</c1>",
+		"1fb9e3q": "Haz clic <0>aqui</0> para obtener ayuda",
+		"0og04vn": "Lee nuestra <0>Politica de Privacidad</0> y <1>Terminos de Servicio</1>",
 	},
 	fr: {
 		"1w2u0qz": "Bonjour",
@@ -37,8 +38,8 @@ const translations = {
 		"0qy12rf": "Vous avez {count} messages",
 		"1jkmkxh": "{count, plural, =0 {Aucun article} one {# article} other {# articles}}",
 		"0x4ur6n": "{gender, select, male {Il} female {Elle} other {Iel}} a repondu",
-		"1mx4siq": "Cliquez <c0>ici</c0> pour obtenir de l aide",
-		"0ydwi6n": "Lisez notre <c0>Politique de confidentialite</c0> et nos <c1>Conditions d utilisation</c1>",
+		"1fb9e3q": "Cliquez <0>ici</0> pour obtenir de l aide",
+		"0og04vn": "Lisez notre <0>Politique de confidentialite</0> et nos <1>Conditions d utilisation</1>",
 	},
 	// Polish: tests CLDR few (2-4) and many (5+) plural categories
 	pl: {

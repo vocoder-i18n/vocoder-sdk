@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { StringExtractor } from "../utils/extract.js";
 
 describe("StringExtractor", () => {
@@ -691,6 +691,269 @@ describe("StringExtractor", () => {
 			const result = await extractor.extractFromProject(file);
 
 			expect(result).toHaveLength(0);
+		});
+	});
+
+	describe("numeric component placeholders and complex expressions", () => {
+		it("emits <0> numeric format for JSX element children", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
+        import { T } from '@vocoder/react';
+
+        function Component() {
+          return <T>Read <a href="/docs">the docs</a> for help.</T>;
+        }
+      `,
+			);
+
+			const result = await extractor.extractFromProject(file);
+
+			expect(result).toHaveLength(1);
+			expect(result[0]!.text).toBe("Read <0>the docs</0> for help.");
+		});
+
+		it("emits sequential <0> <1> indices for multiple JSX element children", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
+        import { T } from '@vocoder/react';
+
+        function Component() {
+          return <T>See <a href="/privacy">Privacy</a> and <a href="/terms">Terms</a>.</T>;
+        }
+      `,
+			);
+
+			const result = await extractor.extractFromProject(file);
+
+			expect(result).toHaveLength(1);
+			expect(result[0]!.text).toBe("See <0>Privacy</0> and <1>Terms</1>.");
+		});
+
+		it("maps MemberExpression children to positional {0}", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
+        import { T } from '@vocoder/react';
+
+        function Component({ user }: { user: { name: string } }) {
+          return <T>Hello {user.name}!</T>;
+        }
+      `,
+			);
+
+			const result = await extractor.extractFromProject(file);
+
+			expect(result).toHaveLength(1);
+			expect(result[0]!.text).toBe("Hello {0}!");
+		});
+
+		it("maps CallExpression children to positional {0}", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
+        import { T } from '@vocoder/react';
+
+        function Component() {
+          return <T>Value: {Math.random()}</T>;
+        }
+      `,
+			);
+
+			const result = await extractor.extractFromProject(file);
+
+			expect(result).toHaveLength(1);
+			expect(result[0]!.text).toBe("Value: {0}");
+		});
+
+		it("keeps named identifiers named and maps complex expressions positionally", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
+        import { T } from '@vocoder/react';
+
+        function Component({ count, user }: { count: number; user: { name: string } }) {
+          return <T>{count} items by {user.name}</T>;
+        }
+      `,
+			);
+
+			const result = await extractor.extractFromProject(file);
+
+			expect(result).toHaveLength(1);
+			expect(result[0]!.text).toBe("{count} items by {0}");
+		});
+
+		it("handles MemberExpression inside template literal as positional", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
+        import { T } from '@vocoder/react';
+
+        function Component({ user }: { user: { name: string } }) {
+          return <T>{\`Hello \${user.name}\`}</T>;
+        }
+      `,
+			);
+
+			const result = await extractor.extractFromProject(file);
+
+			expect(result).toHaveLength(1);
+			expect(result[0]!.text).toBe("Hello {0}");
+		});
+
+		it("inlines numeric literal children as literal text", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
+        import { T } from '@vocoder/react';
+
+        function Component() {
+          return <T>You have {42} new messages</T>;
+        }
+      `,
+			);
+
+			const result = await extractor.extractFromProject(file);
+
+			expect(result).toHaveLength(1);
+			expect(result[0]!.text).toBe("You have 42 new messages");
+		});
+
+		it("inlines float numeric literal children", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
+        import { T } from '@vocoder/react';
+
+        function Component() {
+          return <T>Price: {3.14}</T>;
+        }
+      `,
+			);
+
+			const result = await extractor.extractFromProject(file);
+
+			expect(result).toHaveLength(1);
+			expect(result[0]!.text).toBe("Price: 3.14");
+		});
+
+		it("skips boolean literal children", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
+        import { T } from '@vocoder/react';
+
+        function Component() {
+          return <T>Active: {true}</T>;
+        }
+      `,
+			);
+
+			const result = await extractor.extractFromProject(file);
+
+			// {true} renders nothing — extracted text is just the surrounding literal
+			expect(result).toHaveLength(1);
+			expect(result[0]!.text).toBe("Active:");
+		});
+
+		it("skips null literal children", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
+        import { T } from '@vocoder/react';
+
+        function Component() {
+          return <T>Hello {null} world</T>;
+        }
+      `,
+			);
+
+			const result = await extractor.extractFromProject(file);
+
+			expect(result).toHaveLength(1);
+			expect(result[0]!.text).toBe("Hello  world");
+		});
+
+		it("bails on conditional expression — T not transformed", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
+        import { T } from '@vocoder/react';
+
+        function Component({ isNew }: { isNew: boolean }) {
+          return <T>{isNew ? 'New' : 'Old'} item</T>;
+        }
+      `,
+			);
+
+			// Suppress expected warning
+			const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+			const result = await extractor.extractFromProject(file);
+			warn.mockRestore();
+
+			// Conditional expression = untranslatable unit; extractor skips the element
+			expect(result).toHaveLength(0);
+		});
+
+		it("bails on logical AND expression — T not transformed", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
+        import { T } from '@vocoder/react';
+
+        function Component({ show }: { show: boolean }) {
+          return <T>Status: {show && 'visible'}</T>;
+        }
+      `,
+			);
+
+			const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+			const result = await extractor.extractFromProject(file);
+			warn.mockRestore();
+
+			expect(result).toHaveLength(0);
+		});
+
+		it("bails on logical AND with JSX — T not transformed", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
+        import { T } from '@vocoder/react';
+
+        function Component({ show }: { show: boolean }) {
+          return <T>Hello {show && <strong>world</strong>}</T>;
+        }
+      `,
+			);
+
+			const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+			const result = await extractor.extractFromProject(file);
+			warn.mockRestore();
+
+			expect(result).toHaveLength(0);
+		});
+
+		it("bails on nested <T> inside <T> — outer not transformed, inner extracted independently", async () => {
+			const file = createTestFile(
+				"test.tsx",
+				`
+        import { T } from '@vocoder/react';
+
+        function Component() {
+          return <T>Hello <T>world</T></T>;
+        }
+      `,
+			);
+
+			const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+			const result = await extractor.extractFromProject(file);
+			warn.mockRestore();
+
+			// Outer T bails; inner T extracts independently as "world"
+			expect(result).toHaveLength(1);
+			expect(result[0]!.text).toBe("world");
 		});
 	});
 });

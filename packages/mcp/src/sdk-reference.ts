@@ -40,7 +40,7 @@ export const SDK_REFERENCE = JSON.stringify(
 				formality:
 					"'formal' | 'informal' | 'auto' — translation formality level.",
 				components:
-					"ReactElement[] — rich text inline elements. Maps to <c0>, <c1> placeholders. Plugin injects automatically for natural JSX syntax.",
+					"ComponentSlot[] | Record<number, ComponentSlot> — rich text inline elements. Each slot maps to a numeric <0>, <1> placeholder. A slot is either a ReactElement (children injected via cloneElement) or a render function (children: ReactNode) => ReactNode. Plugin injects automatically for natural JSX syntax.",
 			},
 		},
 
@@ -103,7 +103,7 @@ export const SDK_REFERENCE = JSON.stringify(
 			richText:
 				"<T>Read <a href=\"/docs\">the docs</a> for more.</T>",
 			richTextExplicit:
-				'<T message="Read <c0>the docs</c0> for more." components={[<a href="/docs" />]} />',
+				'<T message="Read <0>the docs</0> for more." components={[<a href="/docs" />]} />',
 			tFunction: "t('Delete {count} files?', { count })",
 			currency: '<T value={price} format="currency" currency="USD" />',
 			dateFormat: '<T value={new Date()} format="date" dateStyle="long" />',

@@ -99,42 +99,121 @@ export function buildSelectICU(props: Record<string, string>): string {
 }
 
 /**
- * Extract the template text from JSX children, preserving {identifier} placeholders.
- * Handles JSXText, JSXExpressionContainer (Identifier, StringLiteral, TemplateLiteral),
- * and JSX element children (mapped to numeric <c0>, <c1> component placeholders).
+ * Mutable context threaded through extractTextContentFromNodes.
+ *
+ * elementCount      — tracks which numeric index the next JSX element child gets (<0>, <1>, …).
+ * complexCount      — tracks which positional index the next complex expression gets ({0}, {1}, …).
+ * namedVars         — all simple identifier names found (e.g. `{count}` → "count").
+ * complexExprs      — source positions of complex expressions mapped to their positional key.
+ *                     Used by transformMsgProps to reconstruct the values prop verbatim from source.
+ * bail              — set to true when an unsupported expression is detected (nested <T>,
+ *                     conditional/logical inside template literal). Caller must abort extraction.
+ * tComponentNames   — names the T component is imported as; used to detect nested <T> elements.
+ */
+interface ExtractContext {
+	elementCount: number;
+	complexCount: number;
+	namedVars: Set<string>;
+	complexExprs: Array<{ key: number; start: number; end: number }>;
+	bail: boolean;
+	tComponentNames: Set<string>;
+}
+
+/**
+ * Recursively extracts ICU template text from JSX children.
+ *
+ * - JSXText                  → literal text
+ * - {identifier}             → named ICU arg `{name}` (added to ctx.namedVars)
+ * - {42} / {3.14}            → inlined as literal string (not a placeholder)
+ * - {true} / {false} / {null}→ skipped (render nothing meaningful)
+ * - {user.name} / {call()}   → positional arg `{0}` (added to ctx.complexExprs)
+ * - {a ? b : c} / {a && b}   → sets ctx.bail = true (caller must abort — use plural/select instead)
+ * - "string literal"         → inline literal value
+ * - `template ${count}`      → quasis as-is; Identifier expressions named, others positional
+ * - <JSXElement>text</JSXElement> → `<N>text</N>` (numeric tag; preprocessor normalises to
+ *                               `<cN>` before ICU parse, restores after translation)
+ * - <T>...</T>               → sets ctx.bail = true (outer T bails; inner T extracts independently)
  */
 function extractTextContentFromNodes(
 	children: any[],
-	elementIndex: { count: number } = { count: 0 },
+	ctx: ExtractContext,
 ): string {
 	let text = "";
 
 	for (const child of children) {
+		if (ctx.bail) return text;
+
 		if (child.type === "JSXText") {
 			text += child.value;
 		} else if (child.type === "JSXExpressionContainer") {
 			const expr = child.expression;
 			if (expr.type === "Identifier") {
+				ctx.namedVars.add(expr.name);
 				text += `{${expr.name}}`;
 			} else if (expr.type === "StringLiteral") {
 				text += expr.value;
+			} else if (expr.type === "NumericLiteral") {
+				text += String(expr.value);
+			} else if (expr.type === "BooleanLiteral" || expr.type === "NullLiteral") {
+				// skip — not translation content
 			} else if (expr.type === "TemplateLiteral") {
 				for (let i = 0; i < expr.quasis.length; i++) {
 					text += expr.quasis[i].value.raw;
 					if (i < expr.expressions.length) {
 						const e = expr.expressions[i];
-						text += e.type === "Identifier" ? `{${e.name}}` : "{value}";
+						if (e.type === "Identifier") {
+							ctx.namedVars.add(e.name);
+							text += `{${e.name}}`;
+						} else if (e.type === "NumericLiteral") {
+							text += String(e.value);
+						} else if (e.type === "BooleanLiteral" || e.type === "NullLiteral") {
+							// skip
+						} else if (
+							e.type === "ConditionalExpression" ||
+							e.type === "LogicalExpression"
+						) {
+							// Conditional inside template literal — untranslatable.
+							ctx.bail = true;
+							return text;
+						} else {
+							// Complex expression inside template literal — positional placeholder.
+							const key = ctx.complexCount++;
+							ctx.complexExprs.push({ key, start: e.start, end: e.end });
+							text += `{${key}}`;
+						}
 					}
 				}
+			} else if (
+				expr.type === "ConditionalExpression" ||
+				expr.type === "LogicalExpression"
+			) {
+				// Untranslatable — a conditional produces different strings depending on runtime state.
+				ctx.bail = true;
+				return text;
+			} else {
+				// Complex expression (MemberExpression, CallExpression, etc.) — positional placeholder.
+				// Catalog stays stable if the expression is renamed or refactored.
+				const key = ctx.complexCount++;
+				ctx.complexExprs.push({ key, start: expr.start, end: expr.end });
+				text += `{${key}}`;
 			}
 		} else if (child.type === "JSXElement") {
-			const idx = elementIndex.count++;
+			const childTagName =
+				child.openingElement.name.type === "JSXIdentifier"
+					? child.openingElement.name.name
+					: null;
+			if (childTagName && ctx.tComponentNames.has(childTagName)) {
+				// Nested T — outer T bails; inner T is extracted independently by the traversal.
+				ctx.bail = true;
+				return text;
+			}
+			const idx = ctx.elementCount++;
 			const isSelfClosing = child.openingElement.selfClosing;
 			if (isSelfClosing) {
-				text += `<c${idx}/>`;
+				text += `<${idx}/>`;
 			} else {
-				const innerText = extractTextContentFromNodes(child.children, elementIndex);
-				text += `<c${idx}>${innerText}</c${idx}>`;
+				const innerText = extractTextContentFromNodes(child.children, ctx);
+				text += `<${idx}>${innerText}</${idx}>`;
 			}
 		}
 	}
@@ -229,33 +308,32 @@ export function transformMsgProps(code: string): TransformResult {
 			});
 			if (hasPluralSelectProps) return;
 
-			// Warn about ternary children — can't extract a meaningful template
-			const hasTernary = path.node.children.some(
+			// Bail early on conditional/logical direct children — untranslatable as a unit.
+			const hasBailingExpr = path.node.children.some(
 				(child: any) =>
 					child.type === "JSXExpressionContainer" &&
-					child.expression.type === "ConditionalExpression",
+					(child.expression.type === "ConditionalExpression" ||
+						child.expression.type === "LogicalExpression"),
 			);
-			if (hasTernary) {
+			if (hasBailingExpr) {
 				const line = path.node.loc?.start.line ?? "?";
 				console.warn(
-					`[vocoder] Ternary in <T> children at line ${line} — move ternary outside: {cond ? <T>...</T> : <T>...</T>}`,
+					`[vocoder] Conditional/logical expression in <T> at line ${line} — extract outside: {cond ? <T>A</T> : <T>B</T>}`,
 				);
 				return;
 			}
 
-			// Collect identifier names from JSX expression children
-			const identifiers = new Set<string>();
-			// Collect JSX element children for component placeholder injection
-			interface ElementInfo { openingStart: number; openingEnd: number; selfClosing: boolean; }
+			// Collect top-level JSX element positions for the components prop.
+			// Only top-level children are included — nested elements inside a parent
+			// JSX element are bundled inside the parent's rendered output.
+			interface ElementInfo {
+				openingStart: number;
+				openingEnd: number;
+				selfClosing: boolean;
+			}
 			const jsxElements: ElementInfo[] = [];
-
 			for (const child of path.node.children) {
-				if (
-					child.type === "JSXExpressionContainer" &&
-					child.expression.type === "Identifier"
-				) {
-					identifiers.add(child.expression.name);
-				} else if (child.type === "JSXElement") {
+				if (child.type === "JSXElement") {
 					jsxElements.push({
 						openingStart: child.openingElement.start,
 						openingEnd: child.openingElement.end,
@@ -264,12 +342,27 @@ export function transformMsgProps(code: string): TransformResult {
 				}
 			}
 
-			// Nothing dynamic to inject — skip
-			if (identifiers.size === 0 && jsxElements.length === 0) return;
-
-			const elementIndex = { count: 0 };
-			const template = extractTextContentFromNodes(path.node.children, elementIndex).trim();
+			// Extract template text and collect named/complex variable metadata.
+			const ctx: ExtractContext = {
+				elementCount: 0,
+				complexCount: 0,
+				namedVars: new Set(),
+				complexExprs: [],
+				bail: false,
+				tComponentNames,
+			};
+			const template = extractTextContentFromNodes(path.node.children, ctx).trim();
+			if (ctx.bail) {
+				const line = path.node.loc?.start.line ?? "?";
+				console.warn(
+					`[vocoder] Unsupported expression in <T> at line ${line} — could not extract template.`,
+				);
+				return;
+			}
 			if (!template) return;
+
+			// Nothing dynamic to inject — skip static-only strings (runtime extractText handles them).
+			if (ctx.namedVars.size === 0 && jsxElements.length === 0 && ctx.complexExprs.length === 0) return;
 
 			const escaped = template.replace(/"/g, "&quot;");
 			const hash = generateMessageHash(template);
@@ -277,18 +370,27 @@ export function transformMsgProps(code: string): TransformResult {
 			// Build insertion text: id, message, optional values, optional components
 			let insertText = ` id="${hash}" message="${escaped}"`;
 
-			if (identifiers.size > 0) {
-				insertText += ` values={{ ${[...identifiers].join(", ")} }}`;
+			// Named vars use shorthand { count, name }; complex exprs use positional { 0: user.name }.
+			const valuesParts: string[] = [
+				...[...ctx.namedVars],
+				...ctx.complexExprs.map(
+					({ key, start, end }) => `${key}: ${code.slice(start, end)}`,
+				),
+			];
+			if (valuesParts.length > 0) {
+				insertText += ` values={{ ${valuesParts.join(", ")} }}`;
 			}
 
 			if (jsxElements.length > 0) {
 				// Reconstruct each JSX element as self-closing using source positions
-				const componentParts = jsxElements.map(({ openingStart, openingEnd, selfClosing }) => {
-					const openingTag = code.slice(openingStart, openingEnd);
-					if (selfClosing) return openingTag;
-					// Strip trailing > and make self-closing
-					return openingTag.slice(0, -1).trimEnd() + " />";
-				});
+				const componentParts = jsxElements.map(
+					({ openingStart, openingEnd, selfClosing }) => {
+						const openingTag = code.slice(openingStart, openingEnd);
+						if (selfClosing) return openingTag;
+						// Strip trailing > and make self-closing
+						return openingTag.slice(0, -1).trimEnd() + " />";
+					},
+				);
 				insertText += ` components={[${componentParts.join(", ")}]}`;
 			}
 
@@ -643,7 +745,16 @@ function _extractFromContent(
 						if (pluralSelectICU) {
 							text = pluralSelectICU;
 						} else {
-							text = extractTextContentFromNodes(path.node.children, { count: 0 });
+							const extractCtx = {
+								elementCount: 0,
+								complexCount: 0,
+								namedVars: new Set<string>(),
+								complexExprs: [] as Array<{ key: number; start: number; end: number }>,
+								bail: false,
+								tComponentNames: new Set(vocoderImports.keys()),
+							};
+							text = extractTextContentFromNodes(path.node.children, extractCtx);
+							if (extractCtx.bail) return;
 						}
 					}
 

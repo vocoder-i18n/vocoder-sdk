@@ -103,6 +103,20 @@ export type FormatMode =
 	| "time"
 	| "datetime";
 
+/**
+ * A slot in a rich-text message. Either a React element (children injected via cloneElement)
+ * or a render function that receives the translated inner content as ReactNode.
+ *
+ * @example React element slot:
+ *   <0>the docs</0> + <a href="/docs" /> → <a href="/docs">the docs</a>
+ *
+ * @example Function slot:
+ *   <0>click here</0> + (children) => <strong>{children}</strong> → <strong>click here</strong>
+ */
+export type ComponentSlot =
+	| React.ReactElement
+	| ((children: React.ReactNode) => React.ReactNode);
+
 export interface TProps {
 	/** Optional stable translation key. When provided, used as lookup key instead of message text. */
 	id?: string;
@@ -155,16 +169,27 @@ export interface TProps {
 	/** Optional formality level */
 	formality?: "formal" | "informal" | "auto";
 	/**
-	 * Component elements for rich-text messages. Each element maps to a `<cN>` placeholder
-	 * by array index. Injected automatically by @vocoder/plugin for natural JSX syntax.
+	 * Component slots for rich-text messages. Each slot maps to a numeric `<N>` placeholder
+	 * by index. Accepts an array or a sparse object (useful when skipping indices).
+	 *
+	 * A slot can be a React element (children injected via cloneElement) or a render
+	 * function that receives the translated inner content as ReactNode.
+	 *
+	 * Injected automatically by @vocoder/plugin for natural JSX syntax.
 	 * @example
 	 * // Natural syntax (plugin injects components automatically):
 	 * <T>Read <a href="/docs">the docs</a> for help.</T>
 	 *
-	 * // Explicit form:
-	 * <T message="Read <c0>the docs</c0> for help." components={[<a href="/docs" />]} />
+	 * // Explicit array form:
+	 * <T message="Read <0>the docs</0> for help." components={[<a href="/docs" />]} />
+	 *
+	 * // Function slot (render prop):
+	 * <T message="<0>Click here</0>" components={[(children) => <strong>{children}</strong>]} />
+	 *
+	 * // Sparse object form:
+	 * <T message="<0>A</0> and <2>B</2>" components={{ 0: <em />, 2: <strong /> }} />
 	 */
-	components?: React.ReactElement[];
+	components?: ComponentSlot[] | Record<number, ComponentSlot>;
 	/**
 	 * CLDR plural categories — triggers plural mode when present alongside `value`.
 	 * Use # as placeholder for the formatted number.

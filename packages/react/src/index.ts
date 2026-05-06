@@ -8,6 +8,7 @@ export { T } from "./T";
 export { ordinal, t } from "./translate";
 // Type exports
 export type {
+	ComponentSlot,
 	FormatMode,
 	LocaleInfo,
 	LocaleSelectorProps,

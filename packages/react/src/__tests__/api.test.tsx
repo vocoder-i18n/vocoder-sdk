@@ -288,15 +288,15 @@ describe("Q4 — select", () => {
 });
 
 // ─── Q5: Rich text / component placeholders ─────────────────────────────────
-// components prop accepts ReactElement[]. Index maps to <cN> in the message.
-// Natural JSX syntax handled by build plugin — explicit form always valid.
+// components prop accepts ComponentSlot[] | Record<number, ComponentSlot>.
+// Numeric <N> placeholder format (Lingui style). Build plugin injects automatically.
 
 describe("Q5 — rich text", () => {
 	it("renders single component placeholder", async () => {
 		render(
 			<VocoderProvider>
 				<T
-					message="Click <c0>here</c0> for help"
+					message="Click <0>here</0> for help"
 					components={[<a href="/help" />]}
 				/>
 			</VocoderProvider>,
@@ -313,7 +313,7 @@ describe("Q5 — rich text", () => {
 		render(
 			<VocoderProvider>
 				<T
-					message="Click <c0>here</c0> for help"
+					message="Click <0>here</0> for help"
 					components={[<a href="/ayuda" />]}
 				/>
 			</VocoderProvider>,
@@ -328,7 +328,7 @@ describe("Q5 — rich text", () => {
 		render(
 			<VocoderProvider>
 				<T
-					message="Read our <c0>Privacy Policy</c0> and <c1>Terms of Service</c1>"
+					message="Read our <0>Privacy Policy</0> and <1>Terms of Service</1>"
 					components={[<a href="/privacy" />, <a href="/terms" />]}
 				/>
 			</VocoderProvider>,
@@ -343,7 +343,7 @@ describe("Q5 — rich text", () => {
 		render(
 			<VocoderProvider>
 				<T
-					message="Hello {name}, read <c0>the docs</c0>."
+					message="Hello {name}, read <0>the docs</0>."
 					values={{ name: "John" }}
 					components={[<a href="/docs" />]}
 				/>
@@ -359,7 +359,7 @@ describe("Q5 — rich text", () => {
 		render(
 			<VocoderProvider>
 				<T
-					message="Upload complete <c0/>"
+					message="Upload complete <0/>"
 					components={[<span data-testid="icon" />]}
 				/>
 			</VocoderProvider>,
@@ -373,7 +373,7 @@ describe("Q5 — rich text", () => {
 		render(
 			<VocoderProvider>
 				<T
-					message="Read <c0>our <c1>docs</c1> now</c0>"
+					message="Read <0>our <1>docs</1> now</0>"
 					components={[<a href="/docs" />, <strong />]}
 				/>
 			</VocoderProvider>,
@@ -383,6 +383,51 @@ describe("Q5 — rich text", () => {
 			expect(link).toHaveAttribute("href", "/docs");
 			expect(link.querySelector("strong")).toBeInTheDocument();
 			expect(screen.getByText("docs")).toBeInTheDocument();
+		});
+	});
+
+	it("renders function slot", async () => {
+		render(
+			<VocoderProvider>
+				<T
+					message="<0>Click here</0>"
+					components={[(children) => <strong data-testid="fn">{children}</strong>]}
+				/>
+			</VocoderProvider>,
+		);
+		await waitFor(() => {
+			const el = screen.getByTestId("fn");
+			expect(el.tagName).toBe("STRONG");
+			expect(el.textContent).toBe("Click here");
+		});
+	});
+
+	it("renders sparse object form for components", async () => {
+		render(
+			<VocoderProvider>
+				<T
+					message="<0>A</0> and <2>B</2>"
+					components={{ 0: <em data-testid="s0" />, 2: <strong data-testid="s2" /> }}
+				/>
+			</VocoderProvider>,
+		);
+		await waitFor(() => {
+			expect(screen.getByTestId("s0").tagName).toBe("EM");
+			expect(screen.getByTestId("s2").tagName).toBe("STRONG");
+		});
+	});
+
+	it("promotes React element in values prop to a component slot", async () => {
+		render(
+			<VocoderProvider>
+				<T
+					message="Click {icon} to continue"
+					values={{ icon: <span data-testid="icon-val">★</span> }}
+				/>
+			</VocoderProvider>,
+		);
+		await waitFor(() => {
+			expect(screen.getByTestId("icon-val").textContent).toBe("★");
 		});
 	});
 });
