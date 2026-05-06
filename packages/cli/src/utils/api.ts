@@ -13,6 +13,23 @@ import type {
 	TranslationStringEntry,
 } from "../types.js";
 
+/**
+ * Mirrors StringsHashInput and computeStringsHash in vocoder-app/lib/sync/strings-hash.ts.
+ * Both must use the identical type shape and serialization — if you change one, change the other.
+ */
+type StringsHashInput = {
+	texts: string[];
+	appIndustry?: string | null;
+};
+
+function computeStringsHash(input: StringsHashInput): string {
+	const { createHash } = require("node:crypto") as typeof import("node:crypto");
+	const sorted = [...input.texts].sort();
+	return createHash("sha256")
+		.update(JSON.stringify({ strings: sorted, appIndustry: input.appIndustry ?? null }))
+		.digest("hex");
+}
+
 function isLimitErrorResponse(value: unknown): value is LimitErrorResponse {
 	if (!value || typeof value !== "object") {
 		return false;
@@ -263,13 +280,7 @@ export class VocoderAPI {
 		const stringEntries = this.normalizeStringEntries(entries);
 		const strings = stringEntries.map((entry) => entry.text);
 
-		// Compute hash of sorted strings for fast comparison
-		const crypto = await import("node:crypto");
-		const sortedStrings = [...strings].sort();
-		const stringsHash = crypto
-			.createHash("sha256")
-			.update(JSON.stringify(sortedStrings))
-			.digest("hex");
+		const stringsHash = computeStringsHash({ texts: strings, appIndustry: options?.appIndustry ?? null });
 
 		return this.request<TranslationBatchResponse>(
 			"/api/cli/sync",

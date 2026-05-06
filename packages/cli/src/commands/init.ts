@@ -470,59 +470,103 @@ async function runAuthFlow(
 	let callbackOrganizationId: string | undefined;
 	let callbackDiscoveryReady = false;
 
-	if (server) {
-		// Fast path: wait for the localhost callback
-		try {
-			const deadline = Math.min(expiresAt, Date.now() + 10 * 60 * 1000);
-			const timeoutMs = deadline - Date.now();
-			const params = await Promise.race([
-				server.waitForCallback(),
-				new Promise<null>((resolve) =>
-					setTimeout(() => resolve(null), timeoutMs),
-				),
-			]);
+	const deadline = Math.min(expiresAt, Date.now() + 10 * 60 * 1000);
+	let stopPolling = false;
 
-			if (params && typeof params.token === "string") {
-				rawToken = params.token;
-				if (
-					typeof params.organizationId === "string" &&
-					params.organizationId
-				) {
-					callbackOrganizationId = params.organizationId;
+	// Local server future — null if no server or on error
+	const serverCallback: Promise<Record<string, string> | null> = server
+		? server.waitForCallback().catch(() => null)
+		: Promise.resolve(null);
+
+	// Polling runs concurrently with the server wait so a missed local-server
+	// callback (browser blocked fetch, mixed-content, port conflict) doesn't
+	// block for the full server timeout before the CLI gets the token.
+	const sessionPoll = (async () => {
+		while (!stopPolling && Date.now() < expiresAt) {
+			try {
+				const result = await api.pollCliAuthSession(session.sessionId);
+				if (result.status === "complete" || result.status === "failed") {
+					return result;
 				}
-				// Link flow: callback signals discovery results are cached
-				if (params.discovery_ready === "1") {
-					callbackDiscoveryReady = true;
-				}
+			} catch {
+				// transient network error — keep trying
 			}
-		} catch {
-			// Fall through to polling
-		} finally {
-			server.close();
+			if (!stopPolling) await sleep(2000);
 		}
-	}
+		return null;
+	})();
 
-	if (!rawToken) {
-		// Polling fallback
-		while (Date.now() < expiresAt) {
-			const result = await api.pollCliAuthSession(session.sessionId);
+	// Three-way race: local server, polling, hard deadline
+	const winner = await new Promise<
+		| { kind: "server"; params: Record<string, string> }
+		| {
+				kind: "poll";
+				result:
+					| { status: "complete"; token: string; organizationId?: string }
+					| { status: "failed"; reason: string };
+		  }
+		| null
+	>((resolve) => {
+		let done = false;
 
-			if (result.status === "complete") {
-				rawToken = result.token;
-				if (result.organizationId) {
-					callbackOrganizationId = result.organizationId;
+		serverCallback
+			.then((params) => {
+				if (done || params === null || typeof params.token !== "string") return;
+				done = true;
+				resolve({ kind: "server", params });
+			})
+			.catch(() => {});
+
+		sessionPoll
+			.then((result) => {
+				if (done || result === null) return;
+				if (result.status === "complete" || result.status === "failed") {
+					done = true;
+					resolve({
+						kind: "poll",
+						result: result as
+							| { status: "complete"; token: string; organizationId?: string }
+							| { status: "failed"; reason: string },
+					});
 				}
-				break;
-			}
+			})
+			.catch(() => {});
 
-			if (result.status === "failed") {
-				authSpinner.stop();
-				p.log.error(result.reason);
-				return null;
-			}
+		setTimeout(
+			() => {
+				if (!done) {
+					done = true;
+					resolve(null);
+				}
+			},
+			Math.max(0, deadline - Date.now()),
+		);
+	});
 
-			// Still pending — wait 2s before next poll
-			await sleep(2000);
+	stopPolling = true;
+	server?.close();
+
+	if (winner !== null) {
+		if (winner.kind === "server") {
+			rawToken = winner.params.token;
+			if (
+				typeof winner.params.organizationId === "string" &&
+				winner.params.organizationId
+			) {
+				callbackOrganizationId = winner.params.organizationId;
+			}
+			if (winner.params.discovery_ready === "1") {
+				callbackDiscoveryReady = true;
+			}
+		} else if (winner.result.status === "complete") {
+			rawToken = winner.result.token;
+			if (winner.result.organizationId) {
+				callbackOrganizationId = winner.result.organizationId;
+			}
+		} else {
+			authSpinner.stop();
+			p.log.error(winner.result.reason);
+			return null;
 		}
 	}
 
