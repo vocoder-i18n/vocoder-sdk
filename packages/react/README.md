@@ -1,6 +1,6 @@
 # @vocoder/react
 
-React components and hooks for Vocoder internationalization. Provides the `<T>` component for translating JSX, the `t()` function for translating plain strings, and a provider that manages locale state with SSR hydration support.
+React components and hooks for the Vocoder i18n platform. Provides `<T>` for translating JSX, `t()` for plain strings, and a provider that manages locale state with SSR support.
 
 ## Installation
 
@@ -8,197 +8,19 @@ React components and hooks for Vocoder internationalization. Provides the `<T>` 
 npm install @vocoder/react
 ```
 
-Requires React 18+.
+Requires React 18+. Pair with [`@vocoder/plugin`](../plugin) to enable build-time extraction and translation loading.
+
+---
 
 ## Setup
 
-Wrap your app with `VocoderProvider`:
+### SPA (Vite, Create React App, etc.)
+
+Call `initializeVocoder()` before the first render to avoid a flash of untranslated content, then wrap your app:
 
 ```tsx
-import { VocoderProvider } from '@vocoder/react';
-
-function App() {
-  return (
-    <VocoderProvider>
-      {/* your app */}
-    </VocoderProvider>
-  );
-}
-```
-
-The provider loads translations from virtual modules injected by [`@vocoder/plugin`](../plugin) at build time. If the unplugin is not installed, source text is rendered as-is.
-
-## Translating Strings
-
-### The `<T>` Component
-
-Use `<T>` to mark JSX content for translation:
-
-```tsx
-import { T } from '@vocoder/react';
-
-// Simple text
-<T>Hello, world!</T>
-
-// Variable interpolation — always use the values prop
-<T message="Hello, {name}!" values={{ name: user.name }} />
-
-// ICU MessageFormat (pluralization)
-<T message="{count, plural, one {# item} other {# items}}" values={{ count: items.length }} />
-
-// Rich text with component placeholders
-<T components={{ link: <a href="/help" /> }}>
-  Click <link>here</link> for help
-</T>
-```
-
-#### Props
-
-| Prop | Type | Description |
-|---|---|---|
-| `children` | `ReactNode` | Source text (also used as the translation key) |
-| `message` | `string` | Alternative to children for ICU strings. Takes precedence over children. |
-| `id` | `string` | Optional stable key for extraction/sync identity |
-| `context` | `string` | Disambiguation context for identical source text |
-| `formality` | `'formal' \| 'informal' \| 'auto'` | Formality level hint for translators |
-| `components` | `Record<string, ReactElement>` | Component placeholders for rich text |
-| `[key: string]` | `any` | Variable values for interpolation |
-
-### The `t()` Function
-
-Use `t()` for translations outside of JSX (utilities, services, constants):
-
-```ts
-import { t } from '@vocoder/react';
-
-// Simple
-const greeting = t('Hello, world!');
-
-// Variable interpolation
-const message = t('Hello, {name}!', { name: 'John' });
-
-// ICU pluralization
-const items = t('{count, plural, one {# item} other {# items}}', { count: 5 });
-
-// With options
-const label = t('Save', {}, { context: 'button' });
-const formal = t('Hello, {name}!', { name }, { formality: 'formal' });
-const byKey = t('', {}, { id: 'welcome_banner' }); // skip hashing, look up by stable key
-```
-
-#### Options
-
-| Option | Type | Description |
-|---|---|---|
-| `context` | `string` | Disambiguation context — must match the `context` prop used on the corresponding `<T>` |
-| `formality` | `'formal' \| 'informal' \| 'auto'` | Formality hint for translation |
-| `id` | `string` | Stable lookup key — skips hashing the source text entirely |
-
-`t()` uses global state synced by `VocoderProvider`. Make sure the provider is mounted before calling it. Rich text with components is only supported in `<T>`, not in `t()`.
-
-### The `useVocoder` Hook
-
-Access locale state and translation utilities in components:
-
-```tsx
-import { useVocoder } from '@vocoder/react';
-
-function MyComponent() {
-  const {
-    locale,            // Current locale code (e.g., 'es')
-    setLocale,         // Switch locale: await setLocale('fr')
-    availableLocales,  // Array of available locale codes
-    locales,           // Locale metadata (nativeName, dir)
-    isReady,           // True when translations are loaded
-    t,                 // Raw key → translated string (internal use; prefer the t() export)
-    hasTranslation,    // Check if a translation exists
-    getDisplayName,    // Get translated locale name
-  } = useVocoder();
-
-  return (
-    <select
-      value={locale}
-      onChange={(e) => setLocale(e.target.value)}
-    >
-      {availableLocales.map((code) => (
-        <option key={code} value={code}>
-          {getDisplayName(code)}
-        </option>
-      ))}
-    </select>
-  );
-}
-```
-
-## Locale Selector
-
-A pre-built locale switcher is available as a separate entry point (to avoid bundling Radix UI unless needed):
-
-```tsx
-import { LocaleSelector } from '@vocoder/react/locale-selector';
-
-// Floating selector with position control
-<LocaleSelector position="bottom-right" />
-
-// Custom styling
-<LocaleSelector
-  position="top-right"
-  background="#1a1a1a"
-  color="#ffffff"
-  iconSize={20}
-  sortBy="native"
-/>
-```
-
-Requires `@radix-ui/react-dropdown-menu` and `lucide-react` as optional peer dependencies:
-
-```bash
-npm install @radix-ui/react-dropdown-menu lucide-react
-```
-
-### Props
-
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `position` | `'top-left' \| 'top-right' \| 'bottom-left' \| 'bottom-right'` | -- | Screen position |
-| `background` | `string` | -- | Background color |
-| `color` | `string` | -- | Text color |
-| `className` | `string` | -- | Additional CSS class |
-| `iconSize` | `number` | -- | Globe icon size in pixels |
-| `locales` | `LocalesMap` | -- | Override locale metadata |
-| `sortBy` | `'source' \| 'native' \| 'translated'` | `'source'` | Sort order for dropdown items |
-
-## Server-Side Rendering
-
-`VocoderProvider` supports SSR with hydration. Pass cookies from the request to enable server-side locale detection:
-
-```tsx
-// Next.js App Router
-import { cookies } from 'next/headers';
-
-export default async function RootLayout({ children }) {
-  const cookieStore = await cookies();
-  return (
-    <VocoderProvider cookies={cookieStore.toString()}>
-      {children}
-    </VocoderProvider>
-  );
-}
-```
-
-The provider injects a `<script type="application/json">` tag with the hydration snapshot so the client can render the correct locale on first paint without a flash of the wrong language.
-
-### Locale Persistence
-
-The user's locale preference is persisted across sessions:
-- **Client:** `localStorage` and a `vocoder_locale` cookie
-- **Server:** Reads the `vocoder_locale` cookie from the request headers
-
-## SPA Setup (Vite / Client-Only)
-
-For client-only apps, call `initializeVocoder()` before the first render to avoid a flash of untranslated content:
-
-```tsx
+// main.tsx
+import ReactDOM from 'react-dom/client';
 import { initializeVocoder, VocoderProvider } from '@vocoder/react';
 import { App } from './App';
 
@@ -214,22 +36,491 @@ async function bootstrap() {
 bootstrap();
 ```
 
-## Background Refresh
+### SSR (Next.js App Router)
 
-When `@vocoder/plugin` is installed, the build plugin injects metadata into the bundle. After the initial render, the provider checks the Vocoder API for translations newer than the build timestamp. If found, it updates the in-memory translations and re-renders.
+Pass the request cookies so the server renders the correct locale on the first byte:
 
-This means:
-- Initial page load uses translations baked in at build time (fast)
-- New translations published after the build appear without redeployment (fresh)
+```tsx
+// app/layout.tsx
+import { cookies } from 'next/headers';
+import { VocoderProvider } from '@vocoder/react';
 
-## How Translations Are Loaded
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const cookieStore = await cookies();
+  return (
+    <html>
+      <body>
+        <VocoderProvider cookies={cookieStore.toString()}>
+          {children}
+        </VocoderProvider>
+      </body>
+    </html>
+  );
+}
+```
 
-Translations are delivered as virtual modules by `@vocoder/plugin`:
+The provider injects a hydration snapshot so the client renders the correct locale on first paint without a flash.
 
-- `virtual:vocoder/manifest` -- project config and per-locale dynamic import loaders
-- `virtual:vocoder/translations/{locale}` -- translation map for each locale
+### VocoderProvider props
 
-Each locale is a separate chunk that the bundler code-splits automatically. Only the active locale is loaded; others are fetched on demand when the user switches languages.
+| Prop | Type | Default | Description |
+|---|---|---|---|
+| `children` | `ReactNode` | required | Your app tree |
+| `cookies` | `string` | — | Cookie string from the request (SSR only) |
+| `applyDir` | `boolean` | `true` | Automatically set `dir` and `lang` on `document.documentElement` when locale changes. Enables RTL via CSS (`[dir="rtl"]`, Tailwind `rtl:` variants). |
+
+### Locale persistence
+
+The active locale is stored in `localStorage` and a `vocoder_locale` cookie. On the server, the cookie is read from the `cookies` prop.
+
+---
+
+## The `<T>` Component
+
+`<T>` handles all translation modes: plain text, interpolation, plurals, selects, ordinals, rich text, and locale-aware formatting.
+
+### Natural JSX syntax
+
+Write your content directly as JSX children. `@vocoder/plugin` injects the `message` and `values` props automatically at build time — no manual string management required:
+
+```tsx
+import { T } from '@vocoder/react';
+
+// Static text
+<T>Hello, world!</T>
+
+// Variables — the build plugin injects: message="Hello {name}!" values={{ name }}
+<T>Hello {name}!</T>
+
+// JSX children with components — plugin injects message and components prop
+<T>Read <a href="/docs" className="underline">the docs</a> for help.</T>
+```
+
+### Explicit message prop
+
+Use `message` directly when you need full control over the ICU string:
+
+```tsx
+<T message="Hello, {name}!" values={{ name: user.name }} />
+<T message="{count, plural, one {# item} other {# items}}" values={{ count }} />
+```
+
+---
+
+### Pluralization
+
+Use CLDR plural category props alongside `value`:
+
+```tsx
+// Cardinal plural
+<T value={count} one="# item" other="# items" />
+
+// With zero exact match
+<T value={count} _0="No items" one="# item" other="# items" />
+
+// All CLDR categories (for Polish, Arabic, etc.)
+<T value={count} one="# przedmiot" few="# przedmioty" many="# przedmiotów" other="# przedmiotu" />
+```
+
+**Exact numeric matches** use underscore-prefixed numbers (`_0`, `_1`, `_2`). They map to ICU `=0`, `=1`, `=2`.
+
+**CLDR categories**: `zero`, `one`, `two`, `few`, `many`, `other`. Which categories are active depends on the locale — Vocoder handles this automatically.
+
+### Select (gender, status, etc.)
+
+Use underscore-prefixed word props alongside `value`:
+
+```tsx
+// Gender-based select
+<T value={gender} _male="He replied" _female="She replied" other="They replied" />
+
+// Status select
+<T value={status} _pending="Awaiting review" _approved="Approved" other="Unknown" />
+```
+
+### Ordinals
+
+Rank numbers in the active locale's ordinal style (1st, 2nd, 3rd; 1.º, 2.º; etc.):
+
+```tsx
+<T value={rank} ordinal />
+// en → "1st", "2nd", "3rd"
+// es → "1.º", "2.º"
+// fr → "1er", "2e"
+
+// Word-based ordinals (Arabic, Hebrew) — pass gender for correct inflection
+<T value={rank} ordinal gender="feminine" />
+```
+
+Ordinal forms are defined per locale in the manifest config generated by the CLI.
+
+### Rich text
+
+Wrap inline elements with numeric component placeholders. The build plugin injects these automatically when you use natural JSX syntax.
+
+**Array form** (sequential index, most common):
+
+```tsx
+// Single link
+<T
+  message="Click <0>here</0> to learn more"
+  components={[<a href="/help" />]}
+/>
+
+// Multiple components — index matches order in the array
+<T
+  message="Read our <0>Privacy Policy</0> and <1>Terms of Service</1>"
+  components={[
+    <a href="/privacy" />,
+    <a href="/terms" />,
+  ]}
+/>
+```
+
+**Object form** (sparse indices, useful when skipping slots):
+
+```tsx
+<T
+  message="<0>Bold</0> and <2>italic</2> text"
+  components={{
+    0: <strong />,
+    2: <em />,
+  }}
+/>
+```
+
+**Function slots** — receive translated inner content as `ReactNode`, return `ReactNode`. Use when the wrapper element needs dynamic props derived at render time:
+
+```tsx
+<T
+  message="Terms: <0>I agree</0> to the policy"
+  components={[(children) => (
+    <label className="flex items-center gap-1">
+      <input type="checkbox" />
+      <span>{children}</span>
+    </label>
+  )]}
+/>
+```
+
+**Self-closing components** (icons, images):
+
+```tsx
+<T
+  message="Upload complete <0/>"
+  components={[<CheckIcon className="inline w-4 h-4" />]}
+/>
+```
+
+**Nested components**:
+
+```tsx
+<T
+  message="See <0>our <1>docs</1></0> for details"
+  components={[<a href="/docs" />, <strong />]}
+/>
+```
+
+**React elements in `values`** are auto-promoted to self-closing component slots — no `components` prop needed:
+
+```tsx
+<T
+  message="Rating: {star} — highly recommended"
+  values={{ star: <StarIcon className="inline w-4 h-4 text-yellow-500" /> }}
+/>
+```
+
+---
+
+### Locale-aware formatting
+
+Use the `format` prop to format numbers, currencies, and dates without a translation lookup. The value is formatted using `Intl` APIs for the active locale.
+
+```tsx
+// Numbers
+<T value={1234.56} format="number" />      // "1,234.56" (en), "1.234,56" (de)
+<T value={1234.56} format="integer" />     // "1,235"
+<T value={0.742} format="percent" />       // "74.2%"
+<T value={1234567} format="compact" />     // "1.2M"
+
+// Currency — requires the currency prop (ISO 4217)
+<T value={29.99} format="currency" currency="USD" />   // "$29.99"
+<T value={29.99} format="currency" currency="EUR" />   // "€29,99" (fr)
+
+// Dates
+<T value={new Date()} format="date" dateStyle="long" />      // "May 6, 2025"
+<T value={new Date()} format="time" timeStyle="short" />     // "3:45 PM"
+<T value={new Date()} format="datetime" dateStyle="medium" timeStyle="short" />
+```
+
+Format modes:
+
+| `format` | Description | Relevant props |
+|---|---|---|
+| `number` | Locale decimal number | — |
+| `integer` | Rounded integer | — |
+| `percent` | Percentage | — |
+| `compact` | Compact notation (1.2M, 4.5K) | — |
+| `currency` | Currency symbol + amount | `currency` (required) |
+| `date` | Date only | `dateStyle` (`full` / `long` / `medium` / `short`, default `medium`) |
+| `time` | Time only | `timeStyle` (`full` / `long` / `medium` / `short`, default `short`) |
+| `datetime` | Date and time | `dateStyle`, `timeStyle` |
+
+---
+
+### Context and formality
+
+Use `context` to disambiguate identical source strings with different meanings:
+
+```tsx
+<T context="button">Save</T>
+<T context="noun">Save</T>
+// Same source text, different translations, different catalog keys
+```
+
+Use `formality` to hint at the required register for the translator:
+
+```tsx
+<T formality="formal">Please submit your application.</T>
+<T formality="informal">Go ahead and apply!</T>
+```
+
+Use `id` to supply a stable catalog key that survives source text edits:
+
+```tsx
+<T id="onboarding.welcome">Welcome to the app!</T>
+```
+
+---
+
+### Props reference
+
+| Prop | Type | Description |
+|---|---|---|
+| `children` | `ReactNode` | Source text / fallback content. Also the translation input when no `message` prop is present. |
+| `message` | `string` | ICU message string. Takes precedence over `children` for lookup. |
+| `values` | `Record<string, any>` | Runtime values for `{name}` interpolation. The only supported way to pass variables. |
+| `id` | `string` | Stable catalog key — bypasses content hashing. |
+| `context` | `string` | Disambiguation string. Same source text + different context = different catalog entry. |
+| `formality` | `'formal' \| 'informal' \| 'auto'` | Translation register hint. |
+| `components` | `ComponentSlot[] \| Record<number, ComponentSlot>` | Component slots for `<0>`, `<1>` rich-text placeholders. Each slot is a `ReactElement` or `(children: ReactNode) => ReactNode`. |
+| `value` | `string \| number \| Date` | The value driving plural/select/ordinal selection, or the input to `format`. |
+| `one` `two` `few` `many` `other` | `string` | CLDR plural branches. Activates plural mode when present alongside `value`. Use `#` as the number placeholder. |
+| `_0` `_1` `_2` | `string` | Exact numeric matches in plural mode (ICU `=0`, `=1`, `=2`). |
+| `_male` `_female` `_nonbinary` … | `string` | Select cases. Activates select mode when present without CLDR props. Key after `_` becomes the ICU case. |
+| `ordinal` | `boolean` | Switches to ordinal mode. Formats `value` as a locale-aware ordinal (1st, 2nd, …). |
+| `gender` | `string` | Grammatical gender for word-based ordinal locales (Arabic, Hebrew). |
+| `format` | `FormatMode` | Pure Intl formatting — bypasses translation lookup. |
+| `currency` | `string` | ISO 4217 code required when `format="currency"`. |
+| `dateStyle` | `'full' \| 'long' \| 'medium' \| 'short'` | Date display style. Default `'medium'`. |
+| `timeStyle` | `'full' \| 'long' \| 'medium' \| 'short'` | Time display style. Default `'short'`. |
+
+---
+
+## The `t()` Function
+
+Use `t()` for translations outside JSX — toast messages, `aria-label`, `document.title`, validation errors, etc.
+
+```tsx
+import { t } from '@vocoder/react';
+
+// Simple
+const label = t('Hello, world!');
+
+// With variables
+const greeting = t('Hello, {name}!', { name: user.name });
+
+// ICU plural
+const summary = t('{count, plural, =0 {No items} one {# item} other {# items}}', { count });
+
+// Context disambiguation
+const action = t('Save', {}, { context: 'button' });
+
+// Explicit catalog key
+const banner = t('', {}, { id: 'welcome_banner' });
+```
+
+`t()` uses global state synced by `VocoderProvider`. Call it only after the provider has mounted. Rich text with component slots is not supported — use `<T>` for that.
+
+### Options
+
+| Option | Type | Description |
+|---|---|---|
+| `context` | `string` | Must match the `context` on the corresponding `<T>` |
+| `formality` | `'formal' \| 'informal' \| 'auto'` | Translation register hint |
+| `id` | `string` | Stable lookup key — skips hashing the source text |
+
+---
+
+## The `ordinal()` Function
+
+Format a number as a locale-aware ordinal outside of React components:
+
+```tsx
+import { ordinal } from '@vocoder/react';
+
+ordinal(1)   // "1st" (en), "1.º" (es), "1er" (fr)
+ordinal(2)   // "2nd" (en), "2.º" (es), "2e" (fr)
+ordinal(21)  // "21st" (en), "21.º" (es)
+
+// Word-based locales (Arabic, Hebrew)
+ordinal(1, 'feminine')
+ordinal(1, 'masculine')
+```
+
+Reads ordinal forms from the manifest config for the current locale. Falls back to `String(value)` when forms are unavailable.
+
+---
+
+## The `useVocoder()` Hook
+
+Access locale state and translation utilities in components. Reactive — re-renders when the locale changes.
+
+```tsx
+import { useVocoder } from '@vocoder/react';
+
+function LocaleSwitcher() {
+  const {
+    locale,           // Current locale code: 'en', 'es', 'fr', …
+    setLocale,        // (locale: string) => Promise<void>
+    availableLocales, // string[] — all configured locale codes
+    locales,          // LocalesMap — metadata (nativeName, dir, currencyCode, ordinalForms)
+    isReady,          // true when initial translations are loaded
+    dir,              // 'ltr' | 'rtl' — text direction for the active locale
+    t,                // Reactive translate function — use inside components
+    hasTranslation,   // (text: string) => boolean
+    getDisplayName,   // (targetLocale: string, viewingLocale?: string) => string
+    ordinal,          // (value: number, gender?: string) => string
+  } = useVocoder();
+
+  return (
+    <select value={locale} onChange={(e) => setLocale(e.target.value)}>
+      {availableLocales.map((code) => (
+        <option key={code} value={code}>
+          {getDisplayName(code)} ({locales?.[code]?.nativeName})
+        </option>
+      ))}
+    </select>
+  );
+}
+```
+
+**`t` vs global `t()`**: `useVocoder().t` re-renders automatically when the locale changes and is safe to call during render. The global `t()` export does not subscribe to React and should be used in callbacks, utilities, and non-React contexts.
+
+---
+
+## Locale Selector
+
+A pre-built floating locale switcher, shipped as a separate entry point to avoid bundling Radix UI unless you need it:
+
+```tsx
+import { LocaleSelector } from '@vocoder/react/locale-selector';
+
+// Floating bottom-right selector
+<LocaleSelector position="bottom-right" />
+
+// Custom appearance
+<LocaleSelector
+  position="top-right"
+  background="#1a1a1a"
+  color="#ffffff"
+  iconSize={20}
+  sortBy="native"
+/>
+```
+
+Requires peer dependencies:
+
+```bash
+npm install @radix-ui/react-dropdown-menu lucide-react
+```
+
+### Props
+
+| Prop | Type | Default | Description |
+|---|---|---|---|
+| `position` | `'top-left' \| 'top-right' \| 'bottom-left' \| 'bottom-right'` (or aliases `tl` `tr` `bl` `br`) | — | Fixed position on the screen |
+| `background` | `string` | `light-dark(#1a1a1a, #EFEAE3)` | Button and dropdown background color |
+| `color` | `string` | `light-dark(#EFEAE3, #1a1a1a)` | Button and dropdown text/icon color |
+| `className` | `string` | — | Additional CSS class on the root element |
+| `iconSize` | `number` | — | Globe icon size in pixels |
+| `locales` | `LocalesMap` | — | Override locale metadata (auto-generated by CLI if omitted) |
+| `sortBy` | `'source' \| 'native' \| 'translated'` | `'native'` | Sort order: by English names, native names, or names translated into the viewing locale |
+
+---
+
+## Extractor: what gets extracted
+
+`@vocoder/plugin` transforms `<T>` components at build time to inject `message`, `values`, and `components` props. Understanding what the extractor supports helps you write translatable code correctly.
+
+### What works
+
+| Child expression | Extracted as |
+|---|---|
+| Plain text | Literal text |
+| `{name}` (identifier) | `{name}` ICU placeholder |
+| `` `Hello ${name}` `` (template literal) | `Hello {name}` |
+| `{user.name}` `{getLabel()}` (complex) | `{0}` positional placeholder; value injected automatically |
+| `{42}` (numeric literal) | `"42"` inlined as text |
+| `<a href="/docs">text</a>` (JSX element) | `<0>text</0>` component slot |
+
+### What bails (T is not transformed — warn emitted)
+
+| Pattern | Problem | Correct alternative |
+|---|---|---|
+| `<T>{isNew ? 'New' : 'Old'} item</T>` | Conditional produces different strings — no stable catalog key | `{isNew ? <T>New item</T> : <T>Old item</T>}` |
+| `<T>Status: {flag && 'visible'}</T>` | Logical expression — not a stable unit | `<T>Status:</T> {flag && <T>visible</T>}` |
+| `<T>Hello <T>world</T></T>` | Nested `<T>` — outer bails; inner extracts independently | `<T>Hello</T> <T>world</T>` or use a component slot for styled content |
+
+### Skipped without extraction
+
+| Expression | Reason |
+|---|---|
+| `{true}` `{false}` `{null}` | React renders nothing — no translation content |
+
+---
+
+## How it works
+
+### Virtual modules
+
+Translations are delivered as virtual modules injected by `@vocoder/plugin`:
+
+- `virtual:vocoder/manifest` — project config and per-locale dynamic import loaders
+- `virtual:vocoder/translations/{locale}` — translation map for each locale
+
+Each locale is a separate code-split chunk. Only the active locale is fetched; others load on demand when the user switches.
+
+### Background refresh
+
+After the initial render, the provider compares the bundle's build timestamp against the Vocoder API. If newer translations exist they are applied in-memory without a page reload — no redeploy required for translation-only updates.
+
+### Translation key format
+
+Each message is identified by a 7-character FNV-1a 32-bit hash of the source text (plus context when provided). The build plugin injects these hashes as `id` props at compile time, keeping the network payload small.
+
+---
+
+## TypeScript
+
+All types are exported from `@vocoder/react`:
+
+```ts
+import type {
+  ComponentSlot,       // ReactElement | ((children: ReactNode) => ReactNode)
+  FormatMode,          // 'number' | 'integer' | 'percent' | 'compact' | 'currency' | 'date' | 'time' | 'datetime'
+  LocaleInfo,          // { nativeName, dir?, currencyCode?, ordinalForms? }
+  LocaleSelectorProps,
+  LocalesMap,          // Record<string, LocaleInfo>
+  TOptions,            // { context?, formality?, id? }
+  TProps,
+  TranslationsMap,
+  VocoderContextValue,
+  VocoderProviderProps,
+} from '@vocoder/react';
+```
+
+---
 
 ## License
 
