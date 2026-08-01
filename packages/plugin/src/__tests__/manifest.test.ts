@@ -14,17 +14,17 @@ function createPlugin(options = {}) {
 }
 
 describe("plugin transform", () => {
-	it("skips files that do not import @vocoder/react", () => {
+	it("skips files that do not import @vocoder/react", async () => {
 		const plugin = createPlugin();
-		const result = plugin.transform?.call({} as never, "const x = 1;", "file.tsx");
+		const result = await plugin.transform?.call({} as never, "const x = 1;", "file.tsx");
 		expect(result).toBeNull();
 		expect(transformMsgProps).not.toHaveBeenCalled();
 	});
 
-	it("calls transformMsgProps for files that import @vocoder/react", () => {
+	it("calls transformMsgProps for files that import @vocoder/react", async () => {
 		vi.mocked(transformMsgProps).mockReturnValueOnce({ changed: true, code: "transformed" });
 		const plugin = createPlugin();
-		const result = plugin.transform?.call(
+		const result = await plugin.transform?.call(
 			{} as never,
 			'import { T } from "@vocoder/react"; <T>Hello</T>',
 			"app.tsx",
@@ -33,10 +33,10 @@ describe("plugin transform", () => {
 		expect(result).toEqual({ code: "transformed" });
 	});
 
-	it("returns null when transformMsgProps reports no changes", () => {
+	it("returns null when transformMsgProps reports no changes", async () => {
 		vi.mocked(transformMsgProps).mockReturnValueOnce({ changed: false, code: "" });
 		const plugin = createPlugin();
-		const result = plugin.transform?.call(
+		const result = await plugin.transform?.call(
 			{} as never,
 			'import { T } from "@vocoder/react"; <T>Hello</T>',
 			"app.tsx",
@@ -44,12 +44,12 @@ describe("plugin transform", () => {
 		expect(result).toBeNull();
 	});
 
-	it("returns null when transformMsgProps throws", () => {
+	it("returns null when transformMsgProps throws", async () => {
 		vi.mocked(transformMsgProps).mockImplementationOnce(() => {
 			throw new Error("parse error");
 		});
 		const plugin = createPlugin();
-		const result = plugin.transform?.call(
+		const result = await plugin.transform?.call(
 			{} as never,
 			'import { T } from "@vocoder/react"; <T>Hello</T>',
 			"app.tsx",
