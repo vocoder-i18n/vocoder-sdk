@@ -10,7 +10,7 @@
   },
   "exports": {
     "./lib": {
-      "types": "./dist/lib.d.ts",
+      "types": "./dist/lib.d.mts",
       "import": "./dist/lib.mjs"
     }
   },
