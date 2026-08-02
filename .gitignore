@@ -115,6 +115,7 @@ scripts/
 # Spec Kit scaffolding and generated constitution are reinstalled per machine
 # via `specify init` + ../scripts/sync-constitution.sh.
 # `specs` is a symlink to ../specs/<repo>, so specs live outside this repo.
-.specify/
+.specify/*
+!.specify/scripts/
 .claude/skills/
 /specs
