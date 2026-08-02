@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as p from "@clack/prompts";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { runAuthFlow } from "../utils/auth-flow.js";
 
 vi.mock("@clack/prompts", () => ({
@@ -65,42 +65,56 @@ beforeEach(() => {
 	});
 });
 
+/**
+ * runAuthFlow offers the browser prompt only when
+ * `stdin.isTTY && stdout.isTTY && process.env.CI !== "true"`.
+ * All three must be simulated: on a CI runner `CI=true` skips the prompt and
+ * the flow falls through to session polling, which runs until the session
+ * expires. Restores CI afterwards so later tests see the real environment.
+ */
+function withInteractiveTerminal(): () => void {
+	const previousCI = process.env.CI;
+	process.env.CI = "false";
+	for (const stream of [process.stdin, process.stdout]) {
+		Object.defineProperty(stream, "isTTY", {
+			value: true,
+			configurable: true,
+		});
+	}
+	return () => {
+		if (previousCI === undefined) delete process.env.CI;
+		else process.env.CI = previousCI;
+	};
+}
+
 describe("runAuthFlow", () => {
 	it("returns null when the user cancels the browser confirm prompt", async () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: true,
-			configurable: true,
-		});
-		Object.defineProperty(process.stdout, "isTTY", {
-			value: true,
-			configurable: true,
-		});
+		const restore = withInteractiveTerminal();
+		try {
+			const api = makeApi();
+			const session = makeSession();
+			vi.mocked(p.confirm).mockResolvedValue(CANCEL as unknown as boolean);
 
-		const api = makeApi();
-		const session = makeSession();
-		vi.mocked(p.confirm).mockResolvedValue(CANCEL as unknown as boolean);
-
-		const result = await runAuthFlow(api, { yes: false }, session, false);
-		expect(result).toBeNull();
-		expect(p.cancel).toHaveBeenCalled();
+			const result = await runAuthFlow(api, { yes: false }, session, false);
+			expect(result).toBeNull();
+			expect(p.cancel).toHaveBeenCalled();
+		} finally {
+			restore();
+		}
 	});
 
 	it("returns null when the user declines the browser confirm prompt", async () => {
-		Object.defineProperty(process.stdin, "isTTY", {
-			value: true,
-			configurable: true,
-		});
-		Object.defineProperty(process.stdout, "isTTY", {
-			value: true,
-			configurable: true,
-		});
+		const restore = withInteractiveTerminal();
+		try {
+			const api = makeApi();
+			const session = makeSession();
+			vi.mocked(p.confirm).mockResolvedValue(false);
 
-		const api = makeApi();
-		const session = makeSession();
-		vi.mocked(p.confirm).mockResolvedValue(false);
-
-		const result = await runAuthFlow(api, { yes: false }, session, false);
-		expect(result).toBeNull();
+			const result = await runAuthFlow(api, { yes: false }, session, false);
+			expect(result).toBeNull();
+		} finally {
+			restore();
+		}
 	});
 
 	it("does not send any GitHub-App params to startCliAuthSession", async () => {
@@ -122,9 +136,9 @@ describe("runAuthFlow", () => {
 	});
 
 	it("emits VOCODER_AUTH_URL pointing at the verification URL in CI mode", async () => {
-		const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(
-			() => true,
-		);
+		const writeSpy = vi
+			.spyOn(process.stdout, "write")
+			.mockImplementation(() => true);
 		const session = makeSession();
 		const api = makeApi({
 			pollCliAuthSession: vi.fn().mockResolvedValue({
