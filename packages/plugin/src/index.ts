@@ -6,7 +6,7 @@ import { transformMsgProps } from "@vocoder/extractor";
 
 export type { VocoderPluginOptions };
 
-export const unplugin = createUnplugin(
+export const unplugin = createUnplugin<VocoderPluginOptions, false>(
 	(options: VocoderPluginOptions = {}) => {
 		loadEnvFile();
 
