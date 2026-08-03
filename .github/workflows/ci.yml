@@ -17,6 +17,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history, not the default shallow clone: scripts/verify.sh
+          # diffs the disclosure scan against the PR's merge base, and a
+          # shallow clone has no merge base to diff against. 169 commits /
+          # 18 MB today — full history costs almost nothing here
+          # (research.md R5).
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
 
@@ -28,11 +35,11 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      - name: Lint
-        run: pnpm run lint
-
-      # Build before test: @vocoder/mcp imports @vocoder/cli/lib from dist,
-      # so its suites fail to load unless the CLI has been built.
+      # Build before the gate's own build step below runs everything else:
+      # @vocoder/mcp imports @vocoder/cli/lib from dist, so its suites fail
+      # to load unless the CLI has been built first. The gate (below)
+      # re-runs build itself, but this assertion is cheap and catches a
+      # tsup config regression before the gate even starts.
       - name: Build
         run: pnpm run build
 
@@ -42,5 +49,12 @@ jobs:
             test -f "packages/cli/dist/$f" || { echo "missing packages/cli/dist/$f"; exit 1; }
           done
 
-      - name: Test
-        run: pnpm run test
+      # The gate is the sole authority on whether work is done (constitution
+      # §12, FR-002) — it runs build, typecheck, lint, every package's unit
+      # suite, and the disclosure scan, then resolves the ticket's
+      # acceptance criteria against the results. A separate set of
+      # Lint/Build/Test steps here would be a second judge of the same
+      # question, which is exactly what FR-002 rules out. See
+      # specs/022-verify-acceptance-manifest/contracts/verify-cli.md.
+      - name: Gate
+        run: ./scripts/verify.sh
