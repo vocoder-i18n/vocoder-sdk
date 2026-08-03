@@ -9,8 +9,25 @@ vi.mock("@vocoder/extractor", () => ({
 import { transformMsgProps } from "@vocoder/extractor";
 import { unplugin } from "../index";
 
-function createPlugin(options = {}) {
-	return unplugin.raw(options, { framework: "vite" as never });
+/**
+ * The plugin's `transform` and `transformInclude` hooks are always plain
+ * functions at runtime (see `packages/plugin/src/index.ts`), never the
+ * object form (`{ handler, filter }`) unplugin's `ObjectHook` type also
+ * allows — this narrows the return type to what this plugin actually
+ * returns, so tests can call `.call(...)` directly.
+ */
+interface PluginUnderTest {
+	transform?: (
+		this: never,
+		code: string,
+		id: string,
+	) => Promise<{ code: string } | null>;
+	transformInclude?: (this: never, id: string) => boolean;
+	vite?: { config?: () => unknown };
+}
+
+function createPlugin(options = {}): PluginUnderTest {
+	return unplugin.raw(options, { framework: "vite" as never }) as PluginUnderTest;
 }
 
 describe("plugin transform", () => {
@@ -22,7 +39,7 @@ describe("plugin transform", () => {
 	});
 
 	it("calls transformMsgProps for files that import @vocoder/react", async () => {
-		vi.mocked(transformMsgProps).mockReturnValueOnce({ changed: true, code: "transformed" });
+		vi.mocked(transformMsgProps).mockResolvedValueOnce({ changed: true, code: "transformed" });
 		const plugin = createPlugin();
 		const result = await plugin.transform?.call(
 			{} as never,
@@ -34,7 +51,7 @@ describe("plugin transform", () => {
 	});
 
 	it("returns null when transformMsgProps reports no changes", async () => {
-		vi.mocked(transformMsgProps).mockReturnValueOnce({ changed: false, code: "" });
+		vi.mocked(transformMsgProps).mockResolvedValueOnce({ changed: false, code: "" });
 		const plugin = createPlugin();
 		const result = await plugin.transform?.call(
 			{} as never,
@@ -85,7 +102,7 @@ describe("plugin transformInclude", () => {
 describe("plugin vite config — define injection", () => {
 	it("injects __VOCODER_PREVIEW__ false by default", () => {
 		const plugin = createPlugin();
-		const config = (plugin as { vite?: { config?: () => unknown } }).vite?.config?.() as {
+		const config = plugin.vite?.config?.() as {
 			define: Record<string, string>;
 		};
 		expect(config.define.__VOCODER_PREVIEW__).toBe("false");
@@ -93,7 +110,7 @@ describe("plugin vite config — define injection", () => {
 
 	it("injects __VOCODER_PREVIEW__ true when preview option is set", () => {
 		const plugin = createPlugin({ preview: true });
-		const config = (plugin as { vite?: { config?: () => unknown } }).vite?.config?.() as {
+		const config = plugin.vite?.config?.() as {
 			define: Record<string, string>;
 		};
 		expect(config.define.__VOCODER_PREVIEW__).toBe("true");
@@ -101,7 +118,7 @@ describe("plugin vite config — define injection", () => {
 
 	it("injects CDN constants as 'undefined' string when env vars are absent", () => {
 		const plugin = createPlugin();
-		const config = (plugin as { vite?: { config?: () => unknown } }).vite?.config?.() as {
+		const config = plugin.vite?.config?.() as {
 			define: Record<string, string>;
 		};
 		expect(config.define.__VOCODER_CDN_URL__).toBe("undefined");
@@ -111,7 +128,7 @@ describe("plugin vite config — define injection", () => {
 
 	it("injects __VOCODER_BUILD_TS__ as a numeric string", () => {
 		const plugin = createPlugin();
-		const config = (plugin as { vite?: { config?: () => unknown } }).vite?.config?.() as {
+		const config = plugin.vite?.config?.() as {
 			define: Record<string, string>;
 		};
 		expect(Number(config.define.__VOCODER_BUILD_TS__)).toBeGreaterThan(0);

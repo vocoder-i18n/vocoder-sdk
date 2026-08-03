@@ -1,0 +1,28 @@
+{
+	"ticket": "VOC-22",
+	"criteria": [
+		{
+			"id": "AC1",
+			"statement": "A diff adding a credit rate, price, margin, or quota value fails the gate, naming the file, the line, and the matched term",
+			"test": "scripts/__tests__/disclosure.test.ts::disclosure > names the file, line, and matched term in the failure"
+		},
+		{
+			"id": "AC2",
+			"statement": "A plan identifier used alone, with no accompanying number, never trips the disclosure check — but the identifier does not exempt a real price sitting next to it",
+			"test": "scripts/__tests__/disclosure.test.ts::disclosure > allows a plan identifier alone"
+		},
+		{
+			"id": "AC3",
+			"statement": "A criterion naming a test that does not exist fails the gate, naming the criterion and the missing test — the same enforcement already proven in the app repo, applied here unchanged",
+			"test": "scripts/__tests__/verify.test.ts::verify > fails on unresolvable test reference"
+		},
+		{
+			"id": "AC4",
+			"statement": "The gate's verdict blocks the merge of a PR whose record is incomplete or whose diff discloses a price, and unblocks once every check resolves",
+			"evidence": {
+				"type": "manual",
+				"ref": "022-verify-acceptance-manifest PR — CI gate step (required check `Build, lint, test`) reports failure on an incomplete record and success once complete"
+			}
+		}
+	]
+}

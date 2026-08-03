@@ -89,7 +89,7 @@ export async function runAuthFlow(
 		}
 		const opened = await tryOpenBrowser(browserUrl);
 		if (!opened) {
-			commandSession.step("Open this URL", highlight(browserUrl), "info");
+			commandSession.step("Open this URL", highlight(browserUrl));
 		}
 	}
 

@@ -43,22 +43,15 @@ export async function config(options: ConfigOptions = {}): Promise<number> {
 		session.step(
 			"Blocking branches",
 			joinHighlighted(projectConfig.syncPolicy.blockingBranches),
-			"info",
 		);
-		session.step(
-			"Blocking mode",
-			highlight(projectConfig.syncPolicy.blockingMode),
-			"info",
-		);
+		session.step("Blocking mode", highlight(projectConfig.syncPolicy.blockingMode));
 		session.step(
 			"Non-blocking mode",
 			highlight(projectConfig.syncPolicy.nonBlockingMode),
-			"info",
 		);
 		session.step(
 			"Max wait",
 			`${highlight(String(projectConfig.syncPolicy.defaultMaxWaitMs))} ms`,
-			"info",
 		);
 		return session.end();
 	} catch (error) {
