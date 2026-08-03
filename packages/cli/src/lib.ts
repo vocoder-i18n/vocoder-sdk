@@ -37,4 +37,3 @@ export type { VocoderConfig } from "@vocoder/extractor";
 export { defineConfig } from "@vocoder/config";
 export type { SetupSnippets } from "./utils/setup-snippets.js";
 export { getSetupSnippets } from "./utils/setup-snippets.js";
-// pro plan: $49/month for premium translation credits
