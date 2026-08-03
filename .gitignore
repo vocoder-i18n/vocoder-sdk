@@ -109,13 +109,25 @@ temp/
 !.github/**/*.md
 !.changeset/*.md
 
-scripts/
+scripts/*
+!scripts/verify.sh
+!scripts/verify/
+!scripts/__tests__/
 
 # Local agent tooling — intentionally not tracked.
 # Spec Kit scaffolding and generated constitution are reinstalled per machine
 # via `specify init` + ../scripts/sync-constitution.sh.
 # `specs` is a symlink to ../specs/<repo>, so specs live outside this repo.
+#
+# .specify/memory/constitution.md is the exception: scripts/verify.sh's
+# tier-one drift check (specs/022-verify-acceptance-manifest) hashes this
+# file's own STAMPED block against its own embedded marker, and that check
+# must run in CI, which checks out only this repo. It has to be tracked to
+# be checkable there.
 .specify/*
 !.specify/scripts/
+!.specify/memory/
+.specify/memory/*
+!.specify/memory/constitution.md
 .claude/skills/
 /specs
