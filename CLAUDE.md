@@ -115,6 +115,50 @@ Rules:
 - Do not leave TODO-style placeholders for OSS process docs when the correct current behavior is knowable from the repo.
 - Treat stale OSS docs as a correctness bug, not a follow-up nice-to-have.
 
+## Acceptance Gate
+
+`./scripts/verify.sh` is the sole authority on whether a ticket's work is done (constitution §12, §2.1). It resolves the ticket from the branch name (`NNN-slug` → ticket `NNN`; anything else is exempt), loads that ticket's acceptance record, checks constitution drift, runs build → typecheck → lint → every package's own unit suite plus the gate's own suite, scans the change's added lines for a pricing disclosure, resolves every criterion against the tests that actually exist and actually passed, and refuses to pass when any criterion is unproven or a disclosure is found. Full contract: `specs/022-verify-acceptance-manifest/contracts/verify-cli.md`.
+
+```
+./scripts/verify.sh              # verify the current branch
+./scripts/verify.sh --evidence   # emit only the evidence block, no slow checks
+```
+
+**Record location and shape.** One JSON file per ticket, committed at `.vocoder/acceptance/<NNN>.json`:
+
+```json
+{
+	"ticket": "VOC-22",
+	"criteria": [
+		{
+			"id": "AC1",
+			"statement": "What is claimed, in one sentence",
+			"test": "scripts/__tests__/disclosure.test.ts::disclosure > names the file, line, and matched term in the failure"
+		},
+		{
+			"id": "AC4",
+			"statement": "What is claimed, when no automated test can prove it",
+			"evidence": { "type": "manual", "ref": "PR #NN — description of what a reviewer checks" }
+		}
+	]
+}
+```
+
+- `test` is `<repo-relative file>::<full nested test name>`, joined with `::`.
+- Every criterion declares **exactly one** of `test` or `evidence`. Both, or neither, is a malformed record and exits the gate with code `2`.
+- The record is read-only to the gate and immutable once the work merges.
+- See `.vocoder/acceptance/022.json` for a worked example.
+
+**This repo is public and MIT-licensed.** A number committed here is disclosed permanently the moment it's pushed, whether or not the PR merges. The gate's disclosure scan exists only because of this — `app` (private) has no equivalent check.
+
+- The scan looks only at **added lines** in the diff against the merge base — never full file content, never history already on `main`.
+- A match requires a shape (a currency symbol, a percentage, a per-unit/per-period number) **and** a nearby pricing-domain word (`credit`, `plan`, `subscription`, `cost`, `price`, `rate`, `margin`, `quota`) on the same line. Neither alone is enough — this is what keeps a bare formatting example (a currency value with no pricing language near it, such as the ones in `packages/core/README.md`, `packages/react/README.md`, and `packages/mcp/docs/icu-patterns.md` demonstrating `<T>`'s number formatting) from ever being flagged.
+- Plan identifiers (`free`, `starter`, `pro`, `enterprise`) never trigger a match on their own — naming a tier is not disclosing what it costs. They also never exempt a real figure sitting next to them.
+- The scan excludes `scripts/__tests__/` — the gate's own test fixtures necessarily contain synthetic examples shaped like the values this check catches (never real Vocoder figures — constitution §13.7), and excluding that directory from the live scan is what lets this feature's own PR pass without the check needing to exempt itself in its matching logic.
+- Implementation: `scripts/verify/disclosure.ts`. Matching logic (`matchLine`) is pure and directly unit-tested against string fixtures in `scripts/__tests__/disclosure.test.ts` — no git or filesystem access needed to verify it.
+
+**Typecheck** runs via the root `typecheck` script (`pnpm -r --if-present run typecheck`), which every package must be able to run standing alone — give a new package its own `tsconfig.json` scoped to its own `src`, the way every existing package does. A package without one falls back to the workspace root's `tsconfig.json`, which type-checks across every package's source simultaneously through the `@vocoder/*` path aliases — this is slow, and can produce compiler crashes that have nothing to do with the package actually being worked on.
+
 ## CLI TUI Output Standards
 
 All CLI command output must follow these conventions. Apply them without prompting when working in `packages/cli/`.
