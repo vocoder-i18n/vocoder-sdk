@@ -191,7 +191,6 @@ describe("listProjectLocales command", () => {
 		const config: APIAppConfig = {
 			projectName: "Test",
 			organizationName: "Acme",
-			shortCode: "test123",
 			sourceLocale: "en",
 			targetLocales: ["fr", "de"],
 			targetBranches: ["main"],

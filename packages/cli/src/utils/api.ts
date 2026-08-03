@@ -17,7 +17,8 @@ import { createHash } from "node:crypto";
  * Both files must use identical type shapes and serialization — if you change one, change the other.
  */
 export type SourceEntriesHashInput = {
-	entries: Array<{ key: string; text: string }>;
+	/** `text` is null for id-only entries (`<T id="key" />` with no message). */
+	entries: Array<{ key: string; text: string | null }>;
 	industry?: string | null;
 };
 
@@ -646,6 +647,7 @@ export class VocoderAPI {
 		targetBranches: string[];
 		repositoryBound: boolean;
 		configureUrl?: string;
+		apps: Array<{ appDir: string; appId: string }>;
 	}> {
 		return this.userRequest<{
 			projectId: string;
@@ -658,6 +660,7 @@ export class VocoderAPI {
 			targetBranches: string[];
 			repositoryBound: boolean;
 			configureUrl?: string;
+			apps: Array<{ appDir: string; appId: string }>;
 		}>(
 			userToken,
 			`${this.apiUrl}/api/projects`,

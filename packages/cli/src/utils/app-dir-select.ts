@@ -228,7 +228,10 @@ export async function collectAppDirs(opts: { cwd?: string; maxDirs?: number } = 
 
 	const result = await prompt.prompt();
 	if (isCancel(result)) return null;
-	return result as string[];
+	// `prompt`'s generic type param resolves to `string`, but `finalize` above
+	// sets `.value` to the accumulated `added` array before resolving — the
+	// runtime value is always `string[]`.
+	return result as unknown as string[];
 }
 
 // ── promptSingleAppDir ────────────────────────────────────────────────────────
