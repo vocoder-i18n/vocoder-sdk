@@ -5,7 +5,7 @@ import {
 	formatLabelValue,
 	joinHighlighted,
 } from "../utils/command-session.js";
-import { promptConfirm } from "../utils/prompt-select.js";
+import { promptConfirm, promptSelect } from "../utils/prompt-select.js";
 
 import type { InitOptions } from "../types.js";
 import type { APIAppConfig } from "../types.js";
@@ -50,6 +50,26 @@ async function confirmApiKeyRepair(
 	});
 	if (answer === null) return null;
 	session.step("Regenerate API key", highlight(answer ? "Yes" : "No"));
+	return answer;
+}
+
+/**
+ * Prompts the customer to choose how Vocoder delivers translations: opening a
+ * pull request for review (default) or pushing directly to the target branch.
+ * Returns null when the user cancels the prompt.
+ */
+async function promptCommitMode(session: CommandSession): Promise<"PR" | "DIRECT" | null> {
+	const answer = await promptSelect({
+		message: "How should Vocoder deliver translations?",
+		confirmLabel: "Delivery mode",
+		options: [
+			{ value: "PR" as const, label: "Open a pull request for review", hint: "recommended" },
+			{ value: "DIRECT" as const, label: "Push directly to the target branch" },
+		],
+		initialValue: "PR" as const,
+	});
+	if (answer === null) return null;
+	session.step("Delivery mode", highlight(answer === "PR" ? "Pull request" : "Direct push"));
 	return answer;
 }
 
@@ -287,6 +307,9 @@ export async function init(options: InitOptions = {}): Promise<number> {
 					session,
 				});
 
+				const repairCommitMode = await promptCommitMode(session);
+				if (repairCommitMode === null) return session.cancelled();
+
 				const workflowBranches =
 					apiKeyResult.projectConfig?.targetBranches ??
 					matchedProject.targetBranches ??
@@ -294,6 +317,7 @@ export async function init(options: InitOptions = {}): Promise<number> {
 				const workflow = writeGitHubActionsWorkflow(
 					identity.repoRoot,
 					workflowBranches,
+					repairCommitMode,
 				);
 				if (workflow.written) {
 					session.success(`Created ${highlight(workflow.relativePath)}`);
@@ -431,7 +455,14 @@ export async function init(options: InitOptions = {}): Promise<number> {
 		let workflowWritten = false;
 		let workflowRelativePath = ".github/workflows/vocoder-translate.yml";
 		if (repoRoot) {
-			const workflow = writeGitHubActionsWorkflow(repoRoot, projectResult.targetBranches);
+			const commitMode = await promptCommitMode(session);
+			if (commitMode === null) return session.cancelled();
+
+			const workflow = writeGitHubActionsWorkflow(
+				repoRoot,
+				projectResult.targetBranches,
+				commitMode,
+			);
 			workflowWritten = workflow.written;
 			workflowRelativePath = workflow.relativePath;
 

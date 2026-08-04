@@ -12,6 +12,7 @@ const {
 	mockCheckPlanLimits,
 	mockRunProjectCreate,
 	mockPromptConfirm,
+	mockPromptSelect,
 	mockInstallForProject,
 	mockWriteApiKeyToEnv,
 	mockWriteGitHubActionsWorkflow,
@@ -36,6 +37,7 @@ const {
 	mockCheckPlanLimits: vi.fn(),
 	mockRunProjectCreate: vi.fn(),
 	mockPromptConfirm: vi.fn(),
+	mockPromptSelect: vi.fn(),
 	mockInstallForProject: vi.fn(),
 	mockWriteApiKeyToEnv: vi.fn(),
 	mockWriteGitHubActionsWorkflow: vi.fn(),
@@ -94,6 +96,7 @@ vi.mock("../utils/project-create.js", () => ({
 
 vi.mock("../utils/prompt-select.js", () => ({
 	promptConfirm: mockPromptConfirm,
+	promptSelect: mockPromptSelect,
 }));
 
 vi.mock("../utils/install-packages.js", () => ({
@@ -167,6 +170,7 @@ beforeEach(() => {
 	mockResolveCurrentAppDir.mockReturnValue("apps/vite");
 	mockEnsureAccountAuth.mockResolvedValue(baseAuth);
 	mockPromptConfirm.mockResolvedValue(false);
+	mockPromptSelect.mockResolvedValue("PR");
 	mockInstallForProject.mockResolvedValue(undefined);
 	mockWriteApiKeyToEnv.mockReturnValue(".env.local");
 	mockWriteGitHubActionsWorkflow.mockReturnValue({
@@ -213,6 +217,34 @@ describe("init", () => {
 		expect(mockWriteApiKeyToEnv).toHaveBeenCalledWith("vcp_new", repoRoot);
 		// monorepo: config written with apps[]
 		expect(mockWriteVocoderConfig).toHaveBeenCalledWith(repoRoot, { appDirs: ["apps/vite"] });
+		expect(mockWriteGitHubActionsWorkflow).toHaveBeenCalledWith(repoRoot, ["main"], "PR");
+	});
+
+	it("threads a direct-push commit-mode choice through to the workflow writer", async () => {
+		mockLookupAppByRepo.mockResolvedValue({
+			exactMatch: null,
+			existingApps: [],
+			hasWholeRepoApp: false,
+			organizationContext: null,
+		});
+		mockSelectOrganizationForInit.mockResolvedValue({ organizationId: "org-1" });
+		mockCheckPlanLimits.mockResolvedValue({ atLimit: false, remaining: 3 });
+		mockRunProjectCreate.mockResolvedValue({
+			projectId: "proj-1",
+			projectName: "Example",
+			apiKey: "vcp_new",
+			sourceLocale: "en",
+			targetLocales: ["fr"],
+			targetBranches: ["main"],
+			repositoryBound: true,
+			appDirs: ["apps/vite"],
+		});
+		mockPromptSelect.mockResolvedValue("DIRECT");
+
+		const code = await init();
+
+		expect(code).toBe(0);
+		expect(mockWriteGitHubActionsWorkflow).toHaveBeenCalledWith(repoRoot, ["main"], "DIRECT");
 	});
 
 	it("repairs local setup for an exact app match", async () => {
@@ -238,6 +270,7 @@ describe("init", () => {
 		expect(mockInstallForProject).toHaveBeenCalledWith(
 			expect.objectContaining({ rootDir: repoRoot, appDirs: ["apps/vite"] }),
 		);
+		expect(mockWriteGitHubActionsWorkflow).toHaveBeenCalledWith(repoRoot, ["main"], "PR");
 	});
 
 	it("repairs local setup against the whole-repo app when present", async () => {

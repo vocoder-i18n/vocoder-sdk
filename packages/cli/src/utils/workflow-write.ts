@@ -14,8 +14,16 @@ export interface WorkflowWriteResult {
  * Render the GitHub Actions workflow YAML that triggers `vocoder translate`
  * on push to one of `targetBranches`. The branches array must already be the
  * set the user selected at project-create time — no defaulting here.
+ *
+ * `commitMode` controls whether the action opens a pull request ("PR",
+ * default) or pushes translations directly to the target branch ("DIRECT").
+ * It is written into the generated YAML as a lowercase `commit-mode:` input,
+ * matching what `readWorkflowCommitMode` parses back.
  */
-export function renderWorkflowYaml(targetBranches: string[]): string {
+export function renderWorkflowYaml(
+	targetBranches: string[],
+	commitMode: "PR" | "DIRECT" = "PR",
+): string {
 	const branches = targetBranches.map((b) => `'${b}'`).join(", ");
 	return `name: Vocoder Translate
 on:
@@ -32,6 +40,7 @@ jobs:
       - uses: vocoder-i18n/translate-action@v1
         with:
           api-key: \${{ secrets.VOCODER_API_KEY }}
+          commit-mode: ${commitMode.toLowerCase()}
           # proceed: build continues even if translations fail (default)
           # fail: block the build if translations fail
           on-failure: proceed
@@ -75,6 +84,7 @@ jobs:
 export function writeGitHubActionsWorkflow(
 	repoRoot: string,
 	targetBranches: string[],
+	commitMode: "PR" | "DIRECT" = "PR",
 ): WorkflowWriteResult {
 	const relativePath = ".github/workflows/vocoder-translate.yml";
 	const absolutePath = join(repoRoot, relativePath);
@@ -84,6 +94,6 @@ export function writeGitHubActionsWorkflow(
 	}
 
 	mkdirSync(dirname(absolutePath), { recursive: true });
-	writeFileSync(absolutePath, renderWorkflowYaml(targetBranches), "utf-8");
+	writeFileSync(absolutePath, renderWorkflowYaml(targetBranches, commitMode), "utf-8");
 	return { path: absolutePath, relativePath, written: true };
 }

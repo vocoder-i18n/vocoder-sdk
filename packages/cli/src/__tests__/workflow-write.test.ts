@@ -7,7 +7,6 @@ import {
 	renderPerAppWorkflowYaml,
 	writeGitHubActionsWorkflow,
 } from "../utils/workflow-write.js";
-import { readWorkflowCommitMode } from "../utils/workflow-read.js";
 
 describe("renderWorkflowYaml", () => {
 	it("renders a single branch with quotes", () => {
@@ -55,9 +54,14 @@ describe("permissions and guards", () => {
 		expect(yaml).not.toContain("pull-requests: write");
 	});
 
-	it("omits commit-mode input", () => {
+	it("writes commit-mode: pr by default", () => {
 		const yaml = renderWorkflowYaml(["main"]);
-		expect(yaml).not.toContain("commit-mode:");
+		expect(yaml).toContain("commit-mode: pr");
+	});
+
+	it("writes commit-mode: direct when selected", () => {
+		const yaml = renderWorkflowYaml(["main"], "DIRECT");
+		expect(yaml).toContain("commit-mode: direct");
 	});
 
 	it("includes if guard for vocoder-bot[bot]", () => {
@@ -141,47 +145,5 @@ describe("writeGitHubActionsWorkflow", () => {
 		expect(readFileSync(workflowPath, "utf-8")).toBe(
 			"# user-customized workflow",
 		);
-	});
-});
-
-describe("readWorkflowCommitMode", () => {
-	let repoRoot: string;
-
-	beforeEach(() => {
-		repoRoot = mkdtempSync(join(tmpdir(), "vocoder-test-"));
-	});
-
-	afterEach(() => {
-		rmSync(repoRoot, { recursive: true, force: true });
-	});
-
-	function writeWorkflow(content: string) {
-		const dir = join(repoRoot, ".github", "workflows");
-		mkdirSync(dir, { recursive: true });
-		writeFileSync(join(dir, "vocoder-translate.yml"), content, "utf-8");
-	}
-
-	it("returns 'PR' when commit-mode is 'pr'", () => {
-		writeWorkflow("      commit-mode: pr\n");
-		expect(readWorkflowCommitMode(repoRoot)).toBe("PR");
-	});
-
-	it("returns 'COMMIT' when commit-mode is 'commit'", () => {
-		writeWorkflow("      commit-mode: commit\n");
-		expect(readWorkflowCommitMode(repoRoot)).toBe("COMMIT");
-	});
-
-	it("is case-insensitive", () => {
-		writeWorkflow("      commit-mode: PR\n");
-		expect(readWorkflowCommitMode(repoRoot)).toBe("PR");
-	});
-
-	it("returns null when commit-mode field is absent", () => {
-		writeWorkflow("name: Vocoder Translate\non:\n  push:\n    branches: ['main']\n");
-		expect(readWorkflowCommitMode(repoRoot)).toBeNull();
-	});
-
-	it("returns null when workflow file does not exist", () => {
-		expect(readWorkflowCommitMode(repoRoot)).toBeNull();
 	});
 });

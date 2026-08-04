@@ -58,7 +58,7 @@ export interface BatchTranslateAppEntry {
 		uiRole?: string;
 	}>;
 	sourceEntriesHash?: string;
-	commitMode?: "PR" | "COMMIT";
+	commitMode?: "PR" | "DIRECT";
 	/** Override where locale files are written. Synced from vocoder.config.ts → DB on each translate. */
 	localesDir?: string;
 }
