@@ -45,7 +45,7 @@ export function readWorkflowBranches(repoRoot: string): string[] | null {
  * should omit commitMode from the translate submission in that case, leaving
  * the server value unchanged.
  */
-export function readWorkflowCommitMode(repoRoot: string): "PR" | "COMMIT" | null {
+export function readWorkflowCommitMode(repoRoot: string): "PR" | "DIRECT" | null {
 	const filePath = join(repoRoot, WORKFLOW_PATH);
 	if (!existsSync(filePath)) return null;
 
@@ -56,9 +56,9 @@ export function readWorkflowCommitMode(repoRoot: string): "PR" | "COMMIT" | null
 		return null;
 	}
 
-	const match = content.match(/commit-mode:\s*(pr|commit)/i);
+	const match = content.match(/commit-mode:\s*(pr|direct)/i);
 	if (!match?.[1]) return null;
 
-	return match[1].toUpperCase() as "PR" | "COMMIT";
+	return match[1].toUpperCase() as "PR" | "DIRECT";
 }
 

@@ -1,0 +1,43 @@
+{
+	"ticket": "VOC-34",
+	"criteria": [
+		{
+			"id": "AC1",
+			"statement": "readWorkflowCommitMode correctly recognizes a workflow file's commit-mode: direct as \"DIRECT\", not null and not silently \"PR\"",
+			"test": "packages/cli/src/__tests__/workflow-read.test.ts::readWorkflowCommitMode > recognizes commit-mode: direct"
+		},
+		{
+			"id": "AC2",
+			"statement": "readWorkflowCommitMode still recognizes commit-mode: pr — regression guard for existing behavior",
+			"test": "packages/cli/src/__tests__/workflow-read.test.ts::readWorkflowCommitMode > still recognizes commit-mode: pr"
+		},
+		{
+			"id": "AC3",
+			"statement": "renderWorkflowYaml writes a commit-mode: pr line by default when no mode is specified",
+			"test": "packages/cli/src/__tests__/workflow-write.test.ts::permissions and guards > writes commit-mode: pr by default"
+		},
+		{
+			"id": "AC4",
+			"statement": "renderWorkflowYaml writes a commit-mode: direct line when the DIRECT mode is selected",
+			"test": "packages/cli/src/__tests__/workflow-write.test.ts::permissions and guards > writes commit-mode: direct when selected"
+		},
+		{
+			"id": "AC5",
+			"statement": "vocoder init's fresh-setup flow prompts for delivery mode and threads the customer's choice through to the generated workflow file",
+			"test": "packages/cli/src/__tests__/init.test.ts::init > threads a direct-push commit-mode choice through to the workflow writer"
+		},
+		{
+			"id": "AC6",
+			"statement": "vocoder init's repair flow (existing project, missing/invalid local workflow) also prompts for delivery mode and writes it into the workflow file, defaulting to PR",
+			"test": "packages/cli/src/__tests__/init.test.ts::init > repairs local setup for an exact app match"
+		},
+		{
+			"id": "AC7",
+			"statement": "packages/mcp/docs/github-action-setup.md's commit-mode: pr # or \"direct\" documentation matches what the CLI actually reads, writes, and generates — verified by repo-wide grep, not sampling",
+			"evidence": {
+				"type": "manual",
+				"ref": "034-fix-commit-mode-direct implementation — repo-wide grep for commit-mode/commitMode/CommitMode confirmed no remaining literal \"COMMIT\" and confirmed github-action-setup.md's pr/direct vocabulary already matches workflow-read.ts and workflow-write.ts post-fix"
+			}
+		}
+	]
+}
