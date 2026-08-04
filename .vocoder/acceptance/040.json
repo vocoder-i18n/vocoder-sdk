@@ -1,0 +1,29 @@
+{
+	"ticket": "VOC-40",
+	"criteria": [
+		{
+			"id": "AC1",
+			"statement": "framework-setup.md's CDN-fallback section states the runtime CDN refresh is Pro+-only (gated on manifest fingerprint), states free/starter plans get no runtime fallback and must fix the build/Action step instead, and contains one clear canonical statement of the delivery model (default = GitHub Action commits locale files, every plan, no runtime fetch; Pro+ opt-in = CDN live-update, fingerprint-gated)",
+			"evidence": {
+				"type": "manual",
+				"ref": "this PR's diff to framework-setup.md"
+			}
+		},
+		{
+			"id": "AC2",
+			"statement": "troubleshooting.md's \"Background CDN refresh\" entry is corrected to match framework-setup.md's Pro+-only gating and references framework-setup.md's canonical statement rather than restating it",
+			"evidence": {
+				"type": "manual",
+				"ref": "this PR's diff to troubleshooting.md"
+			}
+		},
+		{
+			"id": "AC3",
+			"statement": "github-action-setup.md is re-verified against translate-action/action.yml and the CLI's actual commit-mode values (pr/direct); already accurate, so no content edit is made — the verification itself is the acceptance evidence",
+			"evidence": {
+				"type": "manual",
+				"ref": "this PR's diff (no changes to github-action-setup.md) plus reviewer confirmation that the commit-mode table matches action.yml"
+			}
+		}
+	]
+}

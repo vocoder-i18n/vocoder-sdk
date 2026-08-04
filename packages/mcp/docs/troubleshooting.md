@@ -216,7 +216,7 @@ Only branches in `targetBranches` (from `vocoder.config.ts`) trigger translation
 
 **In SSR:** Pass `initialLocale` and `preview` to `VocoderProvider` from the server. The hydration mechanism provides instant translations from a server-side snapshot.
 
-**Background CDN refresh:** If the build has no translations (API unreachable during build), `VocoderProvider` fetches from the CDN after mount. This may cause a brief flash. The CDN fetch succeeds in milliseconds when translations exist.
+**Background CDN refresh (Pro+ only):** If the build has no translations (API unreachable during build), `VocoderProvider` fetches from the CDN after mount — but only on Pro+ plans, gated on the manifest's `fingerprint` field. On free/starter plans there is no `fingerprint` and no runtime fallback; a build with no translations stays untranslated until the next build. See `framework-setup.md`'s "Delivery model" section for the full explanation of what applies to your plan.
 
 ---
 
