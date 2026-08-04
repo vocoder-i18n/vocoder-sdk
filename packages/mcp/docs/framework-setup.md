@@ -104,17 +104,25 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 
 **Avoid for:** RTL locales — a flash of LTR layout before switching to RTL is jarring.
 
-### CDN fallback path
+### Delivery model (read this first)
 
-The above applies to **build-time bundled translations** (the normal case — the GitHub Action ran `vocoder translate` before the build). If the build couldn't fetch translations (API unreachable, first deploy), `VocoderProvider` falls back to fetching from the Vocoder CDN after mount. This is a real network call, not a bundled chunk.
+**Default, every plan:** the GitHub Action commits translated locale files directly into your repository (via PR or direct push, per `commit-mode` — see `github-action-setup.md`). The build then bundles those committed files at build time. No runtime fetch is required for this to work, on any plan.
 
-In that case:
-- `await initializeVocoder()` still resolves quickly — it only awaits the manifest + bundled loaders
-- The CDN refresh happens inside `VocoderProvider` after mount, independently
-- `isReady` will be `false` until the CDN response arrives
-- Use Approach 2 (`isReady` gate) if you need to handle this gracefully
+**Pro+ opt-in:** live translation updates without a rebuild, via a background CDN refresh. This is layered on top of the default — it is not a fallback that free/starter plans can rely on. See below for exactly when it fires.
 
-The CDN fallback is a safety net, not the primary path. Push to a target branch — the GitHub Action extracts and translates automatically. To test locally, run `npx @vocoder/cli translate`.
+### CDN fallback path — Pro+ only
+
+The above build-time bundling applies to every plan. What happens if the build ran with no bundled translations (API unreachable during build, first deploy, etc.) depends entirely on plan:
+
+- **Pro+:** `VocoderProvider` triggers a background refresh from the Vocoder CDN after mount. This only fires when the manifest contains a `fingerprint` — `fingerprint` is present in the manifest only on Pro+ plans (`_triggerRefresh` in `@vocoder/core` bails immediately if `fingerprint` is absent). This is a real network call, not a bundled chunk:
+  - `await initializeVocoder()` still resolves quickly — it only awaits the manifest + bundled loaders
+  - The CDN refresh happens inside `VocoderProvider` after mount, independently
+  - `isReady` will be `false` until the CDN response arrives
+  - Use Approach 2 (`isReady` gate) if you need to handle this gracefully
+
+- **Free/starter:** there is **no runtime fallback**. The manifest has no `fingerprint`, so the refresh is a no-op — nothing will ever arrive, and waiting for one (e.g. gating on `isReady`) will hang indefinitely. If your build shipped without translations on these plans, the problem is upstream: fix the build/GitHub Action step (`VOCODER_API_KEY` missing, target branch misconfigured, etc. — see `troubleshooting.md`), not something to wait out at runtime.
+
+Push to a target branch — the GitHub Action extracts and translates automatically. To test locally, run `npx @vocoder/cli translate`.
 
 ```tsx
 // src/App.tsx
