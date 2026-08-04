@@ -1,0 +1,30 @@
+{
+	"ticket": "VOC-36",
+	"criteria": [
+		{
+			"id": "AC1",
+			"statement": "Given a job submission that returns status: \"queued\", when translate() polls and the job eventually reports status: \"complete\", writeLocaleFileTree is called once with the localeFileTree from the final complete response",
+			"test": "packages/cli/src/__tests__/translate.test.ts::translate() orchestrator (mocked) > calls writeLocaleFileTree with the final localeFileTree after submit → poll(running) → poll(complete)"
+		},
+		{
+			"id": "AC2",
+			"statement": "Given a submission that returns status: \"complete\" immediately, translate() calls writeLocaleFileTree directly from the submit response without ever calling pollTranslateStatus",
+			"test": "packages/cli/src/__tests__/translate.test.ts::translate() orchestrator (mocked) > writes files directly from an immediately-cached submit response without polling"
+		},
+		{
+			"id": "AC3",
+			"statement": "Given a completed job with multiple apps (monorepo), translate() calls writeLocaleFileTree once per app with that app's own locale file tree, not a merged or swapped one",
+			"test": "packages/cli/src/__tests__/translate.test.ts::translate() orchestrator (mocked) > writes each monorepo app's own locale tree independently"
+		},
+		{
+			"id": "AC4",
+			"statement": "Given a completed job, translate() finishes successfully and returns exit code 0",
+			"test": "packages/cli/src/__tests__/translate.test.ts::translate() orchestrator (mocked) > calls writeLocaleFileTree with the final localeFileTree after submit → poll(running) → poll(complete)"
+		},
+		{
+			"id": "AC5",
+			"statement": "Given a final response where one app has no localeFileTree (zero translatable strings), writeLocaleFileTree is skipped for that app rather than called with undefined",
+			"test": "packages/cli/src/__tests__/translate.test.ts::translate() orchestrator (mocked) > skips writeLocaleFileTree for an app with no locale tree"
+		}
+	]
+}

@@ -1,11 +1,153 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AppTranslateStatus, LimitErrorResponse } from "../types.js";
+
+// ── Hoisted mocks for the translate() orchestrator describe block ──────────────
+// These only affect the "translate() orchestrator (mocked)" tests below — every
+// other describe block in this file exercises pure helper functions and never
+// touches these modules.
+
+const {
+	mockGetAppConfig,
+	mockSubmitTranslate,
+	mockPollTranslateStatus,
+	mockComputeSourceEntriesHash,
+	mockDetectBranch,
+	mockIsTargetBranch,
+	mockReadWorkflowBranches,
+	mockReadWorkflowCommitMode,
+	mockLoadVocoderConfig,
+	mockComputeFingerprint,
+	mockExtractFromProject,
+	mockResolveGitRoot,
+	mockResolveGitRepositoryIdentity,
+	mockDetectCommitSha,
+	mockWriteLocaleFileTree,
+	mockValidateLocalConfig,
+	mockLoadEnvFiles,
+	mockIntro,
+	mockOutro,
+	mockLog,
+} = vi.hoisted(() => ({
+	mockGetAppConfig: vi.fn(),
+	mockSubmitTranslate: vi.fn(),
+	mockPollTranslateStatus: vi.fn(),
+	mockComputeSourceEntriesHash: vi.fn(() => "hash-fixed"),
+	mockDetectBranch: vi.fn(() => "main"),
+	mockIsTargetBranch: vi.fn(() => true),
+	mockReadWorkflowBranches: vi.fn(() => null),
+	mockReadWorkflowCommitMode: vi.fn(() => null),
+	mockLoadVocoderConfig: vi.fn(() => null),
+	mockComputeFingerprint: vi.fn(() => "fingerprint-fixed"),
+	mockExtractFromProject: vi.fn(async () => [
+		{ key: "hello.world", text: "Hello", file: "app.tsx", line: 1 },
+	]),
+	mockResolveGitRoot: vi.fn(() => "/repo"),
+	mockResolveGitRepositoryIdentity: vi.fn(() => ({
+		repoCanonical: "github:acme/example",
+		repoRoot: "/repo",
+		appDir: "",
+	})),
+	mockDetectCommitSha: vi.fn(() => "0123456789abcdef0123456789abcdef01234567"),
+	mockWriteLocaleFileTree: vi.fn(
+		(
+			_localeFileTree: Record<string, string>,
+			_rootDir: string,
+			_options?: { isTypeScript?: boolean },
+		) => [] as Array<{ displayDir: string; count: number }>,
+	),
+	mockValidateLocalConfig: vi.fn(),
+	mockLoadEnvFiles: vi.fn(),
+	mockIntro: vi.fn(),
+	mockOutro: vi.fn(),
+	mockLog: {
+		success: vi.fn(),
+		warn: vi.fn(),
+		error: vi.fn(),
+		info: vi.fn(),
+		message: vi.fn(),
+	},
+}));
+
+vi.mock("@clack/prompts", () => ({
+	intro: mockIntro,
+	outro: mockOutro,
+	log: mockLog,
+	spinner: () => ({
+		start: vi.fn(),
+		stop: vi.fn(),
+		message: vi.fn(),
+	}),
+}));
+
+vi.mock("../utils/api.js", () => ({
+	VocoderAPI: class {
+		getAppConfig = mockGetAppConfig;
+		submitTranslate = mockSubmitTranslate;
+		pollTranslateStatus = mockPollTranslateStatus;
+	},
+	VocoderAPIError: class extends Error {
+		status: number;
+		payload: unknown;
+		limitError: null = null;
+		syncPolicyError: null = null;
+		constructor(params: { message: string; status: number; payload: unknown }) {
+			super(params.message);
+			this.status = params.status;
+			this.payload = params.payload;
+		}
+	},
+	computeSourceEntriesHash: mockComputeSourceEntriesHash,
+}));
+
+vi.mock("../utils/branch.js", () => ({
+	detectBranch: mockDetectBranch,
+	isTargetBranch: mockIsTargetBranch,
+}));
+
+vi.mock("../utils/workflow-read.js", () => ({
+	readWorkflowBranches: mockReadWorkflowBranches,
+	readWorkflowCommitMode: mockReadWorkflowCommitMode,
+}));
+
+vi.mock("@vocoder/extractor", () => ({
+	loadVocoderConfig: mockLoadVocoderConfig,
+	computeFingerprint: mockComputeFingerprint,
+}));
+
+vi.mock("../utils/extract.js", () => ({
+	StringExtractor: class {
+		extractFromProject = mockExtractFromProject;
+	},
+}));
+
+vi.mock("../utils/git-identity.js", () => ({
+	resolveGitRoot: mockResolveGitRoot,
+	resolveGitRepositoryIdentity: mockResolveGitRepositoryIdentity,
+	detectCommitSha: mockDetectCommitSha,
+}));
+
+// Resolved relative to THIS test file (src/__tests__/), not to translate.ts's own
+// "./pull.js" import (relative to src/commands/) — both resolve to the same
+// underlying src/commands/pull.ts module.
+vi.mock("../commands/pull.js", () => ({
+	writeLocaleFileTree: mockWriteLocaleFileTree,
+}));
+
+vi.mock("../utils/config.js", () => ({
+	validateLocalConfig: mockValidateLocalConfig,
+}));
+
+vi.mock("../utils/load-env.js", () => ({
+	loadEnvFiles: mockLoadEnvFiles,
+}));
+
 import {
 	computeExitCode,
 	formatAppProgress,
 	formatLocaleResults,
 	getLimitErrorGuidance,
+	translate,
 } from "../commands/translate.js";
-import type { AppTranslateStatus, LimitErrorResponse } from "../types.js";
 
 // ── formatAppProgress ──────────────────────────────────────────────────────────
 
@@ -214,7 +356,9 @@ describe("translate API integration (mocked)", () => {
 			} as Response;
 		});
 
-		const { VocoderAPI } = await import("../utils/api.js");
+		// bypasses this file's top-level vi.mock("../utils/api.js", ...) — this test
+		// exercises the real VocoderAPI HTTP layer against a mocked fetch, not the stub.
+		const { VocoderAPI } = await vi.importActual<typeof import("../utils/api.js")>("../utils/api.js");
 		const api = new VocoderAPI({ apiKey: "vcp_aB3xY9Zk_testrandombytes123456", apiUrl: "https://vocoder.app" });
 
 		const submitResult = await api.submitTranslate({
@@ -236,3 +380,197 @@ describe("translate API integration (mocked)", () => {
 		expect(status.apps).toHaveLength(1);
 	});
 });
+
+// ── orchestrator: translate() drives submit → poll → complete → write ──────────
+
+const baseAppConfig = {
+	projectName: "Example",
+	organizationName: "Acme",
+	sourceLocale: "en",
+	targetLocales: ["fr", "es"],
+	targetBranches: ["main"],
+	syncPolicy: {
+		blockingBranches: ["main"],
+		blockingMode: "required" as const,
+		nonBlockingMode: "best-effort" as const,
+		defaultMaxWaitMs: 60000,
+	},
+};
+
+describe("translate() orchestrator (mocked)", () => {
+	const originalEnv = { ...process.env };
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		process.env = { ...originalEnv };
+		process.env.VOCODER_API_KEY = "vcp_aB3xY9Zk_testrandombytes123456";
+		process.env.VOCODER_API_URL = "https://vocoder.app";
+		delete process.env.GITHUB_ACTIONS;
+
+		mockGetAppConfig.mockResolvedValue(baseAppConfig);
+		mockDetectBranch.mockReturnValue("main");
+		mockIsTargetBranch.mockReturnValue(true);
+		mockReadWorkflowBranches.mockReturnValue(null);
+		mockReadWorkflowCommitMode.mockReturnValue(null);
+		mockLoadVocoderConfig.mockReturnValue(null);
+		mockComputeFingerprint.mockReturnValue("fingerprint-fixed");
+		mockComputeSourceEntriesHash.mockReturnValue("hash-fixed");
+		mockExtractFromProject.mockResolvedValue([
+			{ key: "hello.world", text: "Hello", file: "app.tsx", line: 1 },
+		]);
+		mockResolveGitRoot.mockReturnValue("/repo");
+		mockResolveGitRepositoryIdentity.mockReturnValue({
+			repoCanonical: "github:acme/example",
+			repoRoot: "/repo",
+			appDir: "",
+		});
+		mockDetectCommitSha.mockReturnValue("0123456789abcdef0123456789abcdef01234567");
+		mockWriteLocaleFileTree.mockReturnValue([]);
+		mockValidateLocalConfig.mockImplementation(() => undefined);
+		mockLoadEnvFiles.mockImplementation(() => undefined);
+	});
+
+	afterEach(() => {
+		process.env = { ...originalEnv };
+	});
+
+	it("calls writeLocaleFileTree with the final localeFileTree after submit → poll(running) → poll(complete)", async () => {
+		const finalTree = { "locales/fr.json": "{\"hello\":\"Bonjour\"}" };
+		mockSubmitTranslate.mockResolvedValue({
+			jobId: "job-1",
+			apps: [{ appDir: "", appId: "app-1" }],
+		});
+		mockPollTranslateStatus
+			.mockResolvedValueOnce({
+				jobId: "job-1",
+				status: "running",
+				apps: [
+					{
+						appDir: "",
+						appId: "app-1",
+						status: "running",
+						providers: {},
+						progress: { completed: 1, total: 2 },
+					},
+				],
+			})
+			.mockResolvedValueOnce({
+				jobId: "job-1",
+				status: "complete",
+				apps: [
+					{
+						appDir: "",
+						appId: "app-1",
+						status: "complete",
+						providers: {},
+						progress: { completed: 2, total: 2 },
+						localeFileTree: finalTree,
+					},
+				],
+			});
+
+		const code = await translate({});
+
+		expect(code).toBe(0);
+		expect(mockPollTranslateStatus).toHaveBeenCalledTimes(2);
+		expect(mockWriteLocaleFileTree).toHaveBeenCalledTimes(1);
+		expect(mockWriteLocaleFileTree.mock.calls[0]?.[0]).toEqual(finalTree);
+		expect(mockWriteLocaleFileTree.mock.calls[0]?.[1]).toBe("/repo");
+	});
+
+	it("writes files directly from an immediately-cached submit response without polling", async () => {
+		const cachedTree = { "locales/fr.json": "{\"hello\":\"Bonjour\"}" };
+		mockSubmitTranslate.mockResolvedValue({
+			jobId: "job-2",
+			status: "complete",
+			apps: [{ appDir: "", appId: "app-1", localeFileTree: cachedTree }],
+		});
+
+		const code = await translate({});
+
+		expect(code).toBe(0);
+		expect(mockPollTranslateStatus).not.toHaveBeenCalled();
+		expect(mockWriteLocaleFileTree).toHaveBeenCalledTimes(1);
+		expect(mockWriteLocaleFileTree.mock.calls[0]?.[0]).toEqual(cachedTree);
+	});
+
+	it("writes each monorepo app's own locale tree independently", async () => {
+		const webTree = { "apps/web/locales/fr.json": "WEB_FR" };
+		const adminTree = { "apps/admin/locales/fr.json": "ADMIN_FR" };
+		mockSubmitTranslate.mockResolvedValue({
+			jobId: "job-3",
+			apps: [
+				{ appDir: "apps/web", appId: "app-1" },
+				{ appDir: "apps/admin", appId: "app-2" },
+			],
+		});
+		mockPollTranslateStatus.mockResolvedValue({
+			jobId: "job-3",
+			status: "complete",
+			apps: [
+				{
+					appDir: "apps/web",
+					appId: "app-1",
+					status: "complete",
+					providers: {},
+					progress: { completed: 1, total: 1 },
+					localeFileTree: webTree,
+				},
+				{
+					appDir: "apps/admin",
+					appId: "app-2",
+					status: "complete",
+					providers: {},
+					progress: { completed: 1, total: 1 },
+					localeFileTree: adminTree,
+				},
+			],
+		});
+
+		const code = await translate({});
+
+		expect(code).toBe(0);
+		expect(mockWriteLocaleFileTree).toHaveBeenCalledTimes(2);
+		expect(mockWriteLocaleFileTree.mock.calls[0]?.[0]).toEqual(webTree);
+		expect(mockWriteLocaleFileTree.mock.calls[1]?.[0]).toEqual(adminTree);
+	});
+
+	it("skips writeLocaleFileTree for an app with no locale tree", async () => {
+		const webTree = { "apps/web/locales/fr.json": "WEB_FR" };
+		mockSubmitTranslate.mockResolvedValue({
+			jobId: "job-4",
+			apps: [
+				{ appDir: "apps/web", appId: "app-1" },
+				{ appDir: "apps/empty", appId: "app-2" },
+			],
+		});
+		mockPollTranslateStatus.mockResolvedValue({
+			jobId: "job-4",
+			status: "complete",
+			apps: [
+				{
+					appDir: "apps/web",
+					appId: "app-1",
+					status: "complete",
+					providers: {},
+					progress: { completed: 1, total: 1 },
+					localeFileTree: webTree,
+				},
+				{
+					appDir: "apps/empty",
+					appId: "app-2",
+					status: "complete",
+					providers: {},
+					progress: { completed: 0, total: 0 },
+				},
+			],
+		});
+
+		const code = await translate({});
+
+		expect(code).toBe(0);
+		expect(mockWriteLocaleFileTree).toHaveBeenCalledTimes(1);
+		expect(mockWriteLocaleFileTree.mock.calls[0]?.[0]).toEqual(webTree);
+	});
+});
+
