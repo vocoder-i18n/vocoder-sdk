@@ -1,0 +1,18 @@
+{
+	"ticket": "VOC-38",
+	"criteria": [
+		{
+			"id": "AC1",
+			"statement": "VocoderProvider correctly renders real compileLocaleFiles/generateLocaleLoader output — captured from app's real, DB-backed compile-locale-files-shape.test.ts integration test as content-hash-keyed sourceKeys (1w2u0qz/0x5nje8/0r69b3t) — resolving to the source-locale text on initial render and to the real translated es strings after a locale switch",
+			"test": "packages/react/src/__tests__/VocoderProvider.real-compiler-output.test.tsx::VocoderProvider renders real compiler output > resolves real hash-keyed translations for es after switching from the source locale"
+		},
+		{
+			"id": "AC2",
+			"statement": "The existing 240-test VocoderProvider suite (packages/react/src/__tests__/) continues to pass completely unchanged, using its original hand-crafted test/fixtures/manifest.ts and locale-loader.ts fixtures untouched — the real-compiler-output fixtures (real-manifest.ts, real-locale-loader.ts, real-locales/*.json) are additive and back only AC1's new test",
+			"evidence": {
+				"type": "manual",
+				"ref": "038-compiler-vocoderprovider-shape-parity implementation — git diff shows zero changes to packages/react/test/fixtures/manifest.ts, locale-loader.ts, or locales/{en,es,fr,pl}.json against origin/main; pnpm --filter @vocoder/react test reports 241 passed (240 pre-existing + AC1's new test), 0 failed"
+			}
+		}
+	]
+}
