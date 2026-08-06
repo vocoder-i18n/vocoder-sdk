@@ -119,15 +119,20 @@ scripts/*
 # via `specify init` + ../scripts/sync-constitution.sh.
 # `specs` is a symlink to ../specs/<repo>, so specs live outside this repo.
 #
-# .specify/memory/constitution.md is the exception: scripts/verify.sh's
-# tier-one drift check (specs/022-verify-acceptance-manifest) hashes this
-# file's own STAMPED block against its own embedded marker, and that check
-# must run in CI, which checks out only this repo. It has to be tracked to
-# be checkable there.
+# .specify/memory/constitution.md and .specify/templates/spec-template.md are
+# exceptions: both carry real repo-specific customization (constitution
+# content; the Blast Radius section, specs/015-blast-radius-spec-section)
+# that a bare `specify init` would not reproduce, and scripts/verify.sh's
+# Blast Radius check (like the constitution drift check) must find this
+# content in CI, which checks out only this repo. They have to be tracked to
+# be checkable there — same reasoning already applied to constitution.md.
 .specify/*
 !.specify/scripts/
 !.specify/memory/
 .specify/memory/*
 !.specify/memory/constitution.md
+!.specify/templates/
+.specify/templates/*
+!.specify/templates/spec-template.md
 .claude/skills/
 /specs
