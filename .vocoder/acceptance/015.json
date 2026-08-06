@@ -1,0 +1,33 @@
+{
+	"ticket": "VOC-15",
+	"criteria": [
+		{
+			"id": "AC1",
+			"statement": "A spec generated via speckit-specify contains a Blast Radius section listing every layer with each one explicitly checked or left unchecked, not silently omitted",
+			"evidence": {
+				"type": "manual",
+				"ref": "specs/015-blast-radius-spec-section/spec.md Assumptions — the next speckit-specify invocation in this same autonomous session (SC-001) is the manual verification; its ticket number is referenced back in this PR/Linear comment once it happens"
+			}
+		},
+		{
+			"id": "AC2",
+			"statement": "When a layer is checked as touched, the Downstream effects subsection carries real content naming what consumes it and what breaks if its contract shifts, not template placeholder text",
+			"test": "scripts/__tests__/blast-radius.test.ts::checkBlastRadius > passes when the section is fully filled"
+		},
+		{
+			"id": "AC3",
+			"statement": "The Coupling map entries subsection carries real content naming the applicable root CLAUDE.md coupling-map rows, not template placeholder text",
+			"test": "scripts/__tests__/blast-radius.test.ts::checkBlastRadius > passes when the section is fully filled"
+		},
+		{
+			"id": "AC4",
+			"statement": "The Journey position subsection states where in the canonical translation flow this change sits — the gate fails, naming that subsection specifically, when it still contains only the template's placeholder text",
+			"test": "scripts/__tests__/blast-radius.test.ts::checkBlastRadius > fails, naming Journey position, when it still contains the template placeholder text"
+		},
+		{
+			"id": "AC5",
+			"statement": "A spec whose Blast Radius section is entirely blank (or absent) causes verify.sh to fail, naming what's missing",
+			"test": "scripts/__tests__/blast-radius.test.ts::checkBlastRadius > fails, naming the section, when the Blast Radius heading is missing entirely"
+		}
+	]
+}

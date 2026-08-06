@@ -8,6 +8,8 @@
 //   3. Validate its shape — malformed short-circuits with exit 2, the gate
 //      could not run at all, which is distinct from a legitimate failure.
 //   4. Check rule drift.
+//   4b. Check the resolved ticket's spec.md Blast Radius section is present
+//      and filled (specs/015-blast-radius-spec-section/).
 //   5. Run build, then typecheck, then lint — build first, since
 //      @vocoder/mcp imports @vocoder/cli/lib from packages/cli/dist (R7).
 //   6. Run every package's own unit suite plus the gate's own suite, and
@@ -18,14 +20,15 @@
 //   9. Emit the evidence block.
 //  10. Exit per the code table in the contract.
 //
-// A branch naming no ticket is exempt from the record and criteria steps
-// only — constitution drift, the disclosure scan, and the project's
-// correctness checks still run and still determine the exit code, because a
-// housekeeping change quietly shipping a broken build (or a leaked price)
-// is not something exemption should paper over.
+// A branch naming no ticket is exempt from the record, blast-radius, and
+// criteria steps only — constitution drift, the disclosure scan, and the
+// project's correctness checks still run and still determine the exit code,
+// because a housekeeping change quietly shipping a broken build (or a
+// leaked price) is not something exemption should paper over.
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { checkBlastRadius } from "./blast-radius";
 import { getCurrentBranch, resolveTicketFromBranch } from "./branch";
 import { checkTierOne, checkTierTwo } from "./constitution";
 import { runDisclosureScan } from "./disclosure";
@@ -232,6 +235,18 @@ export async function run(
 			} else {
 				checks.push({ name: "Constitution", outcome: "pass" });
 			}
+		}
+
+		// --- 4b. blast radius ---
+		log("verify: checking blast radius section...");
+		const blastRadius = checkBlastRadius(rootDir, branchRes);
+		checks.push({
+			name: "Blast Radius",
+			outcome: blastRadius.status,
+			detail: blastRadius.detail,
+		});
+		if (blastRadius.status === "fail") {
+			failures.push(formatFailure("blast radius", [blastRadius.detail]));
 		}
 
 		// --- 5. build, typecheck, lint ---
