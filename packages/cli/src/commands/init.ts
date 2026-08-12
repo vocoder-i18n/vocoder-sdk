@@ -92,7 +92,7 @@ async function ensureRepairApiKey(params: {
 		const projectApi = new VocoderAPI({ apiUrl: params.apiUrl, apiKey: currentApiKey });
 		try {
 			const projectConfig = await projectApi.getAppConfig();
-			params.session.step("API key", highlight("Configured"));
+			params.session.step("API key", highlight("Existing key verified"));
 			return {
 				status: "ok",
 				envFile: null,
