@@ -2,6 +2,7 @@ import * as babel from "@babel/core";
 import * as t from "@babel/types";
 import { generateMessageHash } from "@vocoder/core";
 import { ALL_CLDR } from "./icu-builders";
+import { cleanJSXText } from "./jsx-text";
 
 export interface TransformResult {
 	code: string;
@@ -54,7 +55,10 @@ export function extractTextContentFromNodes(
 		if (ctx.bail) return text;
 
 		if (child.type === "JSXText") {
-			text += child.value;
+			// Raw AST text still carries source newlines and indentation; the
+			// runtime only ever sees the compiler-normalised form. Normalise here
+			// so the build-time hash matches the runtime hash.
+			text += cleanJSXText(child.value);
 		} else if (child.type === "JSXExpressionContainer") {
 			const expr = child.expression;
 			if (expr.type === "Identifier") {

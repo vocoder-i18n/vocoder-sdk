@@ -1,0 +1,61 @@
+{
+	"ticket": "VOC-111",
+	"criteria": [
+		{
+			"id": "AC1",
+			"statement": "Text wrapped across two source lines produces the same key at build time as at runtime. This is the reported defect: the extractor hashed \"Some long static sentence\\n  that wraps.\" while the runtime hashed \"Some long static sentence that wraps.\", so the string was uploaded under a key nothing ever looked up",
+			"test": "packages/extractor/src/__tests__/jsx-whitespace.test.ts::extractor/runtime key parity > text wrapped across two lines"
+		},
+		{
+			"id": "AC2",
+			"statement": "The runtime half of that pair independently produces the same key, so neither side can drift alone without failing a suite",
+			"test": "packages/react/src/__tests__/jsx-whitespace-parity.test.tsx::runtime key parity with the extractor > text wrapped across two lines"
+		},
+		{
+			"id": "AC3",
+			"statement": "Reflowing source does not change the key — the same sentence written on one line and wrapped across three lines extracts to one identical key. This is the regression that made the defect compound: running Prettier over a file re-wrapped long <T> children and orphaned every translation in the diff",
+			"test": "packages/extractor/src/__tests__/jsx-whitespace.test.ts::extractor/runtime key parity > reflowing source does not change the key"
+		},
+		{
+			"id": "AC4",
+			"statement": "Runs of spaces inside a single line are preserved rather than collapsed. The JSX compiler keeps them, so a blanket whitespace collapse would change the source text and break the very keys this change exists to align",
+			"test": "packages/extractor/src/__tests__/jsx-whitespace.test.ts::cleanJSXText > preserves runs of spaces inside a line"
+		},
+		{
+			"id": "AC5",
+			"statement": "The runtime agrees that a deliberate double space survives compilation, confirming AC4 is matching real compiler behaviour rather than an assumption encoded twice",
+			"test": "packages/react/src/__tests__/jsx-whitespace-parity.test.tsx::runtime key parity with the extractor > text containing a deliberate double space"
+		},
+		{
+			"id": "AC6",
+			"statement": "Text padded only by leading and trailing newlines, and single-line text, keep the keys they already had — the fix does not silently re-key strings that were already resolving correctly",
+			"test": "packages/extractor/src/__tests__/jsx-whitespace.test.ts::extractor/runtime key parity > text padded by leading and trailing newlines"
+		},
+		{
+			"id": "AC7",
+			"statement": "The recorded runtime hashes are genuinely what generateMessageHash produces, so the parity constants cannot silently rot if the hash function changes",
+			"test": "packages/extractor/src/__tests__/jsx-whitespace.test.ts::extractor/runtime key parity > recorded runtime hashes are what generateMessageHash produces"
+		},
+		{
+			"id": "AC8",
+			"statement": "The normalisation reproduces JSX text semantics rather than approximating them: per-line leading/trailing trimming, removal of whitespace-only lines, single-space joins, tab handling, and CRLF support are each covered",
+			"test": "packages/extractor/src/__tests__/jsx-whitespace.test.ts::cleanJSXText > handles CRLF line endings"
+		},
+		{
+			"id": "AC9",
+			"statement": "The ground-truth hashes were derived from the compiler rather than reasoned about. The runtime values were recorded by rendering each JSX shape through the React package's own test environment — where the JSX compiler has already normalised children before <T> runs — and reading generateMessageHash(extractText(children)); the extractor was then changed until it produced the same values",
+			"evidence": {
+				"type": "manual",
+				"ref": "Recorded before any fix: single line \"Hello world\"/0os091j, wrapped-2 \"Some long static sentence that wraps.\"/14nru4o, wrapped-3 \"Alpha Beta Gamma\"/1gygm9q, padded \"Just one line\"/0zobyef, double-space \"Two  spaces\"/0ktsbeu. The extractor at that point returned 09luxc6 and 0wxvoda for the two wrapped shapes and agreed on the other three, isolating interior newlines as the sole cause. The same 14nru4o vs 09luxc6 split was reproduced independently in a separate session before this work began."
+			}
+		},
+		{
+			"id": "AC10",
+			"statement": "No existing behaviour regressed — the full SDK suite passes across all six packages, including the 246-test React suite covering plural forms, ordinals and RTL, and the CLI's extraction tests which consume this code path",
+			"evidence": {
+				"type": "manual",
+				"ref": "pnpm test at the sdk root: core 112, react 246, extractor 98, plugin 14, cli 245, mcp 21 — all passing, zero failures. ./scripts/verify.sh reports Build pass, Typecheck pass, Lint pass, Unit pass (761), Disclosure pass. The only gate failure is a pre-existing constitution-copy drift unrelated to this change: the sdk copy is stamped 0f51faab while the workspace source is e9a7ecb9, from an in-flight sync that predates this branch. CI skips that check because ../scripts/sync-constitution.sh is not reachable when only this repo is checked out."
+			}
+		}
+	]
+}
