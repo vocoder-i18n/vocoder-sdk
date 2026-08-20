@@ -1,0 +1,52 @@
+{
+	"ticket": "VOC-110",
+	"criteria": [
+		{
+			"id": "AC1",
+			"statement": "The entry source carries a node shebang, so tsup hoists it above the // @ts-nocheck banner and marks the built file executable. Without it npm links a file the kernel cannot interpret, sh takes over, and it dies on the first import statement",
+			"test": "packages/mcp/src/__tests__/bin-shebang.test.ts::published binary > entry source starts with a node shebang"
+		},
+		{
+			"id": "AC2",
+			"statement": "package.json still declares the bin entry the shebang exists to serve, so the two cannot drift apart",
+			"test": "packages/mcp/src/__tests__/bin-shebang.test.ts::published binary > declares a bin entry"
+		},
+		{
+			"id": "AC3",
+			"statement": "Every package marked external to the bundle is a declared dependency — an external that resolves only inside the workspace would fail for anyone installing the published package, which is the same defect class as the shebang: works locally, broken once published",
+			"test": "packages/mcp/src/__tests__/bin-shebang.test.ts::published binary > every package declared external to the bundle is a real dependency"
+		},
+		{
+			"id": "AC4",
+			"statement": "The failure was reproduced before the fix and confirmed resolved after, by running the built file as an executable exactly as npm's shim does",
+			"evidence": {
+				"type": "manual",
+				"ref": "Before: `./dist/index.js` produced `line 1: //: is a directory` and `line 4: import: command not found` — sh parsing an ES module. The CLI, which has a shebang, returned `0.20.0` from the same invocation. After: the file begins `#!/usr/bin/env node` above the `// @ts-nocheck` banner, mode is 755 rather than 644, and it starts and waits on stdio with no output, which is correct for an MCP stdio server."
+			}
+		},
+		{
+			"id": "AC5",
+			"statement": "The built binary is a functioning MCP server, not merely a file that launches — it completes a protocol handshake and registers its full tool set",
+			"evidence": {
+				"type": "manual",
+				"ref": "Fed JSON-RPC over stdio to ./dist/index.js: initialize returned serverInfo name=vocoder, protocolVersion=2024-11-05; tools/list returned all 13 tools (vocoder_setup, vocoder_init_status, vocoder_init_start, vocoder_init_complete, vocoder_create_project, vocoder_regenerate_key, vocoder_implement_i18n, vocoder_config, vocoder_translate, vocoder_pull, vocoder_list_locales, vocoder_add_locale, vocoder_remove_locale)."
+			}
+		},
+		{
+			"id": "AC6",
+			"statement": "The shebang and the executable bit survive packaging, which is what actually determines whether npx works — a fix that only held in the working tree would not have addressed the reported failure",
+			"evidence": {
+				"type": "manual",
+				"ref": "npm pack produced vocoder-mcp-0.20.0.tgz; the archive lists package/dist/index.js as -rwxr-xr-x and its first line is #!/usr/bin/env node. Running it from the extracted tarball fails with node's own ERR_MODULE_NOT_FOUND for dotenv rather than sh's `import: command not found` — the error moving from the shell to node is itself the proof the shebang is being honoured; dotenv is a declared dependency and was simply not installed in the extracted directory."
+			}
+		},
+		{
+			"id": "AC7",
+			"statement": "No existing behaviour regressed across the SDK",
+			"evidence": {
+				"type": "manual",
+				"ref": "Full sdk suite green after the change, with the mcp package rising from 21 to 24 tests. ./scripts/verify.sh reports Build, Typecheck, Lint, Unit and Disclosure all passing; the only gate failure is the pre-existing constitution-copy drift described in the VOC-111 record, unrelated to this branch."
+			}
+		}
+	]
+}
