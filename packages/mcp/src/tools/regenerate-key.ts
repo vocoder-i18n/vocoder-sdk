@@ -1,4 +1,9 @@
-import { VocoderAPI, verifyStoredAuth } from "@vocoder/cli/lib";
+import {
+	VocoderAPI,
+	renderVocoderConfig,
+	resolveLookupMatch,
+	verifyStoredAuth,
+} from "@vocoder/cli/lib";
 
 import { detectRepoIdentity } from "@vocoder/cli/lib";
 
@@ -29,7 +34,15 @@ export async function runRegenerateKey(): Promise<RegenerateKeyResult> {
 		);
 	}
 
-	const firstApp = lookup.existingApps[0]!;
+	// Which app this repo checkout corresponds to. Taking existingApps[0] here
+	// regenerated whichever app happened to come back first, so in a monorepo an
+	// agent working in apps/admin could rotate apps/web's key instead.
+	const match = resolveLookupMatch(lookup, identity.appDir ?? "");
+	if (!match) {
+		throw new Error(
+			`No Vocoder app matches ${identity.appDir ? `"${identity.appDir}"` : "the repository root"}, and this repo has no whole-repo app. Run vocoder_config to see which app directories are registered.`,
+		);
+	}
 	const apps = lookup.existingApps.map((a) => ({ appDir: a.appDir, appId: a.appId }));
 
 	const api = new VocoderAPI({ apiUrl, apiKey: "" });
@@ -43,7 +56,7 @@ export async function runRegenerateKey(): Promise<RegenerateKeyResult> {
 
 	let apiKey: string;
 	try {
-		({ apiKey } = await api.regenerateProjectApiKey(storedAuth.token, firstApp.projectId));
+		({ apiKey } = await api.regenerateProjectApiKey(storedAuth.token, match.projectId));
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
 		if (msg.includes("403")) {
@@ -54,23 +67,20 @@ export async function runRegenerateKey(): Promise<RegenerateKeyResult> {
 		throw new Error(`Failed to generate API key: ${msg}`);
 	}
 
-	const configLines = apps.map((app) =>
-		[
-			`// ${app.appDir || "repo root"} — vocoder.config.ts`,
-			`import { defineConfig } from '@vocoder/config';`,
-			`export default defineConfig({`,
-			`  appId: '${app.appId}',`,
-			`  localesDir: 'src/locales',`,
-			`});`,
-		].join("\n"),
-	);
+	// Rendered by the CLI so an agent writes exactly what `vocoder init` writes.
+	// The previous copy emitted an `appId` field, which is not part of
+	// VocoderConfig — TypeScript rejects it and the parser drops it — and pinned
+	// localesDir to a value that differs from the SDK default.
+	const configLines = [
+		renderVocoderConfig(apps.map((a) => a.appDir)).trimEnd(),
+	];
 
 	return {
 		apiKey,
-		projectName: firstApp.projectName,
+		projectName: match.projectName,
 		apps,
 		instructions: [
-			`New API key generated for "${firstApp.projectName}".`,
+			`New API key generated for "${match.projectName}"${match.appDir ? ` (${match.appDir})` : ""}.`,
 			``,
 			`1. Write to .env at the repo root:`,
 			`   VOCODER_API_KEY=${apiKey}`,

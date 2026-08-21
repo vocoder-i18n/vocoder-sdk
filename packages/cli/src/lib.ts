@@ -56,3 +56,11 @@ export {
 // single root app, so monorepos produced a fingerprint matching nothing.
 export { extractApps, resolveAppDirs } from "./utils/extract-apps.js";
 export type { AppExtraction, ExtractAppsOptions } from "./utils/extract-apps.js";
+
+// Config generation — split render/write so the MCP emits exactly what
+// `vocoder init` writes. Its own copy included an `appId` field that is not
+// part of VocoderConfig and is silently dropped by the parser.
+export { renderVocoderConfig, writeVocoderConfig } from "./utils/config-write.js";
+export type { ConfigWriteResult } from "./utils/config-write.js";
+export { resolveLookupMatch } from "./utils/project-lookup.js";
+export type { ResolvedLookupMatch } from "./utils/project-lookup.js";

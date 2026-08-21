@@ -32,30 +32,44 @@ export function writeVocoderConfig(
 		return { path: absolutePath, relativePath, written: false };
 	}
 
-	const namedDirs = (opts.appDirs ?? []).filter(Boolean);
+	const content = renderVocoderConfig(opts.appDirs ?? []);
 
-	let content: string;
-	if (namedDirs.length > 0) {
-		const appLines = namedDirs.map((dir) => `    { appDir: '${dir}' },`).join("\n");
-		content = [
-			"import { defineConfig } from '@vocoder/config';",
-			"",
-			"export default defineConfig({",
-			"  apps: [",
-			appLines,
-			"  ],",
-			"});",
-			"",
-		].join("\n");
-	} else {
-		content = [
+	writeFileSync(absolutePath, content, "utf-8");
+	return { path: absolutePath, relativePath, written: true };
+}
+
+/**
+ * Render the contents of `vocoder.config.*`.
+ *
+ * Separated from the writer so callers that hand the text to someone else —
+ * the MCP server, which returns it for an agent to write — emit exactly what
+ * `vocoder init` would have written. Its own copy previously included an
+ * `appId` field, which is not part of VocoderConfig at all: TypeScript rejects
+ * it and the config parser silently drops it.
+ *
+ * No `localesDir` is emitted. Omitting it lets DEFAULT_LOCALES_DIR apply, and
+ * pinning a different value here would lay a project out differently depending
+ * on whether it was set up through the CLI or through an agent.
+ */
+export function renderVocoderConfig(appDirs: string[]): string {
+	const namedDirs = appDirs.filter(Boolean);
+	if (namedDirs.length === 0) {
+		return [
 			"import { defineConfig } from '@vocoder/config';",
 			"",
 			"export default defineConfig({});",
 			"",
 		].join("\n");
 	}
-
-	writeFileSync(absolutePath, content, "utf-8");
-	return { path: absolutePath, relativePath, written: true };
+	const appLines = namedDirs.map((dir) => `    { appDir: '${dir}' },`).join("\n");
+	return [
+		"import { defineConfig } from '@vocoder/config';",
+		"",
+		"export default defineConfig({",
+		"  apps: [",
+		appLines,
+		"  ],",
+		"});",
+		"",
+	].join("\n");
 }
