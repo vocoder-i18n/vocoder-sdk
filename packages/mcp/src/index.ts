@@ -439,13 +439,19 @@ server.tool(
 			.boolean()
 			.optional()
 			.describe("Force re-translation even if strings are unchanged"),
+		appDir: z
+			.string()
+			.optional()
+			.describe(
+				"Restrict the run to one app directory in a monorepo, relative to the repo root (e.g. 'apps/web'). Omit to translate every app declared in vocoder.config's apps[], or the repo root when there is no apps[] array.",
+			),
 	},
-	async ({ branch, force }) => {
+	async ({ branch, force, appDir }) => {
 		const api = createClient();
 		if (!api)
 			return { content: [{ type: "text", text: NO_API_KEY_MESSAGE }] };
 		try {
-			const text = await runTranslate({ branch, force }, api);
+			const text = await runTranslate({ branch, force, appDir }, api);
 			return { content: [{ type: "text", text }] };
 		} catch (error) {
 			return {

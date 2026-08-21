@@ -4,8 +4,8 @@ import type {
 	TranslateCommandOptions,
 	TranslationStringEntry,
 } from "../types.js";
-import { VocoderAPI, VocoderAPIError, computeSourceEntriesHash } from "../utils/api.js";
-import { computeFingerprint, loadVocoderConfig } from "@vocoder/extractor";
+import { VocoderAPI, VocoderAPIError } from "../utils/api.js";
+import { loadVocoderConfig } from "@vocoder/extractor";
 import { detectBranch, isTargetBranch } from "../utils/branch.js";
 import { detectCommitSha, resolveGitRepositoryIdentity, resolveGitRoot } from "../utils/git-identity.js";
 import {
@@ -14,8 +14,7 @@ import {
 } from "../utils/workflow-read.js";
 
 import type { LimitErrorResponse } from "../types.js";
-import { StringExtractor } from "../utils/extract.js";
-import { buildStringEntries } from "../utils/string-entries.js";
+import { extractApps, resolveAppDirs } from "../utils/extract-apps.js";
 import chalk from "chalk";
 import {
 	CommandSession,
@@ -253,11 +252,7 @@ export async function translate(options: TranslateCommandOptions = {}): Promise<
 
 		// --app-dir flag > vocoder.config.ts apps[] > single-app root ("")
 		// Monorepo users declare app dirs in vocoder.config.ts; flag overrides for per-app workflows.
-		const configAppDirs = rootConfig?.apps?.map((a) => a.appDir).filter(Boolean) ?? null;
-		const appDirs = options.appDir
-			? [options.appDir.replace(/^\/|\/$/g, "")]
-			: (configAppDirs ?? []);
-		const effectiveAppDirs = appDirs.length > 0 ? appDirs : [""];
+		const effectiveAppDirs = resolveAppDirs(options.appDir, rootConfig);
 
 		// Validate and display named app dirs. Root ("") always valid — skip for single-app projects.
 		const namedAppDirs = effectiveAppDirs.filter(Boolean);
@@ -275,67 +270,33 @@ export async function translate(options: TranslateCommandOptions = {}): Promise<
 			activeStep = null;
 		}
 
-		// Extract strings for each app directory
-		type AppExtraction = {
-			appDir: string;
-			stringEntries: TranslationStringEntry[];
-			sourceEntriesCount: number;
-			sourceEntriesHash: string;
-			fingerprint: string;
-			localesDir?: string;
-		};
-		const appExtractions: AppExtraction[] = [];
-
-		for (const appDir of effectiveAppDirs) {
-			// Resolve effective per-app config: root config merged with matching apps[] entry overrides.
-			const appEntry = appDir ? rootConfig?.apps?.find((a) => a.appDir === appDir) : undefined;
-			const appConfig = appEntry ? { ...rootConfig, ...appEntry } : rootConfig;
-
-			const defaultInclude = appDir ? [`${appDir}/**/*.{tsx,jsx,ts,js}`] : ["**/*.{tsx,jsx,ts,js}"];
-			const includePattern: string | string[] =
-				appConfig?.include?.length ? appConfig.include : defaultInclude;
-			const excludePattern = appConfig?.exclude?.length ? appConfig.exclude : undefined;
-			const industry = appConfig?.industry;
-
-			const patternsDisplay = Array.isArray(includePattern)
-				? includePattern.join(", ")
-				: includePattern;
-
-			activeStep = session.startStep(
-				appDir
-					? `Extracting strings from ${highlight(appDir)} (${patternsDisplay})`
-					: `Extracting strings from ${patternsDisplay}`,
-			);
-
-			const extractor = new StringExtractor();
-			const extractedStrings = await extractor.extractFromProject(
-				includePattern,
-				gitRoot,
-				excludePattern,
-			);
-
-			activeStep.done(
-				appDir
-					? formatLabelValue(
-							highlight(appDir),
-							`${highlight(String(extractedStrings.length))} string${extractedStrings.length === 1 ? "" : "s"}`,
-						)
-					: formatLabelValue(
-							"Strings",
-							`${highlight(String(extractedStrings.length))}`,
-						),
-			);
-			activeStep = null;
-
-			const stringEntries = buildStringEntries(extractedStrings);
-			const sourceEntriesHash = computeSourceEntriesHash({ entries: stringEntries, industry: industry ?? null });
-
-			// Fingerprint: hash(projectShortId:appDir:sortedKeys) — matches server formula
-			const scope = `${projectShortId}:${appDir}`;
-			const fingerprint = computeFingerprint(scope, stringEntries.map((e) => e.key));
-
-			appExtractions.push({ appDir, stringEntries, sourceEntriesCount: stringEntries.length, sourceEntriesHash, fingerprint, localesDir: appConfig?.localesDir });
-		}
+		// Extraction itself lives in utils/extract-apps.ts so callers without a
+		// terminal — the MCP server — run exactly this code rather than their own
+		// copy of it. The callbacks below are the only CLI-specific part.
+		const appExtractions = await extractApps({
+			gitRoot,
+			appDirs: effectiveAppDirs,
+			rootConfig,
+			projectShortId,
+			onAppStart: (appDir, patterns) => {
+				activeStep = session.startStep(
+					appDir
+						? `Extracting strings from ${highlight(appDir)} (${patterns})`
+						: `Extracting strings from ${patterns}`,
+				);
+			},
+			onAppDone: (appDir, count) => {
+				activeStep?.done(
+					appDir
+						? formatLabelValue(
+								highlight(appDir),
+								`${highlight(String(count))} string${count === 1 ? "" : "s"}`,
+							)
+						: formatLabelValue("Strings", `${highlight(String(count))}`),
+				);
+				activeStep = null;
+			},
+		});
 
 		const totalSourceEntries = appExtractions.reduce((sum, a) => sum + a.sourceEntriesCount, 0);
 		if (totalSourceEntries === 0) {

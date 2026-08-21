@@ -47,6 +47,40 @@
 				"type": "manual",
 				"ref": "Still outstanding on VOC-113: the headless runTranslate extraction (which is what makes vocoder_translate's hardcoded appDir '' impossible rather than merely fixed), writeApiKeyToEnv, writeVocoderConfig including apps[] for monorepos, writeLocaleFileTree, findOrphanedFiles, resolveLookupMatch, checkPlanLimits and getLimitErrorGuidance. Workflow generation was taken first because it was the single duplicate causing the most defects — four in one file."
 			}
+		},
+		{
+			"id": "AC8",
+			"statement": "Per-app extraction lives in one implementation that both the CLI and the MCP server call. It previously existed twice, and the copies disagreed about the most consequential thing in the pipeline — which apps exist and what fingerprint scope each gets",
+			"evidence": {
+				"type": "manual",
+				"ref": "packages/cli/src/utils/extract-apps.ts exports extractApps and resolveAppDirs, both re-exported from @vocoder/cli/lib. commands/translate.ts calls them and keeps its spinner via the optional onAppStart/onAppDone callbacks — the only CLI-specific part left. mcp/src/tools/translate.ts calls the same two functions; its own extraction loop, include/exclude resolution and fingerprint computation are deleted."
+			}
+		},
+		{
+			"id": "AC9",
+			"statement": "The MCP server no longer hardcodes a single root app. It previously passed appDir \"\" in the submission and computed the fingerprint scope as `${projectShortId}:`, so every monorepo submitted one merged string set under a scope the plugin never computes at build time",
+			"evidence": {
+				"type": "manual",
+				"ref": "grep for `appDir: \"\"` and for the root-only scope template in mcp/src/tools/translate.ts both return nothing. The submission now maps over the resolved apps, each carrying its own appDir, fingerprint and sourceEntriesHash."
+			}
+		},
+		{
+			"id": "AC10",
+			"statement": "App-directory resolution is covered directly, including the precedence rules and the slash normalisation that keeps `--app-dir /apps/web/` and `apps/web` on the same fingerprint scope",
+			"test": "packages/cli/src/__tests__/extract-apps.test.ts::resolveAppDirs > strips leading and trailing slashes from an explicit app dir"
+		},
+		{
+			"id": "AC11",
+			"statement": "Resolution never returns an empty list — root-level and monorepo projects stay on one code path because a project with no apps[] resolves to a single app whose directory is the empty string",
+			"test": "packages/cli/src/__tests__/extract-apps.test.ts::resolveAppDirs > never returns an empty list"
+		},
+		{
+			"id": "AC12",
+			"statement": "The refactor was proven to sit on the real code path rather than beside it: the CLI's existing orchestrator tests failed when extraction was first imported from the wrong module, and passed once corrected",
+			"evidence": {
+				"type": "manual",
+				"ref": "extract-apps.ts initially imported StringExtractor from @vocoder/extractor rather than the CLI's own utils/extract.js re-export. Four tests in translate.test.ts failed immediately, because the suite mocks utils/extract.js and the new import bypassed that mock. utils/extract.ts is a pure re-export, so the two are identical at runtime and this was a testability defect rather than a production one — but it demonstrates the extracted code is genuinely what the orchestrator tests exercise. Corrected to import from ./extract.js; all 245 CLI tests pass."
+			}
 		}
 	]
 }
