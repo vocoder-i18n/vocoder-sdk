@@ -1,0 +1,67 @@
+{
+	"ticket": "VOC-112",
+	"criteria": [
+		{
+			"id": "AC1",
+			"statement": "The generated Next.js App Router scaffold only imports names the entry point it names actually exports. Previously it took getConfig and getLocales from @vocoder/react, which exports neither, so the file an agent was told to write verbatim did not compile",
+			"test": "packages/mcp/src/__tests__/scaffold-imports.test.ts::generated Next.js scaffold > only imports names the claimed entry point actually exports"
+		},
+		{
+			"id": "AC2",
+			"statement": "getConfig, getLocaleDir and getLocales are all taken from @vocoder/react/server, and none of them is imported from the root entry",
+			"test": "packages/mcp/src/__tests__/scaffold-imports.test.ts::generated Next.js scaffold > takes the server-only helpers from @vocoder/react/server"
+		},
+		{
+			"id": "AC3",
+			"statement": "The prose instructions carry the same correction — the wrong claim appeared in two instruction strings as well as in the generated code, so fixing only the code would have left an agent following the text into the same error",
+			"test": "packages/mcp/src/__tests__/scaffold-imports.test.ts::generated Next.js scaffold > does not tell the agent to import server helpers from the root entry"
+		},
+		{
+			"id": "AC4",
+			"statement": "Import validation is derived from @vocoder/react's real exports rather than pinned to a literal, so moving an export between entry points fails this suite instead of silently shipping a broken scaffold",
+			"evidence": {
+				"type": "manual",
+				"ref": "The test reads packages/react/src/index.ts, server.ts and locale-selector.ts — the three files behind the entries in react's package.json exports map — strips `export type { … }` blocks, and collects value exports from both re-export lists and function/const/class declarations. Each named import in the generated code is checked against the set for the entry it names; imports of external modules such as next/headers are skipped. Nothing about the expected import lines is hardcoded."
+			}
+		},
+		{
+			"id": "AC5",
+			"statement": "The test was demonstrated to fail against the original defect rather than merely passing after the fix",
+			"evidence": {
+				"type": "manual",
+				"ref": "Reverted the import block to its original form and re-ran: 2 of 4 tests failed with `getConfig is not exported by @vocoder/react` and `getLocales is not exported by @vocoder/react`, plus the root-entry assertion. Restoring the fix returned all tests to passing."
+			}
+		},
+		{
+			"id": "AC6",
+			"statement": "The generated vocoder.config.ts matches what the CLI writes for a single-app project, instead of pinning a localesDir that contradicts both the CLI and the SDK default",
+			"test": "packages/mcp/src/__tests__/scaffold-imports.test.ts::generated vocoder.config.ts > matches what the CLI writes for a single-app project"
+		},
+		{
+			"id": "AC7",
+			"statement": "No localesDir is emitted at all, so DEFAULT_LOCALES_DIR applies. The tool previously hardcoded 'src/locales' while the SDK default is 'locales' and the CLI writes no such key, meaning an MCP-provisioned project was laid out differently from a `vocoder init` one",
+			"test": "packages/mcp/src/__tests__/scaffold-imports.test.ts::generated vocoder.config.ts > does not pin a localesDir that contradicts the SDK default"
+		},
+		{
+			"id": "AC8",
+			"statement": "The file scan's 100-file ceiling is disclosed rather than silent — the result reports filesToScanTruncated and the step text tells the agent to scan beyond the list, so a partial list is never presented as the complete set of files to wrap",
+			"test": "packages/mcp/src/__tests__/scaffold-imports.test.ts::file scan reporting > says so in the steps when the list is truncated"
+		},
+		{
+			"id": "AC9",
+			"statement": "A release is queued for this fix, so it reaches users rather than sitting merged and unpublished",
+			"evidence": {
+				"type": "manual",
+				"ref": ".changeset/mcp-scaffold-imports.md declares a patch bump for @vocoder/mcp. VOC-110 and VOC-111 both merged with no changeset and were only caught before publishing by chance; VOC-135 tracks enforcing this in CI."
+			}
+		},
+		{
+			"id": "AC10",
+			"statement": "Deliberately out of scope, recorded so the omission is a decision rather than an oversight: the generated config still has no apps[] array for monorepos, and vocoder_implement_i18n documents appDir as absolute while vocoder_pull documents it as relative",
+			"evidence": {
+				"type": "manual",
+				"ref": "Both belong with the MCP/CLI convergence work in VOC-113, which replaces this tool's hand-built config generation with the CLI's writeVocoderConfig rather than patching the duplicate. Fixing them here would deepen the duplication this ticket's sibling exists to remove."
+			}
+		}
+	]
+}
