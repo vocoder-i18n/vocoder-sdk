@@ -1,5 +1,41 @@
 # @vocoder/extractor
 
+## 0.21.0
+
+### Minor Changes
+
+- Normalise JSX whitespace before hashing, so build-time and runtime keys agree.
+
+  The extractor hashed text read straight from the AST, where it still carried
+  the source file's newlines and indentation. The runtime never sees that form —
+  the JSX compiler normalises text children before `<T>` runs — so the two
+  computed different keys for the same string, and the translation was uploaded
+  under a key nothing ever looked up:
+
+      "Some long static sentence\n  that wraps."  -> 09luxc6   (uploaded)
+      "Some long static sentence that wraps."     -> 14nru4o   (looked up)
+
+  Any `<T>` whose children wrapped across lines was permanently untranslated, and
+  reflowing a file with Prettier changed the key and orphaned every affected
+  translation. Nothing warned: the missing-key warning only fires when an explicit
+  `id` is set, which the transform deliberately omits for static children.
+
+  Only interior newlines were affected. Single-line text, and text padded only by
+  leading or trailing newlines, already produced correct keys and are unchanged.
+
+  Runs of spaces inside a line are deliberately preserved — the compiler keeps
+  them, so collapsing all whitespace would have changed the source text and broken
+  keys that were previously correct.
+
+  **This is a minor rather than a patch because extracted keys change.** Multi-line
+  strings will extract under new keys on the next run: the old rows orphan and are
+  soft-deleted by the sync diff, and the new keys need translating once. Nothing
+  that previously worked stops working, since those old keys never resolved.
+
+### Patch Changes
+
+- @vocoder/config@0.21.0
+
 ## 0.20.0
 
 ### Patch Changes
