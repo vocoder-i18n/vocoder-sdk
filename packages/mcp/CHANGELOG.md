@@ -1,5 +1,34 @@
 # @vocoder/mcp
 
+## 0.21.0
+
+### Patch Changes
+
+- Add a node shebang so the published binary is executable.
+
+  `package.json` declares `bin: { "vocoder-mcp": "dist/index.js" }`, but the entry
+  source had no shebang, so the built file began with the `// @ts-nocheck` banner
+  and was written mode 644. npm links that file directly; with no interpreter line
+  the kernel falls through to `sh`, which fails on the first `import`:
+
+      ./dist/index.js: line 1: //: is a directory
+      ./dist/index.js: line 4: import: command not found
+
+  `npx @vocoder/mcp` therefore failed on macOS and Linux while appearing to work
+  on Windows, whose shims default to node.
+
+  Adding the shebang to the entry lets tsup hoist it above the banner and mark the
+  output executable, matching how `@vocoder/cli` already builds. Verified through
+  to the tarball: `npm pack` preserves both the shebang and mode 755, and the
+  built server completes an MCP `initialize` handshake and registers all 13 tools
+  over stdio.
+
+- Updated dependencies [0b67cbd]
+- Updated dependencies
+  - @vocoder/cli@0.21.0
+  - @vocoder/extractor@0.21.0
+  - @vocoder/plugin@0.21.0
+
 ## 0.20.0
 
 ### Minor Changes
