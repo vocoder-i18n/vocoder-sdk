@@ -81,6 +81,34 @@
 				"type": "manual",
 				"ref": "extract-apps.ts initially imported StringExtractor from @vocoder/extractor rather than the CLI's own utils/extract.js re-export. Four tests in translate.test.ts failed immediately, because the suite mocks utils/extract.js and the new import bypassed that mock. utils/extract.ts is a pure re-export, so the two are identical at runtime and this was a testability defect rather than a production one — but it demonstrates the extracted code is genuinely what the orchestrator tests exercise. Corrected to import from ./extract.js; all 245 CLI tests pass."
 			}
+		},
+		{
+			"id": "AC13",
+			"statement": "vocoder_regenerate_key selects the app matching the current checkout rather than whichever the lookup returned first. Taking existingApps[0] meant an agent working in apps/admin could rotate apps/web's API key — a silent, destructive mis-selection in any monorepo",
+			"test": "packages/cli/src/__tests__/config-render.test.ts::resolveLookupMatch > prefers an exact appDir match over whatever came back first"
+		},
+		{
+			"id": "AC14",
+			"statement": "When no app matches and the repo has no whole-repo app, resolution returns null so the caller can name the missing directory, instead of silently proceeding with an unrelated app",
+			"test": "packages/cli/src/__tests__/config-render.test.ts::resolveLookupMatch > returns null when nothing matches and there is no whole-repo app"
+		},
+		{
+			"id": "AC15",
+			"statement": "The generated vocoder.config no longer contains appId. It is not a field on VocoderConfig — TypeScript rejects it and the extractor's config parser drops it — so every agent following those instructions produced a file the user had to fix by hand",
+			"test": "packages/cli/src/__tests__/config-render.test.ts::renderVocoderConfig > never emits appId — it is not a field on VocoderConfig"
+		},
+		{
+			"id": "AC16",
+			"statement": "No localesDir is pinned, so DEFAULT_LOCALES_DIR applies and a project laid out by an agent matches one laid out by `vocoder init`",
+			"test": "packages/cli/src/__tests__/config-render.test.ts::renderVocoderConfig > never pins localesDir, so the SDK default applies"
+		},
+		{
+			"id": "AC17",
+			"statement": "Config generation follows the same render/write split as the workflow, so callers that hand text to someone else emit exactly what the CLI would have written",
+			"evidence": {
+				"type": "manual",
+				"ref": "renderVocoderConfig is extracted from writeVocoderConfig, which now delegates to it — mirroring renderWorkflowYaml / writeGitHubActionsWorkflow. Both are exported from @vocoder/cli/lib alongside resolveLookupMatch. `grep -c \"appId: '\"` in mcp/src/tools/regenerate-key.ts returns 0. Full sdk suite green at 790; cli 252 -> 260."
+			}
 		}
 	]
 }
