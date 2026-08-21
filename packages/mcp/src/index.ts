@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import "dotenv/config";
 
 import { NO_API_KEY_MESSAGE, createClient } from "./client.js";
