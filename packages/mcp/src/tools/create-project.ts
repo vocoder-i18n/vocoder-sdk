@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { detectRepoIdentity } from "@vocoder/cli/lib";
+import {
+	WORKFLOW_RELATIVE_PATH,
+	detectRepoIdentity,
+	renderWorkflowYaml,
+} from "@vocoder/cli/lib";
 import {
 	VocoderAPI,
 	VocoderAPIError,
@@ -278,22 +282,11 @@ export async function runProjectCreate(
 		? `\n\nNote: Repository auto-bind did not complete — the repo will bind automatically on the first translate run.`
 		: "";
 
-	const branches = input.targetBranches.map((b) => `'${b}'`).join(", ");
-	const workflowYaml = [
-		`name: Vocoder Translate`,
-		`on:`,
-		`  push:`,
-		`    branches: [${branches}]`,
-		`jobs:`,
-		`  translate:`,
-		`    runs-on: ubuntu-latest`,
-		`    steps:`,
-		`      - uses: actions/checkout@v4`,
-		`      - uses: vocoder-i18n/translate-action@v1`,
-		`        with:`,
-		`          api-key: \${{ secrets.VOCODER_API_KEY }}`,
-		`          on-failure: proceed`,
-	].join("\n");
+	// Rendered by the CLI so the two can never emit different YAML. The
+	// hand-built version here omitted the bot loop guard, the permissions
+	// block and commit-mode, and named the file vocoder.yml — which the CLI's
+	// own readers then could not find.
+	const workflowYaml = renderWorkflowYaml(input.targetBranches).trimEnd();
 
 	return {
 		...projectResult,
@@ -303,7 +296,7 @@ export async function runProjectCreate(
 			`1. Write to .env at the project root:`,
 			`   VOCODER_API_KEY=${projectResult.apiKey}`,
 			``,
-			`2. Write .github/workflows/vocoder.yml — create directories if needed:`,
+			`2. Write ${WORKFLOW_RELATIVE_PATH} — create directories if needed:`,
 			``,
 			workflowYaml,
 			``,
@@ -316,7 +309,7 @@ export async function runProjectCreate(
 			`   Value: ${projectResult.apiKey}`,
 			``,
 			`4. Tell the user to commit the workflow file:`,
-			`   git add .github/workflows/vocoder.yml && git commit -m "Add Vocoder translate workflow"`,
+			`   git add ${WORKFLOW_RELATIVE_PATH} && git commit -m "Add Vocoder translate workflow"`,
 			``,
 			`5. Call vocoder_implement_i18n to install packages, set up VocoderProvider, and get the list of files to wrap strings in.`,
 			``,

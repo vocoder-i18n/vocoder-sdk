@@ -37,3 +37,16 @@ export type { VocoderConfig } from "@vocoder/extractor";
 export { defineConfig } from "@vocoder/config";
 export type { SetupSnippets } from "./utils/setup-snippets.js";
 export { getSetupSnippets } from "./utils/setup-snippets.js";
+
+// Workflow generation — the MCP server calls these rather than re-implementing
+// them, so the two can never emit different YAML or disagree on the filename.
+export { WORKFLOW_RELATIVE_PATH } from "./utils/workflow-path.js";
+export {
+	renderWorkflowYaml,
+	writeGitHubActionsWorkflow,
+} from "./utils/workflow-write.js";
+export type { WorkflowWriteResult } from "./utils/workflow-write.js";
+export {
+	readWorkflowBranches,
+	readWorkflowCommitMode,
+} from "./utils/workflow-read.js";

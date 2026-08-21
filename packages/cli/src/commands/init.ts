@@ -19,6 +19,7 @@ import { runProjectCreate } from "../utils/project-create.js";
 import { resolveLookupMatch } from "../utils/project-lookup.js";
 import { selectOrganizationForInit } from "../utils/organization-select.js";
 import { writeApiKeyToEnv } from "../utils/output.js";
+import { WORKFLOW_RELATIVE_PATH } from "../utils/workflow-path.js";
 import { writeGitHubActionsWorkflow } from "../utils/workflow-write.js";
 import { writeVocoderConfig } from "../utils/config-write.js";
 
@@ -453,7 +454,7 @@ export async function init(options: InitOptions = {}): Promise<number> {
 
 		// ── 10. GitHub Actions workflow ──────────────────────────────────────────
 		let workflowWritten = false;
-		let workflowRelativePath = ".github/workflows/vocoder-translate.yml";
+		let workflowRelativePath = WORKFLOW_RELATIVE_PATH;
 		if (repoRoot) {
 			const commitMode = await promptCommitMode(session);
 			if (commitMode === null) return session.cancelled();
