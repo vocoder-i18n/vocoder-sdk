@@ -50,3 +50,9 @@ export {
 	readWorkflowBranches,
 	readWorkflowCommitMode,
 } from "./utils/workflow-read.js";
+
+// Per-app extraction — the MCP server calls this rather than re-deriving which
+// apps exist and what their fingerprint scope is. Its own copy hardcoded a
+// single root app, so monorepos produced a fingerprint matching nothing.
+export { extractApps, resolveAppDirs } from "./utils/extract-apps.js";
+export type { AppExtraction, ExtractAppsOptions } from "./utils/extract-apps.js";
