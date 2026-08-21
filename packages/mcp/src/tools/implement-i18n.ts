@@ -41,6 +41,8 @@ export interface ImplementI18nResult {
 	phase4_wrapping: {
 		importStatement: string;
 		filesToScan: string[];
+		/** True when the scan hit MAX_SCAN_FILES — more source files exist than are listed. */
+		filesToScanTruncated: boolean;
 		patternsToFind: Array<{ pattern: string; example: string }>;
 		patternsToSkip: string[];
 		tFunctionUsage: string;
@@ -87,8 +89,15 @@ const TEST_PATTERNS = [
 	"e2e",
 ];
 
+/**
+ * Upper bound on files reported to the agent. Scanning stops here rather than
+ * enumerating a whole monorepo; callers surface `filesToScanTruncated` so a
+ * partial list is never mistaken for the complete set.
+ */
+const MAX_SCAN_FILES = 100;
+
 function scanSourceFiles(root: string, baseDir: string, results: string[]): void {
-	if (results.length >= 100) return;
+	if (results.length >= MAX_SCAN_FILES) return;
 	let entries: string[];
 	try {
 		entries = readdirSync(root);
@@ -96,7 +105,7 @@ function scanSourceFiles(root: string, baseDir: string, results: string[]): void
 		return;
 	}
 	for (const entry of entries) {
-		if (results.length >= 100) return;
+		if (results.length >= MAX_SCAN_FILES) return;
 		const full = join(root, entry);
 		let stat: ReturnType<typeof statSync> | undefined;
 		try {
@@ -132,7 +141,7 @@ function resolveProviderFile(
 			return {
 				file: found ?? "app/layout.tsx",
 				ssrNote:
-					"Next.js App Router: layout.tsx is a Server Component — it reads the vocoder_locale and vocoder_preview cookies and passes initialLocale and preview props to VocoderProvider. Import getLocaleDir from '@vocoder/react/server' and getConfig/getLocales from '@vocoder/react' to set lang and dir on <html> server-side for correct RTL on first paint. See fullCode for the complete pattern.",
+					"Next.js App Router: layout.tsx is a Server Component — it reads the vocoder_locale and vocoder_preview cookies and passes initialLocale and preview props to VocoderProvider. Import getConfig, getLocaleDir and getLocales from '@vocoder/react/server' to set lang and dir on <html> server-side for correct RTL on first paint. See fullCode for the complete pattern.",
 			};
 		}
 		const pagesCandidates = [
@@ -167,8 +176,8 @@ function resolveProviderFile(
 
 function buildNextAppRouterLayoutCode(): string {
 	return `import { cookies } from 'next/headers';
-import { getConfig, getLocales, VocoderProvider } from '@vocoder/react';
-import { getLocaleDir } from '@vocoder/react/server';
+import { VocoderProvider } from '@vocoder/react';
+import { getConfig, getLocaleDir, getLocales } from '@vocoder/react/server';
 
 export default async function RootLayout({
   children,
@@ -212,13 +221,14 @@ export function runImplementI18n(input: ImplementI18nInput): ImplementI18nResult
 			? buildInstallCommand(detection.packageManager, runtimePackages)
 			: null;
 
-	const localesDir = "src/locales";
+	// Matches what the CLI's writeVocoderConfig emits for a single-app project.
+	// Setting localesDir here would diverge from both the CLI and the SDK default
+	// (DEFAULT_LOCALES_DIR = "locales"), so a project set up through the MCP would
+	// end up laid out differently from one set up through `vocoder init`.
 	const configContent = [
 		"import { defineConfig } from '@vocoder/config';",
 		"",
-		"export default defineConfig({",
-		`  localesDir: '${localesDir}',`,
-		"});",
+		"export default defineConfig({});",
 	].join("\n");
 
 	const snippets = getSetupSnippets({
@@ -261,7 +271,7 @@ export function runImplementI18n(input: ImplementI18nInput): ImplementI18nResult
 				"Create app/layout.tsx using the fullCode — it reads vocoder_locale and vocoder_preview cookies and passes initialLocale and preview to VocoderProvider. Also sets lang and dir on <html> using getLocaleDir for correct RTL server-side rendering.";
 		} else {
 			wrapInstruction =
-				`In ${providerFile}, read the vocoder_locale and vocoder_preview cookies with \`(await cookies()).get('vocoder_locale')?.value\`, then pass initialLocale and preview props to VocoderProvider. Import getLocaleDir from '@vocoder/react/server' and getConfig/getLocales from '@vocoder/react' to set lang and dir on <html>. See vocoder://docs/framework-setup for the complete pattern.`;
+				`In ${providerFile}, read the vocoder_locale and vocoder_preview cookies with \`(await cookies()).get('vocoder_locale')?.value\`, then pass initialLocale and preview props to VocoderProvider. Import getConfig, getLocaleDir and getLocales from '@vocoder/react/server' to set lang and dir on <html>. See vocoder://docs/framework-setup for the complete pattern.`;
 		}
 	} else if (providerFileExists) {
 		wrapInstruction = `In ${providerFile}, wrap your root children with <VocoderProvider>. Import from '@vocoder/react'.`;
@@ -275,6 +285,8 @@ export function runImplementI18n(input: ImplementI18nInput): ImplementI18nResult
 		return depthA !== depthB ? depthA - depthB : a.localeCompare(b);
 	});
 
+	const filesToScanTruncated = filesFound.length >= MAX_SCAN_FILES;
+
 	const steps: string[] = [
 		devInstallCommand || runtimeInstallCommand
 			? `Step 1: Install packages — ${[devInstallCommand, runtimeInstallCommand].filter(Boolean).join(" && ")}`
@@ -284,7 +296,9 @@ export function runImplementI18n(input: ImplementI18nInput): ImplementI18nResult
 			? `Step 3: ${phase2_plugin.action === "modify" ? "Update" : "Create"} ${phase2_plugin.file} with Vocoder build plugin`
 			: "Step 3: (No build plugin needed for this framework)",
 		`Step 4: ${providerFileExists ? "Update" : "Create"} ${providerFile} to add VocoderProvider`,
-		`Step 5: Wrap all visible UI strings in ${filesFound.length} source files with <T> or t()`,
+		filesToScanTruncated
+			? `Step 5: Wrap all visible UI strings with <T> or t() — filesToScan lists the first ${filesFound.length} source files and is truncated, so scan the rest of the project too`
+			: `Step 5: Wrap all visible UI strings in ${filesFound.length} source files with <T> or t()`,
 		"Step 6: Add a locale switcher — use <LocaleSelector /> for a zero-config floating button, or build custom with useVocoder() if you need it embedded in your nav/header",
 		"Step 7: Push to a target branch — the GitHub Actions workflow extracts strings and submits them for translation automatically. To test locally before pushing, run `npx @vocoder/cli translate`.",
 	];
@@ -310,6 +324,7 @@ export function runImplementI18n(input: ImplementI18nInput): ImplementI18nResult
 		phase4_wrapping: {
 			importStatement: "import { T, t } from '@vocoder/react';",
 			filesToScan: filesFound,
+			filesToScanTruncated,
 			patternsToFind: [
 				{
 					pattern: "JSX text content — visible string literals inside elements",
