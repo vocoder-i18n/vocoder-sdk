@@ -1,0 +1,21 @@
+{
+	"ticket": "VOC-46",
+	"criteria": [
+		{
+			"id": "AC1",
+			"statement": "vocoder init's existing-and-valid-key reuse path clearly states the key is being reused and was verified, not just \"configured\" — distinguishable from the fresh-generation path's wording",
+			"evidence": {
+				"type": "manual",
+				"ref": "this PR's diff to packages/cli/src/commands/init.ts — session.step(\"API key\", highlight(\"Configured\")) changed to session.step(\"API key\", highlight(\"Existing key verified\")), inside the branch that only runs after getAppConfig() has successfully verified the key against the real API. The fresh-generation path's own wording (\"Generated API key\" / \"API key saved to X\") is unchanged, so the two remain visually distinct."
+			}
+		},
+		{
+			"id": "AC2",
+			"statement": "No behavior change — the same conditions that generate a fresh key or reuse an existing one today produce the same outcome after this fix, only the messaging differs",
+			"evidence": {
+				"type": "manual",
+				"ref": "this PR's diff touches exactly one string literal on one line; no branching, no new condition, no call added or removed. packages/cli/src/__tests__/init.test.ts's existing reuse-branch tests assert on return codes and downstream mock calls (mockRunProjectCreate, mockInstallForProject, mockWriteGitHubActionsWorkflow), never on the literal session.step copy, so none needed modification — confirmed via git diff showing no test file changes."
+			}
+		}
+	]
+}
