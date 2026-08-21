@@ -1,0 +1,52 @@
+{
+	"ticket": "VOC-113",
+	"criteria": [
+		{
+			"id": "AC1",
+			"statement": "The MCP server emits the CLI's own workflow YAML rather than a hand-built copy — byte-for-byte the output of renderWorkflowYaml, so the two cannot produce different files",
+			"test": "packages/mcp/src/__tests__/phase5.test.ts::runProjectCreate > embeds the CLI's rendered workflow YAML verbatim"
+		},
+		{
+			"id": "AC2",
+			"statement": "Parity holds across inputs rather than for one fixed case — a different set of target branches still yields exactly what the CLI renders",
+			"test": "packages/mcp/src/__tests__/phase5.test.ts::runProjectCreate > tracks the CLI's renderer when branches differ"
+		},
+		{
+			"id": "AC3",
+			"statement": "The four pieces the duplicate had dropped are present: the bot loop guard, the permissions block, contents: write, and commit-mode. Each caused a real failure — the guard stops the bot retriggering itself, permissions are required to push at all, and commit-mode is what readWorkflowCommitMode parses back to choose between a PR and a direct push",
+			"test": "packages/mcp/src/__tests__/phase5.test.ts::runProjectCreate > carries the pieces the hand-built copy dropped"
+		},
+		{
+			"id": "AC4",
+			"statement": "The workflow path is a single exported constant. It was previously spelled out in seven places across the two packages — three times inside the CLI alone — and they disagreed, which is what allowed the filename split to exist at all",
+			"evidence": {
+				"type": "manual",
+				"ref": "WORKFLOW_RELATIVE_PATH is defined once in packages/cli/src/utils/workflow-path.ts and consumed by workflow-write.ts, workflow-read.ts, commands/init.ts, and the MCP's create-project.ts and phase5 tests. `grep -rn 'vocoder-translate.yml' packages/*/src --include=*.ts` outside tests now returns only the constant's own definition and one doc comment; `grep -rn 'vocoder\\.yml'` returns only an explanatory comment describing the bug that was fixed."
+			}
+		},
+		{
+			"id": "AC5",
+			"statement": "The tests assert against the CLI's exported constant and renderer rather than string literals, so a future change to either fails here instead of silently re-introducing a split",
+			"evidence": {
+				"type": "manual",
+				"ref": "phase5.test.ts previously asserted `.github/workflows/vocoder.yml` in three places — it was pinning the bug, and those three assertions failed the moment the fix landed, which is how the fix was confirmed to reach the output. They now import WORKFLOW_RELATIVE_PATH and renderWorkflowYaml from @vocoder/cli/lib. The package's vi.mock of that module uses importOriginal and overrides only VocoderAPI, so the real renderer and constant are exercised."
+			}
+		},
+		{
+			"id": "AC6",
+			"statement": "No existing behaviour regressed across the SDK",
+			"evidence": {
+				"type": "manual",
+				"ref": "Full sdk suite green: core 112, react 246, extractor 98, plugin 14, cli 245, mcp 27 (up from 24). Gate reports Build, Typecheck, Lint, Unit and Disclosure passing; the only failure is the pre-existing constitution-copy drift described in the VOC-111 record, which CI skips because the sync script is unreachable when only this repo is checked out."
+			}
+		},
+		{
+			"id": "AC7",
+			"statement": "This is the first slice of the ticket, not the whole of it — recorded so the remaining scope is a plan rather than an oversight",
+			"evidence": {
+				"type": "manual",
+				"ref": "Still outstanding on VOC-113: the headless runTranslate extraction (which is what makes vocoder_translate's hardcoded appDir '' impossible rather than merely fixed), writeApiKeyToEnv, writeVocoderConfig including apps[] for monorepos, writeLocaleFileTree, findOrphanedFiles, resolveLookupMatch, checkPlanLimits and getLimitErrorGuidance. Workflow generation was taken first because it was the single duplicate causing the most defects — four in one file."
+			}
+		}
+	]
+}

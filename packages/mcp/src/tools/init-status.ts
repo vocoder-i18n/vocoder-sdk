@@ -19,7 +19,7 @@ export interface InitStatusResult {
 const INIT_COMMAND = "npx @vocoder/cli init";
 
 export const WHAT_HAPPENS =
-	"The init command opens a browser window to the Vocoder sign-in page. After authenticating, the terminal displays your VOCODER_API_KEY and writes a GitHub Actions workflow file to .github/workflows/vocoder.yml. Add VOCODER_API_KEY to .env and as a GitHub repository secret, then run /mcp reset to reload.";
+	"The init command opens a browser window to the Vocoder sign-in page. After authenticating, the terminal displays your VOCODER_API_KEY and writes a GitHub Actions workflow file to .github/workflows/vocoder-translate.yml. Add VOCODER_API_KEY to .env and as a GitHub repository secret, then run /mcp reset to reload.";
 
 export const INIT_INSTRUCTIONS = [
 	"1. Run in your terminal: npx @vocoder/cli init",

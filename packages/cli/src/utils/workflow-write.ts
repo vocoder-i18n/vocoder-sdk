@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { WORKFLOW_RELATIVE_PATH } from "./workflow-path.js";
 
 export interface WorkflowWriteResult {
 	/** Absolute path the file lives at (whether written now or already present). */
@@ -86,7 +87,7 @@ export function writeGitHubActionsWorkflow(
 	targetBranches: string[],
 	commitMode: "PR" | "DIRECT" = "PR",
 ): WorkflowWriteResult {
-	const relativePath = ".github/workflows/vocoder-translate.yml";
+	const relativePath = WORKFLOW_RELATIVE_PATH;
 	const absolutePath = join(repoRoot, relativePath);
 
 	if (existsSync(absolutePath)) {

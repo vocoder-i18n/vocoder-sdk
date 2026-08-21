@@ -1,3 +1,4 @@
+import { renderWorkflowYaml, WORKFLOW_RELATIVE_PATH } from "@vocoder/cli/lib";
 import { describe, expect, it, vi, beforeEach, } from "vitest";
 import { WHAT_HAPPENS, INIT_INSTRUCTIONS } from "../tools/init-status.js";
 import { runSetup } from "../tools/setup.js";
@@ -52,7 +53,7 @@ describe("WHAT_HAPPENS", () => {
 
 	it("describes Vocoder sign-in and GitHub Actions workflow", () => {
 		expect(WHAT_HAPPENS).toContain("Vocoder sign-in");
-		expect(WHAT_HAPPENS).toContain(".github/workflows/vocoder.yml");
+		expect(WHAT_HAPPENS).toContain(WORKFLOW_RELATIVE_PATH);
 		expect(WHAT_HAPPENS).toContain("GitHub repository secret");
 	});
 });
@@ -111,8 +112,54 @@ describe("runProjectCreate", () => {
 			targetBranches: ["main", "develop"],
 		});
 		expect(result.instructions).toContain("vocoder-i18n/translate-action@v1");
-		expect(result.instructions).toContain(".github/workflows/vocoder.yml");
+		expect(result.instructions).toContain(WORKFLOW_RELATIVE_PATH);
 		expect(result.instructions).toContain("branches: ['main', 'develop']");
+	});
+
+	// ── parity with the CLI ───────────────────────────────────────────────
+	// This server used to hand-build its own copy of the workflow, and it
+	// drifted: the copy omitted the bot loop guard, the permissions block and
+	// commit-mode, and named the file vocoder.yml while the CLI wrote and read
+	// vocoder-translate.yml — so the CLI's own readers found nothing in an
+	// MCP-provisioned repo and silently ignored branch and commit-mode config.
+	// These assert the two cannot diverge again.
+
+	it("embeds the CLI's rendered workflow YAML verbatim", async () => {
+		const result = await runProjectCreate({
+			sessionId,
+			sourceLocale: "en",
+			targetLocales: ["es"],
+			targetBranches: ["main"],
+		});
+		expect(result.instructions).toContain(renderWorkflowYaml(["main"]).trimEnd());
+	});
+
+	it("tracks the CLI's renderer when branches differ", async () => {
+		const result = await runProjectCreate({
+			sessionId,
+			sourceLocale: "en",
+			targetLocales: ["es"],
+			targetBranches: ["main", "develop"],
+		});
+		expect(result.instructions).toContain(
+			renderWorkflowYaml(["main", "develop"]).trimEnd(),
+		);
+	});
+
+	it("carries the pieces the hand-built copy dropped", async () => {
+		const result = await runProjectCreate({
+			sessionId,
+			sourceLocale: "en",
+			targetLocales: ["es"],
+			targetBranches: ["main"],
+		});
+		// Each was absent before, and each caused a real failure: the guard stops
+		// the bot retriggering itself, permissions are required to push, and
+		// commit-mode is what readWorkflowCommitMode parses back.
+		expect(result.instructions).toContain("if: github.actor != 'vocoder-bot[bot]'");
+		expect(result.instructions).toContain("permissions:");
+		expect(result.instructions).toContain("contents: write");
+		expect(result.instructions).toContain("commit-mode:");
 	});
 
 	it("instructions include VOCODER_API_KEY secret setup", async () => {
@@ -134,7 +181,7 @@ describe("runProjectCreate", () => {
 			targetLocales: ["es"],
 			targetBranches: ["main"],
 		});
-		expect(result.instructions).toContain("git add .github/workflows/vocoder.yml");
+		expect(result.instructions).toContain(`git add ${WORKFLOW_RELATIVE_PATH}`);
 		expect(result.instructions).toContain("Add Vocoder translate workflow");
 	});
 

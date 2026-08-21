@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const WORKFLOW_PATH = ".github/workflows/vocoder-translate.yml";
+import { WORKFLOW_RELATIVE_PATH as WORKFLOW_PATH } from "./workflow-path.js";
 
 /**
  * Reads the Vocoder GitHub Actions workflow file and extracts the target branches
