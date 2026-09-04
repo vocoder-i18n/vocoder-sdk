@@ -42,3 +42,29 @@ describe("published binary", () => {
 		for (const name of externals) expect(declared).toContain(name);
 	});
 });
+
+describe("server identity", () => {
+	it("reports the package's real version, not a hardcoded one", () => {
+		// serverInfo.version is displayed by connecting clients. It was pinned at
+		// "0.1.0" while the package shipped 0.22.0.
+		const pkg = JSON.parse(read("package.json"));
+		const src = read("src/index.ts");
+		expect(src).toContain("version: SERVER_VERSION");
+		expect(src).not.toContain('version: "0.1.0"');
+		expect(pkg.version).not.toBe("0.1.0");
+	});
+
+	it("builds against the v2 server package, not the v1 sdk", () => {
+		const src = read("src/index.ts");
+		expect(src).toContain('from "@modelcontextprotocol/server"');
+		expect(src).not.toContain("@modelcontextprotocol/sdk");
+	});
+
+	it("registers tools and resources through the v2 API", () => {
+		const src = read("src/index.ts");
+		expect(src).not.toMatch(/\bserver\.tool\(/);
+		expect(src).not.toMatch(/\bserver\.resource\(/);
+		expect((src.match(/server\.registerTool\(/g) ?? []).length).toBe(13);
+		expect((src.match(/server\.registerResource\(/g) ?? []).length).toBe(10);
+	});
+});

@@ -1,0 +1,52 @@
+{
+	"ticket": "VOC-136",
+	"criteria": [
+		{
+			"id": "AC1",
+			"statement": "The server builds against @modelcontextprotocol/server v2 rather than the v1 sdk package, with no reference to the old one left behind",
+			"test": "packages/mcp/src/__tests__/bin-shebang.test.ts::server identity > builds against the v2 server package, not the v1 sdk"
+		},
+		{
+			"id": "AC2",
+			"statement": "Every registration uses the v2 API — all 13 tools through registerTool and all 10 resources through registerResource, with no v1 server.tool or server.resource call surviving",
+			"test": "packages/mcp/src/__tests__/bin-shebang.test.ts::server identity > registers tools and resources through the v2 API"
+		},
+		{
+			"id": "AC3",
+			"statement": "serverInfo.version reports the package's real version instead of a hardcoded literal. It said 0.1.0 while the package shipped 0.22.0, and connecting clients display it",
+			"test": "packages/mcp/src/__tests__/bin-shebang.test.ts::server identity > reports the package's real version, not a hardcoded one"
+		},
+		{
+			"id": "AC4",
+			"statement": "The ported server is a working MCP server end to end, not merely one that compiles — it completes a handshake and advertises its full tool and resource set over stdio",
+			"evidence": {
+				"type": "manual",
+				"ref": "Fed JSON-RPC to the built ./dist/index.js: initialize returned serverInfo name=vocoder version=0.22.0 with protocolVersion 2025-11-25; tools/list returned 13 tools; resources/list returned 10 resources. The binary keeps its shebang and mode 755, so the VOC-110 fix survives the port."
+			}
+		},
+		{
+			"id": "AC5",
+			"statement": "The Zod major upgrade required by v2 is contained to this package and touches only constructs that are unchanged across the major",
+			"evidence": {
+				"type": "manual",
+				"ref": "@modelcontextprotocol/server@2.0.0 declares zod ^4.2.0; the package moved from ^3.24.0 to ^4.2.0. The v2 API requires a Standard Schema exposing ~standard.jsonSchema, which Zod 3 does not provide — that was the type error. Checked every package.json in the monorepo: zod is declared in none of cli, config, core, extractor, plugin or react, so nothing else is affected. Usage here is limited to z.object, z.string, z.array, .optional() and .describe(). Full suite green afterwards at 793."
+			}
+		},
+		{
+			"id": "AC6",
+			"statement": "The ticket's stated premise is corrected in the record rather than left to mislead: this port does not advance the negotiated protocol version, because no released TypeScript package implements the 2026-07-28 revision yet",
+			"evidence": {
+				"type": "manual",
+				"ref": "Read at runtime from both installed packages: @modelcontextprotocol/sdk@1.30.0 and @modelcontextprotocol/server@2.0.0 each report LATEST_PROTOCOL_VERSION 2025-11-25. The registry shows @modelcontextprotocol/server has exactly one stable version, 2.0.0. VOC-136 was written asserting v2 would bring 2026-07-28 support; that was inferred from the migration guide rather than verified against the package, and it is wrong. The justification for being on v2 is instead that it exports the MRTR primitives — inputRequired, acceptedContent and createRequestStateCodec, all confirmed present — which are what replace the blocking auth poll."
+			}
+		},
+		{
+			"id": "AC7",
+			"statement": "This slice changes no behaviour. MRTR adoption, which does change behaviour, is deliberately deferred so a large mechanical diff and a subtle behavioural one stay separately reviewable",
+			"evidence": {
+				"type": "manual",
+				"ref": "The diff is confined to packages/mcp/src/index.ts (registration call shapes and imports), packages/mcp/package.json (zod range, new dependency) and pnpm-lock.yaml. No tool handler body changed. The full suite passes unchanged at 793, including the 35 pre-existing mcp tests. VOC-120's blocking poll and in-process session map are untouched and remain the subject of the next slice."
+			}
+		}
+	]
+}
