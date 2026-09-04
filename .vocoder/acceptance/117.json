@@ -1,0 +1,49 @@
+{
+	"ticket": "VOC-117",
+	"criteria": [
+		{
+			"id": "AC1",
+			"statement": "GIVEN the default commit mode (pr) WHEN the CLI renders the translate workflow THEN the generated job's permissions map grants both contents: write and pull-requests: write, the two scopes commit-dispatch.sh needs for `git push` and `gh pr create`",
+			"test": "packages/cli/src/__tests__/workflow-write.test.ts::permissions and guards > grants pull-requests: write in pr mode, which gh pr create requires"
+		},
+		{
+			"id": "AC2",
+			"statement": "GIVEN commit mode direct WHEN the CLI renders the translate workflow THEN the generated job's permissions map grants contents: write only — direct mode never calls the pull request API, so the scope is withheld rather than granted unconditionally",
+			"test": "packages/cli/src/__tests__/workflow-write.test.ts::permissions and guards > withholds pull-requests: write in direct mode, which never calls the pull request API"
+		},
+		{
+			"id": "AC3",
+			"statement": "GIVEN the per-app monorepo template, which passes no commit-mode input and therefore inherits the action's own `pr` default WHEN it is rendered THEN its permissions map also grants pull-requests: write",
+			"test": "packages/cli/src/__tests__/workflow-write.test.ts::permissions and guards > grants pull-requests: write in the per-app template, which passes no commit-mode and so gets the action's pr default"
+		},
+		{
+			"id": "AC4",
+			"statement": "The permissions are proven against parsed YAML rather than substring matching. The generated file parses as valid YAML and its job wires the action to the selected commit mode",
+			"test": "packages/cli/src/__tests__/workflow-write.test.ts::permissions and guards > renders valid YAML whose job wires the action to the selected commit mode"
+		},
+		{
+			"id": "AC5",
+			"statement": "The MCP server needs no separate fix. Since VOC-113 it imports renderWorkflowYaml from @vocoder/cli/lib rather than carrying its own template, so correcting the CLI template corrects every generated workflow the product produces",
+			"evidence": {
+				"type": "manual",
+				"ref": "`grep -rn \"runs-on\" packages/mcp/src` returns no matches — there is no YAML template in the MCP source. packages/mcp/src/tools/create-project.ts:4 imports renderWorkflowYaml from @vocoder/cli/lib and calls it at :308 to build the setup instructions it hands the agent. The ticket's claim that \"the MCP template has no permissions block at all\" described the pre-VOC-113 state and no longer holds."
+			}
+		},
+		{
+			"id": "AC6",
+			"statement": "The tests fail without the fix. Reverting workflow-write.ts to its unconditional `contents: write` block and re-running the suite fails exactly the two criteria that assert the new scope, and no others",
+			"evidence": {
+				"type": "manual",
+				"ref": "Mutation check run before committing: the permissions expression was restored to `const permissions = \"      contents: write\";` and the per-app block to contents-only, then `npx vitest run src/__tests__/workflow-write.test.ts` reported `Tests  2 failed | 21 passed (23)`, failing AC1 and AC3 by name. The source was restored and the full 263-test CLI suite re-run green. The mutation matters because the test this change replaces — \"omits pull-requests: write permission\" — asserted the bug as intended behaviour, so a suite that merely passes proves nothing."
+			}
+		},
+		{
+			"id": "AC7",
+			"statement": "The action's own test suite runs in CI. The second half of this ticket — nothing runs the 10 bash tests — was resolved separately in the translate-action repository",
+			"evidence": {
+				"type": "manual",
+				"ref": "translate-action origin/main contains 85f5afb \"feat: add scripts/verify.sh gate, disclosure scan, and CI (#6)\", which merged the branch chore/verify-gate-and-ci the ticket describes. .github/workflows/verify.yml now runs ./scripts/verify.sh on every pull_request and on push to main, with fetch-depth: 0 so the disclosure scan's merge-base resolves. Confirmed by reading the file on main at c0db31c."
+			}
+		}
+	]
+}

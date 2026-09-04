@@ -126,6 +126,7 @@ jobs:
     if: github.actor != 'vocoder-bot[bot]'
     permissions:
       contents: write
+      pull-requests: write   # this template sets no commit-mode, so the action's `pr` default applies
     steps:
       - uses: actions/checkout@v4
       - uses: vocoder-i18n/translate-action@v1
