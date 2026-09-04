@@ -1,6 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { parse } from "yaml";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
 	renderWorkflowYaml,
@@ -49,9 +50,40 @@ describe("renderWorkflowYaml", () => {
 });
 
 describe("permissions and guards", () => {
-	it("omits pull-requests: write permission", () => {
-		const yaml = renderWorkflowYaml(["main"]);
-		expect(yaml).not.toContain("pull-requests: write");
+	// The generated file is parsed rather than substring-matched. A permissions
+	// block is only meaningful as the map GitHub actually reads: indentation
+	// errors and duplicate keys both survive `toContain` and both silently
+	// change which scopes the job is granted.
+	const permissionsOf = (yaml: string) =>
+		parse(yaml).jobs.translate.permissions as Record<string, string>;
+
+	it("grants pull-requests: write in pr mode, which gh pr create requires", () => {
+		expect(permissionsOf(renderWorkflowYaml(["main"]))).toEqual({
+			"contents": "write",
+			"pull-requests": "write",
+		});
+	});
+
+	it("withholds pull-requests: write in direct mode, which never calls the pull request API", () => {
+		expect(permissionsOf(renderWorkflowYaml(["main"], "DIRECT"))).toEqual({
+			"contents": "write",
+		});
+	});
+
+	it("grants pull-requests: write in the per-app template, which passes no commit-mode and so gets the action's pr default", () => {
+		expect(permissionsOf(renderPerAppWorkflowYaml("apps/web", ["main"]))).toEqual({
+			"contents": "write",
+			"pull-requests": "write",
+		});
+	});
+
+	it("renders valid YAML whose job wires the action to the selected commit mode", () => {
+		const doc = parse(renderWorkflowYaml(["main", "staging"]));
+		expect(doc.name).toBe("Vocoder Translate");
+		expect(doc.on.push.branches).toEqual(["main", "staging"]);
+		const step = doc.jobs.translate.steps.at(-1);
+		expect(step.uses).toBe("vocoder-i18n/translate-action@v1");
+		expect(step.with["commit-mode"]).toBe("pr");
 	});
 
 	it("writes commit-mode: pr by default", () => {

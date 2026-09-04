@@ -20,12 +20,23 @@ export interface WorkflowWriteResult {
  * default) or pushes translations directly to the target branch ("DIRECT").
  * It is written into the generated YAML as a lowercase `commit-mode:` input,
  * matching what `readWorkflowCommitMode` parses back.
+ *
+ * The `permissions:` block is scoped to the selected mode. Both modes push a
+ * branch, so both need `contents: write`. PR mode additionally calls
+ * `gh pr create` and `gh pr merge --auto`, which the default GITHUB_TOKEN
+ * cannot do without `pull-requests: write` — the run would pay for the
+ * translation and then fail at delivery. DIRECT mode never touches the pull
+ * request API, so it is not granted the scope.
  */
 export function renderWorkflowYaml(
 	targetBranches: string[],
 	commitMode: "PR" | "DIRECT" = "PR",
 ): string {
 	const branches = targetBranches.map((b) => `'${b}'`).join(", ");
+	const permissions =
+		commitMode === "PR"
+			? "      contents: write\n      pull-requests: write"
+			: "      contents: write";
 	return `name: Vocoder Translate
 on:
   push:
@@ -35,7 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.actor != 'vocoder-bot[bot]'
     permissions:
-      contents: write
+${permissions}
     steps:
       - uses: actions/checkout@v4
       - uses: vocoder-i18n/translate-action@v1
@@ -52,6 +63,9 @@ jobs:
  * Render a per-app workflow YAML for advanced monorepos where different apps
  * target different branches. The generated file uses `app-dir` to target one
  * specific app. Most teams use a single workflow — this is an advanced escape hatch.
+ *
+ * This template passes no `commit-mode:` input, so the action's own default
+ * ("pr") applies and `pull-requests: write` is always required.
  */
 export function renderPerAppWorkflowYaml(appDir: string, branches: string[]): string {
 	const branchList = branches.map((b) => `'${b}'`).join(", ");
@@ -65,6 +79,7 @@ jobs:
     if: github.actor != 'vocoder-bot[bot]'
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
       - uses: vocoder-i18n/translate-action@v1

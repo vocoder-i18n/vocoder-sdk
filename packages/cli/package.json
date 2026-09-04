@@ -57,13 +57,14 @@
     "tsx": "^4.7.0"
   },
   "devDependencies": {
+    "@types/node": "^20.19.9",
     "@vocoder/config": "workspace:*",
     "@vocoder/core": "workspace:*",
     "@vocoder/extractor": "workspace:*",
-    "@types/node": "^20.19.9",
     "tsup": "^8.0.0",
     "typescript": "^5.4.0",
-    "vitest": "^1.0.0"
+    "vitest": "^1.0.0",
+    "yaml": "^2.9.0"
   },
   "engines": {
     "node": ">=18"
