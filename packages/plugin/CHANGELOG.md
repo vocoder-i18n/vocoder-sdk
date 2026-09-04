@@ -1,5 +1,17 @@
 # @vocoder/plugin
 
+## 0.24.0
+
+### Minor Changes
+
+- Fix the two halves of the GitHub Action delivery path that disagreed with each other.
+
+  The generated workflow now grants `pull-requests: write` in `pr` mode, which is the default. `gh pr create` and `gh pr merge --auto` cannot run without it, so every new project's first CI run translated, paid, and then failed at delivery. `direct` mode still gets `contents: write` only.
+
+  `vocoder translate` now reports the locale paths it actually wrote and deleted, and the GitHub Action stages that list rather than re-deriving one from the server's tree. For TypeScript projects the CLI turns `locales/loader.js` into a typed `locales/loader.ts` and removes the `.js`; the Action used to re-create the untyped `.js` and stage that, so the `loader.ts` the app imports was never committed.
+
+  Locale file keys are now checked for containment before anything is written. A key that resolves outside the repository root aborts the whole write rather than landing in a checkout where CI holds `contents: write`.
+
 ## 0.23.0
 
 ## 0.22.0
