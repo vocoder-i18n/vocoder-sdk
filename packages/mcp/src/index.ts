@@ -7,8 +7,8 @@ import { dirname, join } from "node:path";
 import { runAddLocale, runRemoveLocale } from "./tools/locales.js";
 import { runInitComplete, runInitStart, runProjectCreate } from "./tools/create-project.js";
 
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { McpServer } from "@modelcontextprotocol/server";
+import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
 import { runPull } from "./tools/pull.js";
@@ -23,8 +23,18 @@ import { z } from "zod";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const loadDoc = (name: string) => readFileSync(join(__dirname, "../docs", name), "utf8");
 
+// Reported to clients as serverInfo.version. Read from package.json rather than
+// hardcoded — it previously said 0.1.0 while the package was at 0.22.0, and
+// clients display whatever this says. npm always includes package.json in the
+// tarball, so this resolves from dist/ in a published install.
+const SERVER_VERSION = (
+	JSON.parse(readFileSync(join(__dirname, "../package.json"), "utf8")) as {
+		version: string;
+	}
+).version;
+
 const server = new McpServer(
-	{ name: "vocoder", version: "0.1.0" },
+	{ name: "vocoder", version: SERVER_VERSION },
 	{
 		instructions: `You are a localization expert and an expert in the Vocoder i18n platform.
 
@@ -53,7 +63,7 @@ Reference resources (read when you need detail):
 
 // ── Resources ─────────────────────────────────────────────────────────────────
 
-server.resource(
+server.registerResource(
 	"sdk-reference",
 	"vocoder://docs/sdk-reference",
 	{
@@ -66,7 +76,7 @@ server.resource(
 	}),
 );
 
-server.resource(
+server.registerResource(
 	"vocoder-icu-patterns",
 	"vocoder://docs/icu-patterns",
 	{
@@ -79,7 +89,7 @@ server.resource(
 	}),
 );
 
-server.resource(
+server.registerResource(
 	"vocoder-t-function",
 	"vocoder://docs/t-function",
 	{
@@ -92,7 +102,7 @@ server.resource(
 	}),
 );
 
-server.resource(
+server.registerResource(
 	"vocoder-framework-setup",
 	"vocoder://docs/framework-setup",
 	{
@@ -105,7 +115,7 @@ server.resource(
 	}),
 );
 
-server.resource(
+server.registerResource(
 	"vocoder-rtl",
 	"vocoder://docs/rtl",
 	{
@@ -118,7 +128,7 @@ server.resource(
 	}),
 );
 
-server.resource(
+server.registerResource(
 	"vocoder-plugin-reference",
 	"vocoder://docs/plugin-reference",
 	{
@@ -131,7 +141,7 @@ server.resource(
 	}),
 );
 
-server.resource(
+server.registerResource(
 	"vocoder-extractor",
 	"vocoder://docs/extractor",
 	{
@@ -144,7 +154,7 @@ server.resource(
 	}),
 );
 
-server.resource(
+server.registerResource(
 	"vocoder-troubleshooting",
 	"vocoder://docs/troubleshooting",
 	{
@@ -157,7 +167,7 @@ server.resource(
 	}),
 );
 
-server.resource(
+server.registerResource(
 	"app-config",
 	"vocoder://docs/app-config",
 	{
@@ -170,7 +180,7 @@ server.resource(
 	}),
 );
 
-server.resource(
+server.registerResource(
 	"vocoder-github-action-setup",
 	"vocoder://docs/github-action-setup",
 	{
@@ -187,18 +197,20 @@ server.resource(
 
 // vocoder_setup — inspect framework and return setup info.
 // Works without an API key (local detection only).
-server.tool(
+server.registerTool(
 	"vocoder_setup",
-	"Detect the current app's framework and return everything needed to understand the Vocoder i18n setup: install commands, build plugin snippet, provider placement (exact file path), usage example, string-wrapping guidance, and the full SDK API reference. Call this first to assess the app. For a step-by-step implementation plan with file discovery, call vocoder_implement_i18n instead.",
 	{
-		sourceLocale: z
-			.string()
-			.optional()
-			.describe('Source language code (default: "en")'),
-		targetLocales: z
-			.array(z.string())
-			.optional()
-			.describe('Target language codes, e.g. ["es", "fr", "de"]'),
+		description: "Detect the current app's framework and return everything needed to understand the Vocoder i18n setup: install commands, build plugin snippet, provider placement (exact file path), usage example, string-wrapping guidance, and the full SDK API reference. Call this first to assess the app. For a step-by-step implementation plan with file discovery, call vocoder_implement_i18n instead.",
+		inputSchema: z.object({
+				sourceLocale: z
+					.string()
+					.optional()
+					.describe('Source language code (default: "en")'),
+				targetLocales: z
+					.array(z.string())
+					.optional()
+					.describe('Target language codes, e.g. ["es", "fr", "de"]'),
+			}),
 	},
 	async ({ sourceLocale, targetLocales }) => {
 		try {
@@ -222,10 +234,12 @@ server.tool(
 
 // vocoder_init_status — check whether Vocoder is configured and the API key is valid.
 // Call this first when the user asks about Vocoder setup status or if the key is missing.
-server.tool(
+server.registerTool(
 	"vocoder_init_status",
-	"Check whether Vocoder is configured for this app. Returns ready=true with app name and locale config if VOCODER_API_KEY is valid, or ready=false with instructions to run vocoder_init_start if not. Call this before any other tool when you are unsure whether the app is set up.",
-	{},
+	{
+		description: "Check whether Vocoder is configured for this app. Returns ready=true with app name and locale config if VOCODER_API_KEY is valid, or ready=false with instructions to run vocoder_init_start if not. Call this before any other tool when you are unsure whether the app is set up.",
+		inputSchema: z.object({}),
+	},
 	async () => {
 		try {
 			const api = createClient();
@@ -247,10 +261,12 @@ server.tool(
 // vocoder_init_start — begin the Vocoder project setup flow.
 // Checks for stored auth and performs an anonymous repo lookup first.
 // Returns an authUrl for the user to open in their browser, or null if already authenticated.
-server.tool(
+server.registerTool(
 	"vocoder_init_start",
-	"Start the Vocoder app setup flow. Checks for an existing auth token, performs an anonymous lookup to detect if this repo already has a Vocoder app, then returns a browser URL for the user to sign in to Vocoder. If already authenticated, returns authUrl=null and mode='existing'. Call vocoder_init_complete after the user confirms they've completed the browser flow.",
-	{},
+	{
+		description: "Start the Vocoder app setup flow. Checks for an existing auth token, performs an anonymous lookup to detect if this repo already has a Vocoder app, then returns a browser URL for the user to sign in to Vocoder. If already authenticated, returns authUrl=null and mode='existing'. Call vocoder_init_complete after the user confirms they've completed the browser flow.",
+		inputSchema: z.object({}),
+	},
 	async () => {
 		try {
 			const result = await runInitStart({});
@@ -269,11 +285,13 @@ server.tool(
 );
 
 // vocoder_init_complete — poll for auth token after user completes the browser flow.
-server.tool(
+server.registerTool(
 	"vocoder_init_complete",
-	"Poll for the authentication token after the user completes the browser flow from vocoder_init_start. Pass the sessionId returned by vocoder_init_start. Once authenticated, ask the user for sourceLocale, targetLocales, and targetBranches, then call vocoder_create_project.",
 	{
-		sessionId: z.string().describe("sessionId returned by vocoder_init_start"),
+		description: "Poll for the authentication token after the user completes the browser flow from vocoder_init_start. Pass the sessionId returned by vocoder_init_start. Once authenticated, ask the user for sourceLocale, targetLocales, and targetBranches, then call vocoder_create_project.",
+		inputSchema: z.object({
+				sessionId: z.string().describe("sessionId returned by vocoder_init_start"),
+			}),
 	},
 	async ({ sessionId }) => {
 		try {
@@ -293,20 +311,22 @@ server.tool(
 );
 
 // vocoder_create_project — create the Vocoder project and get the API key.
-server.tool(
+server.registerTool(
 	"vocoder_create_project",
-	"Create a Vocoder project for this repo and return the API key. Requires a completed auth session from vocoder_init_complete. Returns apiKey and step-by-step instructions. After calling this: append VOCODER_API_KEY to .env.local at the repo root, write .github/workflows/vocoder-translate.yml (template branches from targetBranches), add VOCODER_API_KEY as a GitHub repository secret (Settings → Secrets and variables → Actions), commit the workflow file, then call vocoder_implement_i18n to scaffold the SDK.",
 	{
-		sessionId: z.string().describe("sessionId from vocoder_init_start"),
-		sourceLocale: z.string().describe('Source language code, e.g. "en"'),
-		targetLocales: z.array(z.string()).describe('Target language codes, e.g. ["es", "fr"]'),
-		targetBranches: z
-			.array(z.string())
-			.describe('Git branches that trigger translation, e.g. ["main"]'),
-		projectName: z
-			.string()
-			.optional()
-			.describe("App name (defaults to repo name)"),
+		description: "Create a Vocoder project for this repo and return the API key. Requires a completed auth session from vocoder_init_complete. Returns apiKey and step-by-step instructions. After calling this: append VOCODER_API_KEY to .env.local at the repo root, write .github/workflows/vocoder-translate.yml (template branches from targetBranches), add VOCODER_API_KEY as a GitHub repository secret (Settings → Secrets and variables → Actions), commit the workflow file, then call vocoder_implement_i18n to scaffold the SDK.",
+		inputSchema: z.object({
+				sessionId: z.string().describe("sessionId from vocoder_init_start"),
+				sourceLocale: z.string().describe('Source language code, e.g. "en"'),
+				targetLocales: z.array(z.string()).describe('Target language codes, e.g. ["es", "fr"]'),
+				targetBranches: z
+					.array(z.string())
+					.describe('Git branches that trigger translation, e.g. ["main"]'),
+				projectName: z
+					.string()
+					.optional()
+					.describe("App name (defaults to repo name)"),
+			}),
 	},
 	async ({ sessionId, sourceLocale, targetLocales, targetBranches, projectName }) => {
 		try {
@@ -333,10 +353,12 @@ server.tool(
 
 // vocoder_regenerate_key — generate a new API key for the Vocoder app in this repo.
 // Requires admin or owner role. Uses stored auth token; throws if none (user must run CLI in terminal).
-server.tool(
+server.registerTool(
 	"vocoder_regenerate_key",
-	"Generate a new API key for the Vocoder app in this repo. Requires admin or owner role. Uses stored browser auth — if no auth token is found, instructs the user to run `vocoder regenerate-key` in their terminal instead. On success, returns the new key with instructions to write it to .env and restart the MCP server.",
-	{},
+	{
+		description: "Generate a new API key for the Vocoder app in this repo. Requires admin or owner role. Uses stored browser auth — if no auth token is found, instructs the user to run `vocoder regenerate-key` in their terminal instead. On success, returns the new key with instructions to write it to .env and restart the MCP server.",
+		inputSchema: z.object({}),
+	},
 	async () => {
 		try {
 			const result = await runRegenerateKey();
@@ -357,30 +379,32 @@ server.tool(
 // vocoder_implement_i18n — generate a complete implementation plan.
 // Returns exact file paths, install commands, provider setup, files to scan,
 // string-wrapping patterns, and the full SDK reference. Use when ready to code.
-server.tool(
+server.registerTool(
 	"vocoder_implement_i18n",
-	"Generate a complete, step-by-step i18n implementation plan for the current app. Returns exact file paths to modify, install commands, provider setup code, a list of source files to scan for hardcoded strings, wrapping patterns with before/after examples, and the full @vocoder/react SDK reference. Call this when you are ready to implement i18n — it gives you everything needed to make code changes autonomously.",
 	{
-		sourceLocale: z
-			.string()
-			.optional()
-			.describe('Source language code (default: "en")'),
-		targetLocales: z
-			.array(z.string())
-			.optional()
-			.describe('Target language codes, e.g. ["es", "fr", "de"]'),
-		scope: z
-			.string()
-			.optional()
-			.describe(
-				'Subdirectory to limit file scanning, e.g. "src/components". Defaults to entire project.',
-			),
-		appDir: z
-			.string()
-			.optional()
-			.describe(
-				"App directory override for monorepos. Absolute path to the app package root.",
-			),
+		description: "Generate a complete, step-by-step i18n implementation plan for the current app. Returns exact file paths to modify, install commands, provider setup code, a list of source files to scan for hardcoded strings, wrapping patterns with before/after examples, and the full @vocoder/react SDK reference. Call this when you are ready to implement i18n — it gives you everything needed to make code changes autonomously.",
+		inputSchema: z.object({
+				sourceLocale: z
+					.string()
+					.optional()
+					.describe('Source language code (default: "en")'),
+				targetLocales: z
+					.array(z.string())
+					.optional()
+					.describe('Target language codes, e.g. ["es", "fr", "de"]'),
+				scope: z
+					.string()
+					.optional()
+					.describe(
+						'Subdirectory to limit file scanning, e.g. "src/components". Defaults to entire project.',
+					),
+				appDir: z
+					.string()
+					.optional()
+					.describe(
+						"App directory override for monorepos. Absolute path to the app package root.",
+					),
+			}),
 	},
 	async ({ sourceLocale, targetLocales, scope, appDir }) => {
 		try {
@@ -402,10 +426,12 @@ server.tool(
 );
 
 // vocoder_config — show project configuration.
-server.tool(
+server.registerTool(
 	"vocoder_config",
-	"Get the current Vocoder project configuration: project name, workspace, source locale, target locales, target branches, and sync policy.",
-	{},
+	{
+		description: "Get the current Vocoder project configuration: project name, workspace, source locale, target locales, target branches, and sync policy.",
+		inputSchema: z.object({}),
+	},
 	async () => {
 		const api = createClient();
 		if (!api)
@@ -427,24 +453,26 @@ server.tool(
 );
 
 // vocoder_translate — extract strings and submit for translation.
-server.tool(
+server.registerTool(
 	"vocoder_translate",
-	"Extract all translatable strings from the current app and submit them to Vocoder for translation. Polls until translations are ready (up to 60 seconds).",
 	{
-		branch: z
-			.string()
-			.optional()
-			.describe("Git branch to translate (auto-detected from git if not provided)"),
-		force: z
-			.boolean()
-			.optional()
-			.describe("Force re-translation even if strings are unchanged"),
-		appDir: z
-			.string()
-			.optional()
-			.describe(
-				"Restrict the run to one app directory in a monorepo, relative to the repo root (e.g. 'apps/web'). Omit to translate every app declared in vocoder.config's apps[], or the repo root when there is no apps[] array.",
-			),
+		description: "Extract all translatable strings from the current app and submit them to Vocoder for translation. Polls until translations are ready (up to 60 seconds).",
+		inputSchema: z.object({
+				branch: z
+					.string()
+					.optional()
+					.describe("Git branch to translate (auto-detected from git if not provided)"),
+				force: z
+					.boolean()
+					.optional()
+					.describe("Force re-translation even if strings are unchanged"),
+				appDir: z
+					.string()
+					.optional()
+					.describe(
+						"Restrict the run to one app directory in a monorepo, relative to the repo root (e.g. 'apps/web'). Omit to translate every app declared in vocoder.config's apps[], or the repo root when there is no apps[] array.",
+					),
+			}),
 	},
 	async ({ branch, force, appDir }) => {
 		const api = createClient();
@@ -469,22 +497,24 @@ server.tool(
 // vocoder_pull — fetch the compiled translation bundle for the current app.
 // Mirrors the build plugin: extract → fingerprint → /api/t/{fingerprint}.
 // Returns the same data as __VOCODER_BUNDLE__ at runtime, including overrides.
-server.tool(
+server.registerTool(
 	"vocoder_pull",
-	"Fetch the compiled translation bundle for the current app. Extracts source strings, computes the content-addressed fingerprint, and returns the bundle from /api/t/{fingerprint} — identical to what __VOCODER_BUNDLE__ contains at runtime (includes TranslationOverrides). Use for inspection, debugging, or to verify what the app will render before building.",
 	{
-		appDir: z
-			.string()
-			.optional()
-			.describe(
-				'App directory override for monorepos (e.g. "apps/web"). Auto-detected from cwd relative to git root when omitted.',
-			),
-		locale: z
-			.string()
-			.optional()
-			.describe(
-				'Filter to a specific locale (e.g. "es"). Returns all locales when omitted.',
-			),
+		description: "Fetch the compiled translation bundle for the current app. Extracts source strings, computes the content-addressed fingerprint, and returns the bundle from /api/t/{fingerprint} — identical to what __VOCODER_BUNDLE__ contains at runtime (includes TranslationOverrides). Use for inspection, debugging, or to verify what the app will render before building.",
+		inputSchema: z.object({
+				appDir: z
+					.string()
+					.optional()
+					.describe(
+						'App directory override for monorepos (e.g. "apps/web"). Auto-detected from cwd relative to git root when omitted.',
+					),
+				locale: z
+					.string()
+					.optional()
+					.describe(
+						'Filter to a specific locale (e.g. "es"). Returns all locales when omitted.',
+					),
+			}),
 	},
 	async ({ appDir, locale }) => {
 		const api = createClient();
@@ -507,10 +537,12 @@ server.tool(
 );
 
 // vocoder_list_locales — list all locales Vocoder supports.
-server.tool(
+server.registerTool(
 	"vocoder_list_locales",
-	"List all locales supported by Vocoder. Returns BCP 47 codes with display names. Call this before vocoder_add_locale to find the correct code for a language.",
-	{},
+	{
+		description: "List all locales supported by Vocoder. Returns BCP 47 codes with display names. Call this before vocoder_add_locale to find the correct code for a language.",
+		inputSchema: z.object({}),
+	},
 	async () => {
 		const apiKey = process.env.VOCODER_API_KEY;
 		if (!apiKey) return { content: [{ type: "text", text: NO_API_KEY_MESSAGE }] };
@@ -537,13 +569,15 @@ server.tool(
 );
 
 // vocoder_add_locale — add a new target language to the app.
-server.tool(
+server.registerTool(
 	"vocoder_add_locale",
-	'Add a new target locale to the Vocoder app. The locale must be a valid BCP 47 code (e.g. "fr", "de", "pt-BR", "zh-TW"). Use vocoder_list_locales to find the correct code for a language.',
 	{
-		locale: z
-			.string()
-			.describe('BCP 47 locale code to add, e.g. "fr" or "pt-BR"'),
+		description: 'Add a new target locale to the Vocoder app. The locale must be a valid BCP 47 code (e.g. "fr", "de", "pt-BR", "zh-TW"). Use vocoder_list_locales to find the correct code for a language.',
+		inputSchema: z.object({
+				locale: z
+					.string()
+					.describe('BCP 47 locale code to add, e.g. "fr" or "pt-BR"'),
+			}),
 	},
 	async ({ locale }) => {
 		const api = createClient();
@@ -566,13 +600,15 @@ server.tool(
 );
 
 // vocoder_remove_locale — remove a target language from the app.
-server.tool(
+server.registerTool(
 	"vocoder_remove_locale",
-	'Remove a target locale from the Vocoder app. Pass the BCP 47 code of a currently-configured target locale (e.g. "fr", "de"). Use vocoder_config to see the current target locales before calling.',
 	{
-		locale: z
-			.string()
-			.describe('BCP 47 locale code to remove, e.g. "fr" or "pt-BR"'),
+		description: 'Remove a target locale from the Vocoder app. Pass the BCP 47 code of a currently-configured target locale (e.g. "fr", "de"). Use vocoder_config to see the current target locales before calling.',
+		inputSchema: z.object({
+				locale: z
+					.string()
+					.describe('BCP 47 locale code to remove, e.g. "fr" or "pt-BR"'),
+			}),
 	},
 	async ({ locale }) => {
 		const api = createClient();
