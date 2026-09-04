@@ -23,7 +23,7 @@ import {
 	formatLabelValue,
 	joinHighlighted,
 } from "../utils/command-session.js";
-import { dirname, join } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
 import { existsSync, readdirSync, writeFileSync } from "node:fs";
 import { writeLocaleFileTree } from "./pull.js";
 import { extractProjectShortIdFromApiKey } from "@vocoder/core";
@@ -100,6 +100,12 @@ type TranslateResultApp = {
 	appDir: string;
 	localeFileTree?: Record<string, string>;
 	commitConfig?: { commitMode: string; autoMergePRs: boolean; skipCiOnDirectCommit: boolean };
+	/** Paths this run wrote, repo-root-relative. The Action stages exactly these. */
+	writtenPaths?: string[];
+	/** Paths this run deleted — staged as deletions so they leave the repository. */
+	removedPaths?: string[];
+	/** Locale files present on disk but no longer a target. Reported, never deleted. */
+	orphanedPaths?: string[];
 };
 
 type TranslationOutputApp = {
@@ -108,24 +114,55 @@ type TranslationOutputApp = {
 };
 
 // Writes a JSON result file for the GitHub Action commit step. No-op outside CI.
-function writeTranslateResult(jobId: string, apps: TranslateResultApp[]): void {
+//
+// `writtenPaths`/`removedPaths` describe what this process actually did to the
+// working tree, which is not recoverable from `localeFileTree` alone: a
+// TypeScript project turns the server's `locales/loader.js` key into a
+// `locales/loader.ts` file and deletes the `.js`. The Action stages this list
+// verbatim rather than re-deriving it, so the two halves of the pipeline
+// cannot disagree about which files exist.
+function writeTranslateResult(
+	jobId: string,
+	apps: TranslateResultApp[],
+	orphanedPaths: string[] = [],
+): void {
 	if (!process.env.GITHUB_ACTIONS) return;
 	const runnerTemp = process.env.RUNNER_TEMP ?? "/tmp";
 	try {
 		writeFileSync(
 			`${runnerTemp}/vocoder-result.json`,
-			JSON.stringify({ jobId, status: "complete", apps }, null, 2),
+			JSON.stringify(
+				{
+					jobId,
+					status: "complete",
+					apps,
+					...(orphanedPaths.length > 0 ? { orphanedPaths } : {}),
+				},
+				null,
+				2,
+			),
 		);
 	} catch {
 		// Non-fatal — commit step skips if file is absent
 	}
 }
 
+/**
+ * Warns about locale files on disk that are no longer a target, and returns
+ * them as repo-root-relative paths.
+ *
+ * The paths travel into the result file so the Action can repeat the warning
+ * as a CI annotation — a locale dropped from the project otherwise leaves its
+ * stale `.json` committed forever, and this warning is the only thing that
+ * says so. Reported, never deleted: the same "not in the target set" test also
+ * matches a file a developer added by hand, and `vocoder clean` is the
+ * deliberate, local way to remove them.
+ */
 function warnOrphanedLocaleFiles(
 	session: CommandSession,
 	apps: TranslationOutputApp[],
 	rootDir: string,
-): void {
+): string[] {
 	const writtenPaths = new Set<string>();
 	const localeDirs = new Set<string>();
 
@@ -137,42 +174,60 @@ function warnOrphanedLocaleFiles(
 		}
 	}
 
-	if (localeDirs.size === 0) return;
+	if (localeDirs.size === 0) return [];
 
-	const orphaned: string[] = [];
+	const orphaned: { name: string; path: string }[] = [];
 	for (const dir of localeDirs) {
 		if (!existsSync(dir)) continue;
 		for (const file of readdirSync(dir)) {
 			if (!file.endsWith(".json")) continue;
 			if (!writtenPaths.has(join(dir, file))) {
-				orphaned.push(file);
+				orphaned.push({
+					name: file,
+					path: relative(rootDir, join(dir, file)).split(sep).join("/"),
+				});
 			}
 		}
 	}
 
-	if (orphaned.length === 0) return;
+	if (orphaned.length === 0) return [];
 
 	const count = orphaned.length;
 	session.warn(
-		`${highlight(String(count))} locale file${count === 1 ? "" : "s"} not in target locales: ${orphaned.join(", ")}`,
+		`${highlight(String(count))} locale file${count === 1 ? "" : "s"} not in target locales: ${orphaned.map((o) => o.name).join(", ")}`,
 	);
 	session.message(
 		`Run ${highlight("vocoder clean")} to remove ${count === 1 ? "it" : "them"}.`,
 	);
+	return orphaned.map((o) => o.path);
 }
 
+/** What `writeLocaleFileTree` did for one app, keyed so the result file can carry it. */
+export interface AppWriteOutcome {
+	written: string[];
+	removed: string[];
+}
+
+/**
+ * Writes each app's locale tree and reports it. Returns what landed on disk,
+ * keyed by appDir, so the result file the Action reads describes real files
+ * rather than the server's request.
+ */
 function renderWrittenLocaleFiles(
 	session: CommandSession,
 	apps: TranslationOutputApp[],
 	rootDir: string,
-): void {
+): Map<string, AppWriteOutcome> {
 	const showRootLabel = apps.length > 1;
+	const outcomes = new Map<string, AppWriteOutcome>();
 	for (const app of apps) {
 		if (app.localeFileTree) {
 			const isTypeScript =
 				existsSync(join(rootDir, app.appDir, "tsconfig.json")) ||
 				existsSync(join(rootDir, "tsconfig.json"));
-			for (const result of writeLocaleFileTree(app.localeFileTree, rootDir, { isTypeScript })) {
+			const outcome = writeLocaleFileTree(app.localeFileTree, rootDir, { isTypeScript });
+			outcomes.set(app.appDir, { written: outcome.written, removed: outcome.removed });
+			for (const result of outcome.dirs) {
 				session.success(
 					`Wrote ${highlight(String(result.count))} file${result.count === 1 ? "" : "s"} to ${highlight(result.displayDir)}`,
 				);
@@ -187,6 +242,7 @@ function renderWrittenLocaleFiles(
 			);
 		}
 	}
+	return outcomes;
 }
 
 export async function translate(options: TranslateCommandOptions = {}): Promise<number> {
@@ -372,16 +428,26 @@ export async function translate(options: TranslateCommandOptions = {}): Promise<
 			const duration = ((Date.now() - startTime) / 1000).toFixed(1);
 			activeStep.done(`Cached translations ready in ${duration}s`);
 			activeStep = null;
+			// Files are written before the result is recorded: the Action stages
+			// the paths this reports, so they have to be the paths that exist.
+			const writeOutcomes = renderWrittenLocaleFiles(session, submitResult.apps, gitRoot);
+			const orphanedPaths = warnOrphanedLocaleFiles(session, submitResult.apps, gitRoot);
 			writeTranslateResult(
 				submitResult.jobId,
-				submitResult.apps.map((a) => ({
-					appDir: a.appDir,
-					...(a.localeFileTree ? { localeFileTree: a.localeFileTree } : {}),
-					...(a.commitConfig ? { commitConfig: a.commitConfig } : {}),
-				})),
+				submitResult.apps.map((a) => {
+					const outcome = writeOutcomes.get(a.appDir);
+					return {
+						appDir: a.appDir,
+						...(a.localeFileTree ? { localeFileTree: a.localeFileTree } : {}),
+						...(a.commitConfig ? { commitConfig: a.commitConfig } : {}),
+						...(outcome ? { writtenPaths: outcome.written } : {}),
+						...(outcome && outcome.removed.length > 0
+							? { removedPaths: outcome.removed }
+							: {}),
+					};
+				}),
+				orphanedPaths,
 			);
-			renderWrittenLocaleFiles(session, submitResult.apps, gitRoot);
-			warnOrphanedLocaleFiles(session, submitResult.apps, gitRoot);
 			return session.end("Up to date.");
 		}
 
@@ -430,16 +496,26 @@ export async function translate(options: TranslateCommandOptions = {}): Promise<
 		if (finalStatus.status === "complete") {
 			activeStep.done(`Translations ready in ${elapsedSec}s`);
 			activeStep = null;
+			// Files are written before the result is recorded: the Action stages
+			// the paths this reports, so they have to be the paths that exist.
+			const writeOutcomes = renderWrittenLocaleFiles(session, finalStatus.apps, gitRoot);
+			const orphanedPaths = warnOrphanedLocaleFiles(session, finalStatus.apps, gitRoot);
 			writeTranslateResult(
 				finalStatus.jobId,
-				finalStatus.apps.map((a) => ({
-					appDir: a.appDir,
-					...(a.localeFileTree ? { localeFileTree: a.localeFileTree } : {}),
-					...(a.commitConfig ? { commitConfig: a.commitConfig } : {}),
-				})),
+				finalStatus.apps.map((a) => {
+					const outcome = writeOutcomes.get(a.appDir);
+					return {
+						appDir: a.appDir,
+						...(a.localeFileTree ? { localeFileTree: a.localeFileTree } : {}),
+						...(a.commitConfig ? { commitConfig: a.commitConfig } : {}),
+						...(outcome ? { writtenPaths: outcome.written } : {}),
+						...(outcome && outcome.removed.length > 0
+							? { removedPaths: outcome.removed }
+							: {}),
+					};
+				}),
+				orphanedPaths,
 			);
-			renderWrittenLocaleFiles(session, finalStatus.apps, gitRoot);
-			warnOrphanedLocaleFiles(session, finalStatus.apps, gitRoot);
 			return session.end("Up to date.");
 		}
 
