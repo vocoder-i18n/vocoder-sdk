@@ -84,7 +84,7 @@ const AUTH_TIMEOUT_MS = 5 * 60 * 1000; // how long an auth session stays valid
  * destroy the very session the next step needs.
  */
 const pendingSessions = {
-	set(sessionId: string, session: PendingSession) {
+	set(_sessionId: string, session: PendingSession) {
 		saveSession({
 			...session,
 			expiresAt: new Date(Date.now() + AUTH_TIMEOUT_MS).toISOString(),
@@ -383,6 +383,3 @@ async function resolveOrganization(
 	);
 }
 
-function sleep(ms: number): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms));
-}
