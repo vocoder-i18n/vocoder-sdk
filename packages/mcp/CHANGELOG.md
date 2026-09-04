@@ -1,5 +1,56 @@
 # @vocoder/mcp
 
+## 0.23.0
+
+### Minor Changes
+
+- a167826: `vocoder_init_complete` no longer blocks waiting for browser sign-in, and
+  sessions survive a restart.
+
+  It looped for up to five minutes polling the auth session. Most MCP clients time
+  out long before that, killing the call while the session was still valid and
+  leaving no way to resume. It now polls once and returns `pending: true` with
+  instructions to call again with the same `sessionId`.
+
+  Sessions move from a process-local `Map` to `~/.vocoder/mcp-sessions.json`. The
+  setup flow tells the user to restart their editor after adding the API key,
+  which used to destroy the session the next step needs. Entries carry an expiry
+  and are pruned on read.
+
+  `InitCompleteResult.authenticated` is now `boolean` rather than the literal
+  `true`, and gains an optional `pending` flag.
+
+- a1d86d0: Port the MCP server to `@modelcontextprotocol/server` v2, and report the real
+  server version.
+
+  The server was built on `@modelcontextprotocol/sdk` v1. It now uses the v2
+  package: `server.tool(name, description, shape, cb)` becomes
+  `server.registerTool(name, { description, inputSchema }, cb)`, `server.resource`
+  becomes `server.registerResource`, and input schemas are `z.object(...)` rather
+  than raw shapes. All 13 tools and 10 resources are ported; behaviour is
+  unchanged.
+
+  v2 requires Zod 4, so the package moves from `zod@^3.24.0` to `zod@^4.2.0`.
+  Zod is used nowhere else in the monorepo, and only for `z.object`, `z.string`,
+  `z.array`, `.optional()` and `.describe()`, all of which are unchanged across
+  the major.
+
+  `serverInfo.version` is now read from package.json. It was hardcoded to `0.1.0`
+  while the package shipped `0.22.0`, and connecting clients display it.
+
+  Note this does **not** move the negotiated protocol version. Both the v1 SDK at
+  1.30.0 and the v2 server at 2.0.0 report `LATEST_PROTOCOL_VERSION: 2025-11-25`;
+  no released TypeScript package implements the 2026-07-28 revision yet. The
+  reason to be on v2 is that it ships the MRTR primitives — `inputRequired`,
+  `acceptedContent`, `createRequestStateCodec` — which are what replace the
+  blocking auth poll.
+
+### Patch Changes
+
+- @vocoder/cli@0.23.0
+- @vocoder/extractor@0.23.0
+- @vocoder/plugin@0.23.0
+
 ## 0.22.0
 
 ### Patch Changes
