@@ -96,6 +96,104 @@ describe("writeLocaleFileTree", () => {
 		expect(content).toContain("async function loadLocale(locale: string): Promise<Record<string, string>>");
 	});
 
+	// ── what the GitHub Action stages ────────────────────────────────────────
+	//
+	// The Action no longer re-derives paths from the server's tree; it stages
+	// `written` and `removed` verbatim. If these lists describe anything other
+	// than the files on disk, the commit is wrong in the customer's repository.
+
+	it("reports the paths it wrote, matching the tree keys for a plain JS project", () => {
+		const root = makeTmpDir();
+		const outcome = writeLocaleFileTree(
+			{ "locales/en.json": '{"k":"v"}\n', "locales/es.json": '{"k":"w"}\n' },
+			root,
+		);
+		expect(outcome.written.sort()).toEqual(["locales/en.json", "locales/es.json"]);
+		expect(outcome.removed).toEqual([]);
+	});
+
+	it("reports loader.ts — not the loader.js key the server sent — for a TypeScript project", () => {
+		const root = makeTmpDir();
+		const outcome = writeLocaleFileTree(
+			{ "locales/loader.js": "export async function loadLocale(locale) {}\n" },
+			root,
+			{ isTypeScript: true },
+		);
+		expect(outcome.written).toEqual(["locales/loader.ts"]);
+		expect(outcome.written).not.toContain("locales/loader.js");
+	});
+
+	it("reports a superseded loader.js as removed so the Action can stage the deletion", () => {
+		const root = makeTmpDir();
+		mkdirSync(join(root, "locales"), { recursive: true });
+		writeFileSync(join(root, "locales/loader.js"), "old js\n", "utf-8");
+		writeFileSync(join(root, "locales/loader.d.ts"), "old dts\n", "utf-8");
+
+		const outcome = writeLocaleFileTree(
+			{ "locales/loader.js": "export async function loadLocale(locale) {}\n" },
+			root,
+			{ isTypeScript: true },
+		);
+
+		expect(outcome.removed.sort()).toEqual(["locales/loader.d.ts", "locales/loader.js"]);
+		expect(outcome.written).toEqual(["locales/loader.ts"]);
+	});
+
+	it("reports nothing removed when there was no stale loader to delete", () => {
+		const root = makeTmpDir();
+		const outcome = writeLocaleFileTree(
+			{ "locales/loader.js": "export async function loadLocale(locale) {}\n" },
+			root,
+			{ isTypeScript: true },
+		);
+		expect(outcome.removed).toEqual([]);
+	});
+
+	// ── path containment ─────────────────────────────────────────────────────
+	//
+	// The tree is server-supplied and is applied inside a checkout where the
+	// Action holds `contents: write`. A key that escapes the root would be
+	// written and then committed.
+
+	it("refuses a key that escapes the repository root, writing nothing", () => {
+		const root = makeTmpDir();
+		expect(() =>
+			writeLocaleFileTree(
+				{
+					"locales/en.json": '{"k":"v"}\n',
+					"../../.github/workflows/deploy.yml": "on: push\n",
+				},
+				root,
+			),
+		).toThrow(/outside the repository/);
+		// The whole tree is validated before anything is written, so the
+		// legitimate sibling key must not have landed either.
+		expect(existsSync(join(root, "locales/en.json"))).toBe(false);
+	});
+
+	it("refuses an absolute key", () => {
+		const root = makeTmpDir();
+		expect(() =>
+			writeLocaleFileTree({ "/etc/passwd": "root\n" }, root),
+		).toThrow(/outside the repository/);
+	});
+
+	it("refuses a key that escapes via a traversal segment in the middle", () => {
+		const root = makeTmpDir();
+		expect(() =>
+			writeLocaleFileTree({ "locales/../../escaped.json": "{}\n" }, root),
+		).toThrow(/outside the repository/);
+	});
+
+	it("allows a traversal segment that stays inside the root, and reports the resolved path", () => {
+		const root = makeTmpDir();
+		const outcome = writeLocaleFileTree({ "app/../locales/en.json": '{"k":"v"}\n' }, root);
+		expect(readFileSync(join(root, "locales/en.json"), "utf-8")).toBe('{"k":"v"}\n');
+		// `git add app/../locales/en.json` would be asked to walk an "app/"
+		// directory that need not exist — the reported path is the real one.
+		expect(outcome.written).toEqual(["locales/en.json"]);
+	});
+
 	it("cleans up stale loader.js and loader.d.ts when writing loader.ts", () => {
 		const root = makeTmpDir();
 		mkdirSync(join(root, "locales"), { recursive: true });

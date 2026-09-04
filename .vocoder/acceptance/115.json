@@ -1,0 +1,81 @@
+{
+	"ticket": "VOC-115",
+	"criteria": [
+		{
+			"id": "AC1",
+			"statement": "writeLocaleFileTree reports the paths it actually wrote, repo-root-relative with forward slashes, so the GitHub Action can stage that list verbatim instead of re-deriving it from the server's tree keys",
+			"test": "packages/cli/src/__tests__/pull.test.ts::writeLocaleFileTree > reports the paths it wrote, matching the tree keys for a plain JS project"
+		},
+		{
+			"id": "AC2",
+			"statement": "For a TypeScript project the reported path is locales/loader.ts \u2014 the file that exists \u2014 and never the locales/loader.js key the server sent. This is the loader bug: the Action staged the key, so every TypeScript customer committed an untyped loader.js while the loader.ts their app imports went unstaged",
+			"test": "packages/cli/src/__tests__/pull.test.ts::writeLocaleFileTree > reports loader.ts \u2014 not the loader.js key the server sent \u2014 for a TypeScript project"
+		},
+		{
+			"id": "AC3",
+			"statement": "A loader.js (and loader.d.ts) superseded by writing loader.ts is reported as removed, so the Action can stage the deletion and the obsolete file leaves the repository rather than staying committed forever",
+			"test": "packages/cli/src/__tests__/pull.test.ts::writeLocaleFileTree > reports a superseded loader.js as removed so the Action can stage the deletion"
+		},
+		{
+			"id": "AC4",
+			"statement": "Nothing is reported as removed when there was no stale loader to delete, so the Action is never asked to stage a deletion for a path that was already absent",
+			"test": "packages/cli/src/__tests__/pull.test.ts::writeLocaleFileTree > reports nothing removed when there was no stale loader to delete"
+		},
+		{
+			"id": "AC5",
+			"statement": "A tree key that would write outside the repository root is refused, and the whole tree is validated before anything is written so a bad key aborts rather than leaving a half-applied update behind. The tree is server-supplied and lands in a checkout where the Action holds contents: write, so a key of ../../.github/workflows/deploy.yml would otherwise be written and committed",
+			"test": "packages/cli/src/__tests__/pull.test.ts::writeLocaleFileTree > refuses a key that escapes the repository root, writing nothing"
+		},
+		{
+			"id": "AC6",
+			"statement": "Absolute keys are refused as well as relative escapes",
+			"test": "packages/cli/src/__tests__/pull.test.ts::writeLocaleFileTree > refuses an absolute key"
+		},
+		{
+			"id": "AC7",
+			"statement": "A traversal segment in the middle of a key is caught, not only a leading one",
+			"test": "packages/cli/src/__tests__/pull.test.ts::writeLocaleFileTree > refuses a key that escapes via a traversal segment in the middle"
+		},
+		{
+			"id": "AC8",
+			"statement": "A traversal segment that resolves back inside the root is allowed, and the reported path is the resolved one \u2014 `git add app/../locales/en.json` would otherwise be asked to walk an app/ directory that need not exist",
+			"test": "packages/cli/src/__tests__/pull.test.ts::writeLocaleFileTree > allows a traversal segment that stays inside the root, and reports the resolved path"
+		},
+		{
+			"id": "AC9",
+			"statement": "The result file the Action reads carries writtenPaths and removedPaths per app, describing files on disk rather than the request that produced them",
+			"test": "packages/cli/src/__tests__/translate.test.ts::translate() result file for the GitHub Action > reports the paths written to disk, not the keys the server sent"
+		},
+		{
+			"id": "AC10",
+			"statement": "removedPaths is omitted entirely when nothing was deleted, so the Action can treat its presence as meaningful",
+			"test": "packages/cli/src/__tests__/translate.test.ts::translate() result file for the GitHub Action > omits removedPaths entirely when nothing was deleted"
+		},
+		{
+			"id": "AC11",
+			"statement": "In a monorepo each app's written paths are recorded against that app's own appDir, rather than collapsing to whichever app was processed first",
+			"test": "packages/cli/src/__tests__/translate.test.ts::translate() result file for the GitHub Action > records each monorepo app's own written paths against its own appDir"
+		},
+		{
+			"id": "AC12",
+			"statement": "The result file is written only after the locale files exist on disk. The previous order recorded the result first, which for this change would publish a path list before knowing whether those paths landed",
+			"test": "packages/cli/src/__tests__/translate.test.ts::translate() result file for the GitHub Action > writes the result only after the files exist on disk"
+		},
+		{
+			"id": "AC13",
+			"statement": "Orphaned locale files \u2014 present on disk but no longer a target \u2014 are reported as repo-root-relative paths alongside the existing warning, so the Action can repeat them as a CI annotation. They are reported and never deleted: the same test also matches a file a developer added by hand, and `vocoder clean` remains the deliberate local way to remove them",
+			"evidence": {
+				"type": "manual",
+				"ref": "warnOrphanedLocaleFiles in packages/cli/src/commands/translate.ts now returns the orphan list and writeTranslateResult serializes it as a top-level orphanedPaths key, omitted when empty. No deletion path was added to product code: in `git diff main...HEAD` the only rmSync lines under packages/cli/src/commands/ are context lines \u2014 the pre-existing loader.js and loader.d.ts cleanup in pull.ts, unchanged in behaviour. The two added rmSync calls are both in test teardown, removing the temporary RUNNER_TEMP directory. Consuming the annotation is the translate-action half of this ticket."
+			}
+		},
+		{
+			"id": "AC14",
+			"statement": "Before this change the CLI/Action result contract had no test coverage at all, so the disagreement between the two halves could not have been caught by the suite",
+			"evidence": {
+				"type": "manual",
+				"ref": "Every pre-existing test in translate.test.ts runs under `delete process.env.GITHUB_ACTIONS` in its beforeEach (:412), and writeTranslateResult returns immediately when that variable is unset \u2014 so no test had ever caused the result file to be written, and `grep -n 'vocoder-result' src/__tests__/` returned nothing. The new describe block sets GITHUB_ACTIONS and points RUNNER_TEMP at a temporary directory, then reads the real file back. The ordering criterion AC12 was mutation-checked by hoisting writeTranslateResult above the write on the cached path: the suite reported `1 failed | 23 skipped`, failing exactly that criterion."
+			}
+		}
+	]
+}

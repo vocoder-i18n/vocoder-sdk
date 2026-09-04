@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join as pathJoin } from "node:path";
 import type { AppTranslateStatus, LimitErrorResponse } from "../types.js";
 
 // ── Hoisted mocks for the translate() orchestrator describe block ──────────────
@@ -53,7 +56,11 @@ const {
 			_localeFileTree: Record<string, string>,
 			_rootDir: string,
 			_options?: { isTypeScript?: boolean },
-		) => [] as Array<{ displayDir: string; count: number }>,
+		) => ({
+			dirs: [] as Array<{ displayDir: string; count: number }>,
+			written: [] as string[],
+			removed: [] as string[],
+		}),
 	),
 	mockValidateLocalConfig: vi.fn(),
 	mockLoadEnvFiles: vi.fn(),
@@ -425,7 +432,7 @@ describe("translate() orchestrator (mocked)", () => {
 			appDir: "",
 		});
 		mockDetectCommitSha.mockReturnValue("0123456789abcdef0123456789abcdef01234567");
-		mockWriteLocaleFileTree.mockReturnValue([]);
+		mockWriteLocaleFileTree.mockReturnValue({ dirs: [], written: [], removed: [] });
 		mockValidateLocalConfig.mockImplementation(() => undefined);
 		mockLoadEnvFiles.mockImplementation(() => undefined);
 	});
@@ -574,3 +581,158 @@ describe("translate() orchestrator (mocked)", () => {
 	});
 });
 
+// ── the result file the GitHub Action reads ──────────────────────────────────
+//
+// This is the contract between the two halves of the pipeline. The Action no
+// longer re-writes the locale tree from `localeFileTree`; it stages the paths
+// reported here. Nothing else covers this file — every test above runs with
+// GITHUB_ACTIONS unset, which makes writeTranslateResult a no-op.
+
+describe("translate() result file for the GitHub Action", () => {
+	const originalEnv = { ...process.env };
+	let runnerTemp: string;
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		runnerTemp = mkdtempSync(pathJoin(tmpdir(), "vocoder-runner-temp-"));
+		process.env = { ...originalEnv };
+		process.env.VOCODER_API_KEY = "vcp_aB3xY9Zk_testrandombytes123456";
+		process.env.VOCODER_API_URL = "https://vocoder.app";
+		process.env.GITHUB_ACTIONS = "true";
+		process.env.RUNNER_TEMP = runnerTemp;
+
+		mockGetAppConfig.mockResolvedValue(baseAppConfig);
+		mockDetectBranch.mockReturnValue("main");
+		mockIsTargetBranch.mockReturnValue(true);
+		mockReadWorkflowBranches.mockReturnValue(null);
+		mockReadWorkflowCommitMode.mockReturnValue(null);
+		mockLoadVocoderConfig.mockReturnValue(null);
+		mockComputeFingerprint.mockReturnValue("fingerprint-fixed");
+		mockComputeSourceEntriesHash.mockReturnValue("hash-fixed");
+		mockExtractFromProject.mockResolvedValue([
+			{ key: "hello.world", text: "Hello", file: "app.tsx", line: 1 },
+		]);
+		mockResolveGitRoot.mockReturnValue("/repo");
+		mockResolveGitRepositoryIdentity.mockReturnValue({
+			repoCanonical: "github:acme/example",
+			repoRoot: "/repo",
+			appDir: "",
+		});
+		mockDetectCommitSha.mockReturnValue("0123456789abcdef0123456789abcdef01234567");
+		mockValidateLocalConfig.mockImplementation(() => undefined);
+		mockLoadEnvFiles.mockImplementation(() => undefined);
+	});
+
+	afterEach(() => {
+		rmSync(runnerTemp, { recursive: true, force: true });
+		process.env = { ...originalEnv };
+	});
+
+	function readResult(): Record<string, unknown> {
+		return JSON.parse(
+			readFileSync(pathJoin(runnerTemp, "vocoder-result.json"), "utf-8"),
+		);
+	}
+
+	it("reports the paths written to disk, not the keys the server sent", async () => {
+		mockWriteLocaleFileTree.mockReturnValue({
+			dirs: [],
+			written: ["locales/fr.json", "locales/loader.ts"],
+			removed: ["locales/loader.js"],
+		});
+		mockSubmitTranslate.mockResolvedValue({
+			jobId: "job-1",
+			status: "complete",
+			apps: [
+				{
+					appDir: "",
+					appId: "app-1",
+					localeFileTree: {
+						"locales/fr.json": "{}",
+						"locales/loader.js": "export async function loadLocale(locale) {}",
+					},
+				},
+			],
+		});
+
+		expect(await translate({})).toBe(0);
+
+		const app = (readResult().apps as Record<string, unknown>[])[0] as Record<string, unknown>;
+		expect(app.writtenPaths).toEqual(["locales/fr.json", "locales/loader.ts"]);
+		expect(app.removedPaths).toEqual(["locales/loader.js"]);
+	});
+
+	it("omits removedPaths entirely when nothing was deleted", async () => {
+		mockWriteLocaleFileTree.mockReturnValue({
+			dirs: [],
+			written: ["locales/fr.json"],
+			removed: [],
+		});
+		mockSubmitTranslate.mockResolvedValue({
+			jobId: "job-2",
+			status: "complete",
+			apps: [{ appDir: "", appId: "app-1", localeFileTree: { "locales/fr.json": "{}" } }],
+		});
+
+		expect(await translate({})).toBe(0);
+
+		const app = (readResult().apps as Record<string, unknown>[])[0] as Record<string, unknown>;
+		expect(app.writtenPaths).toEqual(["locales/fr.json"]);
+		expect(app).not.toHaveProperty("removedPaths");
+	});
+
+	it("records each monorepo app's own written paths against its own appDir", async () => {
+		mockWriteLocaleFileTree
+			.mockReturnValueOnce({ dirs: [], written: ["apps/web/locales/fr.json"], removed: [] })
+			.mockReturnValueOnce({ dirs: [], written: ["apps/admin/locales/fr.json"], removed: [] });
+		mockSubmitTranslate.mockResolvedValue({
+			jobId: "job-3",
+			status: "complete",
+			apps: [
+				{
+					appDir: "apps/web",
+					appId: "app-1",
+					localeFileTree: { "apps/web/locales/fr.json": "{}" },
+				},
+				{
+					appDir: "apps/admin",
+					appId: "app-2",
+					localeFileTree: { "apps/admin/locales/fr.json": "{}" },
+				},
+			],
+		});
+
+		expect(await translate({})).toBe(0);
+
+		const apps = readResult().apps as Record<string, unknown>[];
+		expect(apps.map((a) => [a.appDir, a.writtenPaths])).toEqual([
+			["apps/web", ["apps/web/locales/fr.json"]],
+			["apps/admin", ["apps/admin/locales/fr.json"]],
+		]);
+	});
+
+	it("writes the result only after the files exist on disk", async () => {
+		// The Action stages what this file names, so recording paths before the
+		// write would publish a list that may never have landed. Observed from
+		// inside the write itself: if the result had been written first, the
+		// file would already be there when writeLocaleFileTree runs.
+		let resultExistedDuringWrite: boolean | null = null;
+		mockWriteLocaleFileTree.mockImplementation(() => {
+			resultExistedDuringWrite = existsSync(pathJoin(runnerTemp, "vocoder-result.json"));
+			return { dirs: [], written: ["locales/fr.json"], removed: [] };
+		});
+		mockSubmitTranslate.mockResolvedValue({
+			jobId: "job-4",
+			status: "complete",
+			apps: [{ appDir: "", appId: "app-1", localeFileTree: { "locales/fr.json": "{}" } }],
+		});
+
+		expect(await translate({})).toBe(0);
+
+		expect(resultExistedDuringWrite).toBe(false);
+		expect(
+			((readResult().apps as Record<string, unknown>[])[0] as Record<string, unknown>)
+				.writtenPaths,
+		).toEqual(["locales/fr.json"]);
+	});
+});
