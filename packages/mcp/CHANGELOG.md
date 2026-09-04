@@ -1,5 +1,100 @@
 # @vocoder/mcp
 
+## 0.22.0
+
+### Patch Changes
+
+- 1187b2a: `vocoder_regenerate_key` picked the wrong app in a monorepo, and told agents to
+  write a config field that does not exist.
+
+  It selected `existingApps[0]` — whichever app the lookup happened to return
+  first — so an agent working in `apps/admin` could rotate `apps/web`'s API key
+  instead. It now uses the CLI's `resolveLookupMatch`, which prefers an exact
+  `appDir` match and only falls back to a whole-repo app when one exists. When
+  nothing matches it says which directory was missing rather than proceeding with
+  an arbitrary app.
+
+  The config it emitted included `appId`, which is not a field on `VocoderConfig`
+  at all: TypeScript rejects it and the config parser silently drops it. It also
+  pinned `localesDir: 'src/locales'`, diverging from both the CLI and the SDK
+  default. Config text is now rendered by the CLI.
+
+  `@vocoder/cli/lib` gains `renderVocoderConfig`, `writeVocoderConfig`,
+  `resolveLookupMatch` and `ResolvedLookupMatch`. `writeVocoderConfig` keeps its
+  behaviour and now delegates its content to `renderVocoderConfig`, mirroring the
+  `renderWorkflowYaml` / `writeGitHubActionsWorkflow` split.
+
+- 573463c: Fix the Next.js App Router scaffold emitting code that does not compile.
+
+  `vocoder_implement_i18n` generated a `layout.tsx` importing `getConfig` and
+  `getLocales` from `@vocoder/react`, which exports neither — they live in
+  `@vocoder/react/server` alongside `getLocaleDir`, which the same snippet already
+  imported correctly. The wrong claim appeared three times: in the generated code
+  and in two prose instructions telling the agent what to import.
+
+  This is the flagship agent path for the most common React framework, so the
+  failure was: assistant writes the file exactly as instructed, project does not
+  build.
+
+  Imports are now validated against what `@vocoder/react` actually exports, read
+  from source, rather than asserted against a fixed string — moving an export
+  between entry points fails the test.
+
+  Two related corrections in the same tool:
+  - **The generated `vocoder.config.ts` no longer pins `localesDir: 'src/locales'`.**
+    The CLI writes `defineConfig({})` for a single-app project and lets the SDK
+    default (`locales`) apply, so a project set up through the MCP was laid out
+    differently from one set up with `vocoder init`.
+  - **File scanning stops at 100 files and now says so.** `filesToScanTruncated`
+    is reported on `phase4_wrapping` and the step text changes accordingly, so a
+    partial list is no longer presented as the complete set of files to wrap.
+
+- 583f8f6: `vocoder_translate` now extracts through the CLI instead of its own copy, so
+  monorepos work.
+
+  The MCP server ignored `apps[]` entirely and hardcoded `appDir: ""` into both
+  the fingerprint scope and the submission. Every monorepo therefore uploaded one
+  merged string set under a scope the plugin never computes at build time — a
+  fingerprint matching nothing, so the runtime asked for a bundle that was never
+  built.
+
+  Per-app extraction moves to `utils/extract-apps.ts` and is exported from
+  `@vocoder/cli/lib` as `extractApps` and `resolveAppDirs`. The CLI command keeps
+  its spinner through two optional callbacks; nothing else about its behaviour
+  changes. Both callers now resolve app directories, merge per-app config over
+  root config, and compute the `${projectShortId}:${appDir}` fingerprint scope
+  through one implementation.
+
+  `vocoder_translate` also gains an `appDir` input, mirroring the CLI's
+  `--app-dir`, so an agent can target a single app in a monorepo.
+
+- 7b205ee: The MCP server now renders its GitHub Actions workflow with the CLI's own
+  generator instead of hand-building a copy.
+
+  `@vocoder/cli/lib` gains `WORKFLOW_RELATIVE_PATH`, `renderWorkflowYaml`,
+  `writeGitHubActionsWorkflow`, `readWorkflowBranches` and `readWorkflowCommitMode`.
+
+  The MCP's duplicate had drifted in four ways at once. It omitted the
+  `github.actor != 'vocoder-bot[bot]'` guard, so a bot commit could retrigger the
+  workflow. It omitted the `permissions` block, so the push failed on a
+  default-read-only token. It omitted `commit-mode`, which is what the CLI reads
+  back to decide between opening a PR and pushing directly. And it told agents to
+  write `.github/workflows/vocoder.yml` while the CLI writes and reads
+  `vocoder-translate.yml` — so in an MCP-provisioned repo `readWorkflowBranches`
+  and `readWorkflowCommitMode` both returned null and branch and commit-mode
+  configuration was silently ignored.
+
+  The workflow path was previously written out in seven places across the two
+  packages, three times inside the CLI alone, and they disagreed. It is now one
+  exported constant.
+
+- Updated dependencies [1187b2a]
+- Updated dependencies [583f8f6]
+- Updated dependencies [7b205ee]
+  - @vocoder/cli@0.22.0
+  - @vocoder/extractor@0.22.0
+  - @vocoder/plugin@0.22.0
+
 ## 0.21.0
 
 ### Patch Changes
