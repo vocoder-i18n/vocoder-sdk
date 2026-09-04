@@ -1,0 +1,51 @@
+{
+	"ticket": "VOC-120",
+	"criteria": [
+		{
+			"id": "AC1",
+			"statement": "vocoder_init_complete returns promptly when sign-in has not finished, instead of blocking. It previously looped for up to five minutes, which most MCP clients time out long before — killing the call while the auth session was still valid and leaving no way to resume",
+			"test": "packages/mcp/src/__tests__/auth-session.test.ts::auth handoff > returns promptly when sign-in has not finished, instead of blocking"
+		},
+		{
+			"id": "AC2",
+			"statement": "Each call performs exactly one poll rather than a loop, so the tool's cost is bounded by one network round trip regardless of how long the user takes in the browser",
+			"test": "packages/mcp/src/__tests__/auth-session.test.ts::auth handoff > polls once per call rather than in a loop"
+		},
+		{
+			"id": "AC3",
+			"statement": "The flow completes on a later call with the same sessionId, so returning early is a resumable state rather than an abandoned one",
+			"test": "packages/mcp/src/__tests__/auth-session.test.ts::auth handoff > completes on a later call with the same sessionId"
+		},
+		{
+			"id": "AC4",
+			"statement": "A rejected auth session still fails loudly rather than being reported as merely pending — the non-blocking path must not swallow a genuine failure into an infinite retry",
+			"test": "packages/mcp/src/__tests__/auth-session.test.ts::auth handoff > still fails loudly when the auth session is rejected"
+		},
+		{
+			"id": "AC5",
+			"statement": "Sessions survive a server restart. They previously lived in a process-local Map, and the setup flow's own instructions tell the user to restart their editor after adding the API key — so the session was routinely destroyed by the very step that follows it",
+			"test": "packages/mcp/src/__tests__/auth-session.test.ts::session store > survives a server restart"
+		},
+		{
+			"id": "AC6",
+			"statement": "Expired sessions are treated as absent and pruned on read, so the store cannot grow without bound and a stale session cannot be resumed",
+			"test": "packages/mcp/src/__tests__/auth-session.test.ts::session store > treats an expired session as absent"
+		},
+		{
+			"id": "AC7",
+			"statement": "MRTR was deliberately not used, and the reason is recorded so the decision is reviewable rather than looking like an omission",
+			"evidence": {
+				"type": "manual",
+				"ref": "VOC-136 proposed fixing this with MRTR (inputRequired / requestState). Those primitives are exported by @modelcontextprotocol/server@2.0.0 and were confirmed present. But the SDK's own type documentation states that URL elicitation rides the multi-round-trip flow on the 2026-07-28 revision, and MissingRequiredClientCapability is documented as a -32021 error of that same revision. No released TypeScript package negotiates 2026-07-28 — both sdk@1.30.0 and server@2.0.0 report LATEST_PROTOCOL_VERSION 2025-11-25 — so on today's wire an inputRequired result is shimmed into a 2025-era server-to-client elicitation/create, which requires the client to advertise the elicitation capability. Which MCP clients do so could not be verified from here, and a client without it would leave the auth flow worse off than the blocking poll it replaced. The defects in this ticket are both fixable without that dependency, so they were. MRTR remains the right upgrade once 2026-07-28 clients exist."
+			}
+		},
+		{
+			"id": "AC8",
+			"statement": "The session store degrades rather than breaking when the filesystem is uncooperative — an unwritable home directory or a corrupt file falls back to behaving like an empty store instead of failing setup",
+			"evidence": {
+				"type": "manual",
+				"ref": "readAll() catches JSON parse failures and returns {}; writeAll() catches write failures silently, which reduces to the previous in-process behaviour. The file is written with mode 0o600 alongside auth.json in ~/.vocoder/. Losing it costs the user a re-run of vocoder_init_start, which was already the recovery path when the process-local Map was cleared."
+			}
+		}
+	]
+}

@@ -1,17 +1,16 @@
 import { randomUUID } from "node:crypto";
 import {
-	WORKFLOW_RELATIVE_PATH,
 	detectRepoIdentity,
 	renderWorkflowYaml,
-} from "@vocoder/cli/lib";
-import {
 	VocoderAPI,
 	VocoderAPIError,
-	writeAuthData,
 	verifyStoredAuth,
+	WORKFLOW_RELATIVE_PATH,
+	writeAuthData,
 } from "@vocoder/cli/lib";
+import { deleteSession, loadSession, saveSession } from "../session-store.js";
 
-export type InitStartInput = {}
+export type InitStartInput = {};
 
 export interface ExistingApp {
 	appDir: string;
@@ -34,9 +33,14 @@ export interface InitCompleteInput {
 }
 
 export interface InitCompleteResult {
-	authenticated: true;
+	authenticated: boolean;
 	email: string;
 	instructions: string;
+	/**
+	 * True when sign-in has not finished yet and the caller should retry with the
+	 * same sessionId. Previously the server blocked instead of returning this.
+	 */
+	pending?: boolean;
 }
 
 export interface ProjectCreateInput {
@@ -72,11 +76,27 @@ interface PendingSession {
 	pollOrganizationId?: string;
 }
 
-// Survives for the lifetime of the MCP server process — one session at a time is fine
-const pendingSessions = new Map<string, PendingSession>();
+const AUTH_TIMEOUT_MS = 5 * 60 * 1000; // how long an auth session stays valid
 
-const POLL_INTERVAL_MS = 2000;
-const AUTH_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+/**
+ * Sessions live on disk rather than in a process-local Map. The setup flow tells
+ * the user to restart their editor after adding the API key, which used to
+ * destroy the very session the next step needs.
+ */
+const pendingSessions = {
+	set(sessionId: string, session: PendingSession) {
+		saveSession({
+			...session,
+			expiresAt: new Date(Date.now() + AUTH_TIMEOUT_MS).toISOString(),
+		});
+	},
+	get(sessionId: string): PendingSession | null {
+		return loadSession(sessionId);
+	},
+	delete(sessionId: string) {
+		deleteSession(sessionId);
+	},
+};
 
 export async function runInitStart(
 	_input: InitStartInput,
@@ -129,7 +149,10 @@ export async function runInitStart(
 		};
 	}
 
-	const session = await api.startCliAuthSession(undefined, identity?.repoCanonical);
+	const session = await api.startCliAuthSession(
+		undefined,
+		identity?.repoCanonical,
+	);
 	const isReauth = storedAuth.status === "expired";
 	const authUrl = session.verificationUrl;
 
@@ -175,37 +198,32 @@ export async function runInitComplete(
 	if (session.storedToken) {
 		userToken = session.storedToken;
 	} else {
-		const deadline = Date.now() + AUTH_TIMEOUT_MS;
-		let polledToken: string | null = null;
+		// One check, then return. This used to block for up to five minutes,
+		// which most MCP clients time out long before — killing the call while
+		// the auth session was still perfectly valid, with no way to resume.
+		// The agent now calls this tool again instead of the server sleeping.
+		const result = await api.pollCliAuthSession(session.sessionId);
 
-		while (Date.now() < deadline) {
-			const result = await api.pollCliAuthSession(session.sessionId);
-
-			if (result.status === "complete") {
-				polledToken = result.token;
-				// organizationId returned by auth callback — skip workspace lookup if present.
-				if (result.organizationId) pollOrganizationId = result.organizationId;
-				break;
-			}
-
-			if (result.status === "failed") {
-				pendingSessions.delete(input.sessionId);
-				throw new Error(
-					`Authentication failed: ${result.reason}. Run vocoder_init_start again.`,
-				);
-			}
-
-			await sleep(POLL_INTERVAL_MS);
-		}
-
-		if (!polledToken) {
+		if (result.status === "failed") {
 			pendingSessions.delete(input.sessionId);
 			throw new Error(
-				"Authentication timed out after 5 minutes. Run vocoder_init_start again.",
+				`Authentication failed: ${result.reason}. Run vocoder_init_start again.`,
 			);
 		}
 
-		userToken = polledToken;
+		if (result.status !== "complete") {
+			return {
+				authenticated: false,
+				pending: true,
+				email: "",
+				instructions:
+					"Sign-in has not completed yet. The user still needs to finish authenticating in the browser window opened by vocoder_init_start. Wait a few seconds, then call vocoder_init_complete again with the same sessionId. The session stays valid for five minutes and survives an editor restart.",
+			};
+		}
+
+		userToken = result.token;
+		// organizationId returned by auth callback — skip workspace lookup if present.
+		if (result.organizationId) pollOrganizationId = result.organizationId;
 	}
 
 	// Write auth.json immediately — same order as CLI, before anything else can fail.
@@ -278,9 +296,10 @@ export async function runProjectCreate(
 
 	pendingSessions.delete(input.sessionId);
 
-	const repoWarning = !projectResult.repositoryBound && session.repoCanonical
-		? `\n\nNote: Repository auto-bind did not complete — the repo will bind automatically on the first translate run.`
-		: "";
+	const repoWarning =
+		!projectResult.repositoryBound && session.repoCanonical
+			? `\n\nNote: Repository auto-bind did not complete — the repo will bind automatically on the first translate run.`
+			: "";
 
 	// Rendered by the CLI so the two can never emit different YAML. The
 	// hand-built version here omitted the bot loop guard, the permissions
@@ -352,7 +371,9 @@ async function resolveOrganization(
 	// No workspace exists — auto-create a default one if the plan allows it.
 	if (organizationData.canCreateOrganization) {
 		const userInfo = await api.getCliUserInfo(userToken);
-		const name = userInfo.name ? `${userInfo.name}'s Workspace` : "My Workspace";
+		const name = userInfo.name
+			? `${userInfo.name}'s Workspace`
+			: "My Workspace";
 		const created = await api.createOrganization(userToken, { name });
 		return created.organizationId;
 	}
